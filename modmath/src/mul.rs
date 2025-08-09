@@ -316,7 +316,7 @@ macro_rules! generate_mod_mul_tests_block_2 {
                 mod_mul(u64::MAX - 1, &1_u64, &u64::MAX),
                 (u64::MAX - 1) % u64::MAX
             ); // Just below MAX
-               // Prime modulus large values
+            // Prime modulus large values
             let large_prime = 18_446_744_073_709_551_557_u64; // Largest 64-bit prime
 
             assert_eq!(mod_mul(u64::MAX, &(u64::MAX - 1), &large_prime), 3306_u64);
