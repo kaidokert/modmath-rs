@@ -3,6 +3,8 @@
 [![Build](https://github.com/kaidokert/modmath-rs/actions/workflows/rust.yaml/badge.svg)](https://github.com/kaidokert/modmath-rs/actions/workflows/rust.yaml)
 [![crate](https://img.shields.io/crates/v/modmath.svg)](https://crates.io/crates/modmath)
 [![documentation](https://docs.rs/modmath/badge.svg)](https://docs.rs/modmath/)
+[![Coverage Status](https://coveralls.io/repos/github/kaidokert/modmath-rs/badge.svg?branch=main)](https://coveralls.io/github/kaidokert/modmath-rs?branch=main)
+
 
 Yet another mod math implementation, but written for _traits_. All functions
 are free functions that are constrainted by `core::ops::` and `num_traits::`
