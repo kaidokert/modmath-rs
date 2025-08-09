@@ -1,5 +1,6 @@
 ### Modular math functions
 
+[![Build](https://github.com/kaidokert/modmath-rs/actions/workflows/rust.yaml/badge.svg)](https://github.com/kaidokert/modmath-rs/actions/workflows/rust.yaml)
 [![crate](https://img.shields.io/crates/v/modmath.svg)](https://crates.io/crates/modmath)
 [![documentation](https://docs.rs/modmath/badge.svg)](https://docs.rs/modmath/)
 
@@ -12,6 +13,8 @@ Implements:
 - Unsigned modular multiplication
 - Unsigned modular exponentiation
 - Unsigned modular inverse
+- Unsigned modular Montgomery multiply
+- Unsigned modular Montgomery exponentiation
 
 The code isn't intended to be fast or efficient, just as generic as possible
 to work with multiple implementations.

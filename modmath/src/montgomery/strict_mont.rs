@@ -42,6 +42,110 @@ where
     }
 }
 
+/// Compute N' using Extended Euclidean Algorithm - O(log R) complexity (strict version)
+/// Finds N' such that modulus * N' ≡ -1 (mod R)
+/// This is equivalent to N' ≡ -modulus^(-1) (mod R)
+fn strict_compute_n_prime_extended_euclidean<T>(modulus: &T, r: &T) -> T
+where
+    T: num_traits::Zero
+        + num_traits::One
+        + PartialEq
+        + PartialOrd
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::ops::overflowing::OverflowingSub,
+    for<'a> T: core::ops::RemAssign<&'a T>
+        + core::ops::Mul<&'a T, Output = T>
+        + core::ops::Div<&'a T, Output = T>
+        + core::ops::Sub<&'a T, Output = T>
+        + core::ops::Add<&'a T, Output = T>
+        + core::ops::AddAssign<&'a T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
+        + core::ops::Mul<&'a T, Output = T>
+        + core::ops::Sub<&'a T, Output = T>
+        + core::ops::Div<&'a T, Output = T>
+        + core::ops::Sub<T, Output = T>
+        + core::ops::Add<&'a T, Output = T>,
+{
+    // We need to solve: modulus * N' ≡ -1 (mod R)
+    // This is equivalent to: N' ≡ -modulus^(-1) (mod R)
+
+    // Use strict_mod_inv to find modulus^(-1) mod R
+    let modulus_clone = &T::zero() + modulus; // Clone using references
+    if let Some(modulus_inv) = crate::inv::strict_mod_inv(modulus_clone, r) {
+        // N' = -modulus^(-1) mod R = R - modulus^(-1) mod R
+        if modulus_inv == T::zero() {
+            r - &T::one() // Handle edge case where inverse is 0
+        } else {
+            r - &modulus_inv
+        }
+    } else {
+        panic!("Could not find modular inverse - gcd(modulus, R) should be 1 for valid Montgomery parameters");
+    }
+}
+
+/// Compute N' using Hensel's lifting - O(log R) complexity, optimized for R = 2^k (strict version)
+/// Finds N' such that modulus * N' ≡ -1 (mod R)
+/// Uses Newton's method to iteratively lift from small powers to full R
+fn strict_compute_n_prime_hensels_lifting<T>(modulus: &T, r: &T, r_bits: usize) -> T
+where
+    T: num_traits::Zero
+        + num_traits::One
+        + PartialEq
+        + PartialOrd
+        + core::ops::Shl<usize, Output = T>
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::ops::overflowing::OverflowingSub
+        + for<'a> core::ops::Rem<&'a T, Output = T>,
+    for<'a> T: core::ops::RemAssign<&'a T>,
+    for<'a> &'a T: core::ops::Add<&'a T, Output = T>
+        + core::ops::Sub<&'a T, Output = T>
+        + core::ops::Mul<&'a T, Output = T>
+        + core::ops::Rem<&'a T, Output = T>
+        + core::ops::BitAnd<Output = T>,
+{
+    // Hensel's lifting for N' computation when R = 2^k
+    // Start with base case: find N' such that modulus * N' ≡ -1 (mod 2)
+    // Then iteratively lift to larger powers of 2
+
+    // Base case: modulus * N' ≡ -1 ≡ 1 (mod 2)
+    // Since modulus is odd (required for Montgomery), modulus ≡ 1 (mod 2)
+    // So we need N' ≡ 1 (mod 2), hence N' starts as 1
+    let mut n_prime = T::one();
+
+    // Lift from 2^1 to 2^r_bits using Newton's method
+    for k in 2..=r_bits {
+        // We have: modulus * n_prime ≡ -1 (mod 2^(k-1))
+        // We want: modulus * n_prime_new ≡ -1 (mod 2^k)
+
+        let target_mod = T::one() << k; // 2^k
+        let temp_prod = modulus * &n_prime;
+        let (temp_sum, _overflow) = temp_prod.overflowing_add(&T::one());
+        let check_val = &temp_sum % &target_mod;
+
+        if check_val != T::zero() {
+            // Need to adjust n_prime
+            // If modulus * n_prime + 1 = t * 2^(k-1) for odd t, add 2^(k-1) to n_prime
+            let prev_power = T::one() << (k - 1); // 2^(k-1)
+
+            if check_val == prev_power {
+                let (adjusted, _overflow) = n_prime.overflowing_add(&prev_power);
+                n_prime = adjusted;
+            }
+        }
+    }
+
+    // Final check and adjustment to ensure modulus * N' ≡ -1 (mod R)
+    let final_check = (modulus * &n_prime) % r;
+    let target = r - &T::one(); // -1 mod R
+
+    if final_check != target {
+        // This shouldn't happen with correct Hensel lifting, but safety check
+        panic!("Hensel lifting failed to produce correct N'");
+    }
+
+    n_prime
+}
+
 /// Montgomery parameter computation (Strict)
 /// Computes R, R^(-1) mod N, N', and R bit length for Montgomery arithmetic
 /// Uses reference-based operations to minimize copying of large integers
@@ -103,7 +207,8 @@ where
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
+        + num_traits::ops::overflowing::OverflowingSub
+        + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
@@ -115,7 +220,8 @@ where
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<T, Output = T>
-        + core::ops::Add<&'a T, Output = T>,
+        + core::ops::Add<&'a T, Output = T>
+        + core::ops::BitAnd<Output = T>,
 {
     // Step 1: Find R = 2^k where R > modulus
     let mut r = T::one();
@@ -139,14 +245,10 @@ where
             strict_compute_n_prime_trial_search(modulus, &r)
         }
         crate::montgomery::NPrimeMethod::ExtendedEuclidean => {
-            // TODO: Implement strict Extended Euclidean for N' computation
-            // For now, fall back to trial search
-            strict_compute_n_prime_trial_search(modulus, &r)
+            strict_compute_n_prime_extended_euclidean(modulus, &r)
         }
         crate::montgomery::NPrimeMethod::HenselsLifting => {
-            // TODO: Implement strict Hensel's lifting for N' computation
-            // For now, fall back to trial search
-            strict_compute_n_prime_trial_search(modulus, &r)
+            strict_compute_n_prime_hensels_lifting(modulus, &r, r_bits)
         }
     };
 

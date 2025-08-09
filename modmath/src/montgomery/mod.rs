@@ -3,6 +3,8 @@
 
 pub mod basic_mont;
 
+pub mod constrained_mont;
+
 pub mod strict_mont;
 
 // Re-export basic functions for backwards compatibility
@@ -10,6 +12,13 @@ pub use basic_mont::{
     basic_compute_montgomery_params, basic_compute_montgomery_params_with_method,
     basic_from_montgomery, basic_montgomery_mod_exp, basic_montgomery_mod_mul,
     basic_montgomery_mul, basic_to_montgomery, NPrimeMethod,
+};
+
+// Re-export constrained functions
+pub use constrained_mont::{
+    constrained_compute_montgomery_params, constrained_compute_montgomery_params_with_method,
+    constrained_from_montgomery, constrained_montgomery_mod_exp, constrained_montgomery_mod_mul,
+    constrained_montgomery_mul, constrained_to_montgomery,
 };
 
 // Re-export strict functions
@@ -66,8 +75,8 @@ mod tests {
 
     #[test]
     fn test_n_prime_method_enum() {
-        // Test that the enum default is TrialSearch
-        assert_eq!(NPrimeMethod::default(), NPrimeMethod::TrialSearch);
+        // Test that the enum default is ExtendedEuclidean
+        assert_eq!(NPrimeMethod::default(), NPrimeMethod::ExtendedEuclidean);
     }
 
     #[test]
@@ -349,6 +358,7 @@ macro_rules! montgomery_test_module {
         $type_path:path,       // Full path to the type
         $(type $type_def:ty = $type_expr:ty;)? // Optional type definition
         strict: $strict:expr,
+        constrained: $constrained:expr,
         basic: $basic:expr,
     ) => {
         paste::paste! {
@@ -373,6 +383,15 @@ macro_rules! montgomery_test_module {
 
                         // Verify against regular modular multiplication
                         let regular_result = crate::mul::strict_mod_mul(a, &b, &modulus);
+                        assert_eq!(result, regular_result);
+                    });
+                    let a = U256::from(a_val);
+                    crate::maybe_test!($constrained, {
+                        let result = super::constrained_mont::constrained_montgomery_mod_mul(a.clone(), &b, &modulus);
+                        assert_eq!(result, expected);
+
+                        // Verify against regular modular multiplication
+                        let regular_result = crate::mul::constrained_mod_mul(a, &b, &modulus);
                         assert_eq!(result, regular_result);
                     });
                     let a = U256::from(a_val);
@@ -405,6 +424,15 @@ macro_rules! montgomery_test_module {
                         assert_eq!(result, regular_result);
                     });
                     let base = U256::from(base_val);
+                    crate::maybe_test!($constrained, {
+                        let result = super::constrained_mont::constrained_montgomery_mod_exp(base.clone(), &exponent, &modulus);
+                        assert_eq!(result, expected);
+
+                        // Verify against regular modular exponentiation
+                        let regular_result = crate::exp::constrained_mod_exp(base, &exponent, &modulus);
+                        assert_eq!(result, regular_result);
+                    });
+                    let base = U256::from(base_val);
                     crate::maybe_test!($basic, {
                         let result = super::basic_montgomery_mod_exp(base, exponent, modulus);
                         assert_eq!(result, expected);
@@ -431,6 +459,20 @@ macro_rules! montgomery_test_module {
 
                             // 2. N * N' ≡ -1 (mod R) which means N * N' ≡ R - 1 (mod R)
                             assert_eq!((*modulus * n_prime) % r, r - U256::from(1u8));
+
+                            // 3. R should be > N and a power of 2
+                            assert!(r > *modulus);
+                            assert_eq!(r, U256::from(1u8) << r_bits);
+                        });
+                        crate::maybe_test!($constrained, {
+                            let (r, r_inv, n_prime, r_bits) = super::constrained_mont::constrained_compute_montgomery_params(modulus);
+
+                            // Verify mathematical properties
+                            // 1. R * R^(-1) ≡ 1 (mod N)
+                            assert_eq!((r.clone() * r_inv.clone()) % modulus, U256::from(1u8));
+
+                            // 2. N * N' ≡ -1 (mod R) which means N * N' ≡ R - 1 (mod R)
+                            assert_eq!((modulus.clone() * n_prime.clone()) % r.clone(), r.clone() - U256::from(1u8));
 
                             // 3. R should be > N and a power of 2
                             assert!(r > *modulus);
@@ -469,6 +511,16 @@ macro_rules! montgomery_test_module {
                         assert_eq!(trial_result, hensels_result);
                         assert_eq!(euclidean_result, hensels_result);
                     });
+                    crate::maybe_test!($constrained, {
+                        let trial_result = super::constrained_mont::constrained_compute_montgomery_params_with_method(&modulus, super::NPrimeMethod::TrialSearch);
+                        let euclidean_result = super::constrained_mont::constrained_compute_montgomery_params_with_method(&modulus, super::NPrimeMethod::ExtendedEuclidean);
+                        let hensels_result = super::constrained_mont::constrained_compute_montgomery_params_with_method(&modulus, super::NPrimeMethod::HenselsLifting);
+
+                        // All methods should produce identical results
+                        assert_eq!(trial_result, euclidean_result);
+                        assert_eq!(trial_result, hensels_result);
+                        assert_eq!(euclidean_result, hensels_result);
+                    });
                     crate::maybe_test!($basic, {
                         let trial_result = super::basic_compute_montgomery_params_with_method(modulus, super::NPrimeMethod::TrialSearch);
                         let euclidean_result = super::basic_compute_montgomery_params_with_method(modulus, super::NPrimeMethod::ExtendedEuclidean);
@@ -495,6 +547,17 @@ macro_rules! montgomery_test_module {
                             let value = U256::from(i);
                             let montgomery_form = super::strict_mont::strict_to_montgomery(value, &modulus, &r);
                             let back_to_normal = super::strict_mont::strict_from_montgomery(montgomery_form, &modulus, &n_prime, r_bits);
+                            assert_eq!(back_to_normal, value, "Round-trip failed for {}", i);
+                        }
+                    });
+                    crate::maybe_test!($constrained, {
+                        let (r, _r_inv, n_prime, r_bits) = super::constrained_mont::constrained_compute_montgomery_params(&modulus);
+
+                        // Test values from 0 to modulus-1
+                        for i in 0u8..13u8 {
+                            let value = U256::from(i);
+                            let montgomery_form = super::constrained_mont::constrained_to_montgomery(value.clone(), &modulus, &r);
+                            let back_to_normal = super::constrained_mont::constrained_from_montgomery(montgomery_form, &modulus, &n_prime, r_bits);
                             assert_eq!(back_to_normal, value, "Round-trip failed for {}", i);
                         }
                     });
@@ -530,6 +593,15 @@ macro_rules! montgomery_test_module {
                             });
                             let a_big = U256::from(a);
                             let b_big = U256::from(b);
+                            crate::maybe_test!($constrained, {
+                                let montgomery_result = super::constrained_mont::constrained_montgomery_mod_mul(a_big.clone(), &b_big, &modulus);
+                                let regular_result = crate::mul::constrained_mod_mul(a_big, &b_big, &modulus);
+                                assert_eq!(montgomery_result, regular_result,
+                                    "Montgomery vs regular mismatch: {} * {} mod 13: {:?} != {:?}",
+                                    a, b, montgomery_result, regular_result);
+                            });
+                            let a_big = U256::from(a);
+                            let b_big = U256::from(b);
                             crate::maybe_test!($basic, {
                                 let montgomery_result = super::basic_montgomery_mod_mul(a_big, b_big, modulus);
                                 let regular_result = crate::mul::basic_mod_mul(a_big, b_big, modulus);
@@ -553,6 +625,7 @@ mod bnum_montgomery_tests {
         bnum,
         bnum::types::U256,
         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+        constrained: on,
         basic: on,
     );
 
@@ -560,6 +633,7 @@ mod bnum_montgomery_tests {
         bnum_patched,
         bnum_patched::types::U256,
         strict: off, // Complex trait bounds for Montgomery operations not fully compatible
+        constrained: on,
         basic: on,
     );
 
@@ -567,6 +641,7 @@ mod bnum_montgomery_tests {
         crypto_bigint,
         crypto_bigint::U256,
         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+        constrained: off, // RemAssign and other traits missing
         basic: off, // RemAssign and other traits missing
     );
 
@@ -574,6 +649,7 @@ mod bnum_montgomery_tests {
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
         strict: off, // &T + &T and &T - &T operations missing for Montgomery needs
+        constrained: on, // Fixed trait bounds - now works with patched libraries
         basic: on,
     );
 
@@ -582,6 +658,7 @@ mod bnum_montgomery_tests {
         num_bigint::BigUint,
         type U256 = num_bigint::BigUint;
         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+        constrained: off, // WrappingAdd missing
         basic: off, // Copy is not implemented, heap allocation
     );
 
@@ -590,6 +667,7 @@ mod bnum_montgomery_tests {
         num_bigint_patched::BigUint,
         type U256 = num_bigint_patched::BigUint;
         strict: off, // Complex trait bounds for Montgomery operations not fully compatible
+        constrained: on, // Fixed trait bounds - now works with patched libraries
         basic: off, // Copy is not implemented, heap allocation
     );
 
@@ -598,6 +676,7 @@ mod bnum_montgomery_tests {
         ibig::UBig,
         type U256 = ibig::UBig;
         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+        constrained: off, // WrappingAdd missing
         basic: off, // Copy is not implemented, heap allocation
     );
 
@@ -606,6 +685,7 @@ mod bnum_montgomery_tests {
         ibig_patched::UBig,
         type U256 = ibig_patched::UBig;
         strict: off, // Complex trait bounds for Montgomery operations not fully compatible
+        constrained: on, // Fixed trait bounds - now works with patched libraries
         basic: off, // Copy is not implemented, heap allocation
     );
 
@@ -614,6 +694,7 @@ mod bnum_montgomery_tests {
         fixed_bigint::FixedUInt,
         type U256 = fixed_bigint::FixedUInt<u8, 4>;
         strict: on,
+        constrained: on,
         basic: on,
     );
 }
