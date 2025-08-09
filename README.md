@@ -1,5 +1,8 @@
 ### Modular math functions
 
+[![crate](https://img.shields.io/crates/v/modmath.svg)](https://crates.io/crates/modmath)
+[![documentation](https://docs.rs/modmath/badge.svg)](https://docs.rs/modmath/)
+
 Yet another mod math implementation, but written for _traits_. All functions
 are free functions that are constrainted by `core::ops::` and `num_traits::`
 traits.

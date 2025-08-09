@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+
+on:
+    push:
+      branches:
+        - main
+        - 'feature/**'
+    pull_request:
+
+name: Rust
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+          toolchain: stable
+          targets: thumbv6m-none-eabi
+          components: rustfmt, clippy
+    - name: Check formatting
+      working-directory: modmath
+      run: cargo fmt -- --check
+    - name: Run clippy
+      working-directory: modmath
+      run: cargo clippy -- -D warnings
+    - name: Build
+      working-directory: modmath
+      run: cargo build
