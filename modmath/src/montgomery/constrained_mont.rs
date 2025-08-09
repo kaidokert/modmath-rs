@@ -16,19 +16,16 @@ where
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T>,
-    for<'a> &'a T: core::ops::Add<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>,
+    for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     // We need to find N' where modulus * N' ≡ R - 1 (mod R)
-    let target = r - &T::one(); // This is -1 mod R
+    let target = r.clone().wrapping_sub(&T::one()); // This is -1 mod R
 
     // Simple trial search for N'
     let mut n_prime = T::one();
     loop {
-        if (modulus * &n_prime) % r == target {
+        if (modulus.clone() * &n_prime) % r == target {
             return n_prime;
         }
         n_prime = n_prime.wrapping_add(&T::one());
@@ -51,16 +48,8 @@ where
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub,
-    for<'a> T: core::ops::RemAssign<&'a T>
-        + core::ops::DivAssign<&'a T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Add<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
-        + core::ops::Div<&'a T, Output = T>
-        + core::ops::Sub<T, Output = T>,
+    for<'a> T: core::ops::Add<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Sub<T, Output = T> + core::ops::Div<&'a T, Output = T>,
 {
     // We need to solve: modulus * N' ≡ -1 (mod R)
     // This is equivalent to: N' ≡ -modulus^(-1) (mod R)
@@ -69,9 +58,9 @@ where
     if let Some(modulus_inv) = constrained_mod_inv(modulus.clone(), r) {
         // N' = -modulus^(-1) mod R = R - modulus^(-1) mod R
         if modulus_inv == T::zero() {
-            r - &T::one() // Handle edge case where inverse is 0
+            r.clone().wrapping_sub(&T::one()) // Handle edge case where inverse is 0
         } else {
-            r - &modulus_inv
+            r.clone().wrapping_sub(&modulus_inv)
         }
     } else {
         panic!("Could not find modular inverse - gcd(modulus, R) should be 1 for valid Montgomery parameters");
@@ -91,12 +80,8 @@ where
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shl<usize, Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T>,
-    for<'a> &'a T: core::ops::Add<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
-        + core::ops::BitAnd<Output = T>,
+    for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     // Hensel's lifting for N' computation when R = 2^k
     let mut n_prime = T::one();
@@ -104,7 +89,7 @@ where
     // Lift from 2^1 to 2^r_bits using Newton's method
     for k in 2..=r_bits {
         let target_mod = T::one() << k; // 2^k
-        let temp_prod = modulus * &n_prime;
+        let temp_prod = modulus.clone() * &n_prime;
         let temp_sum = temp_prod.wrapping_add(&T::one());
         let check_val = &temp_sum % &target_mod;
 
@@ -117,8 +102,8 @@ where
     }
 
     // Final check
-    let final_check = (modulus * &n_prime) % r;
-    let target = r - &T::one(); // -1 mod R
+    let final_check = (modulus.clone() * &n_prime) % r;
+    let target = r.clone().wrapping_sub(&T::one()); // -1 mod R
 
     if final_check != target {
         panic!("Hensel lifting failed to produce correct N'");
@@ -142,18 +127,15 @@ where
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shl<usize, Output = T>
+        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T>
-        + core::ops::DivAssign<&'a T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Add<&'a T, Output = T>
+    for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
+        + core::ops::RemAssign<&'a T>,
+    for<'a> &'a T: core::ops::Sub<T, Output = T>
         + core::ops::Div<&'a T, Output = T>
-        + core::ops::BitAnd<Output = T>
-        + core::ops::Sub<T, Output = T>,
+        + core::ops::Rem<&'a T, Output = T>,
 {
     // Step 1: Find R = 2^k where R > modulus
     let mut r = T::one();
@@ -194,18 +176,15 @@ where
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shl<usize, Output = T>
+        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T>
-        + core::ops::DivAssign<&'a T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Add<&'a T, Output = T>
+    for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
+        + core::ops::RemAssign<&'a T>,
+    for<'a> &'a T: core::ops::Sub<T, Output = T>
         + core::ops::Div<&'a T, Output = T>
-        + core::ops::BitAnd<Output = T>
-        + core::ops::Sub<T, Output = T>,
+        + core::ops::Rem<&'a T, Output = T>,
 {
     constrained_compute_montgomery_params_with_method(modulus, NPrimeMethod::default())
 }
@@ -213,14 +192,13 @@ where
 /// Convert to Montgomery form (Constrained): a -> (a * R) mod N
 pub fn constrained_to_montgomery<T>(a: T, modulus: &T, r: &T) -> T
 where
-    T: Clone
-        + PartialOrd
-        + num_traits::Zero
+    T: num_traits::Zero
         + num_traits::One
+        + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shr<usize, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T> + core::ops::ShrAssign<usize>,
+    for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
 {
     crate::mul::constrained_mod_mul(a, r, modulus)
@@ -239,26 +217,23 @@ where
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T>,
-    for<'a> &'a T: core::ops::Add<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>,
+    for<'a> T: core::ops::Mul<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     // Montgomery reduction algorithm:
     let r = T::one() << r_bits; // R = 2^r_bits
 
     // Step 1: m = (a_mont * N') mod R
-    let m = (&a_mont * n_prime) % &r;
+    let m = (a_mont.clone() * n_prime) % &r;
 
     // Step 2: t = (a_mont + m * N) / R
-    let temp_prod = &m * modulus;
+    let temp_prod = m.clone() * modulus;
     let temp_sum = a_mont.wrapping_add(&temp_prod);
     let t = temp_sum >> r_bits; // Divide by R = 2^r_bits
 
     // Step 3: Final reduction
     if &t >= modulus {
-        &t - modulus
+        t.wrapping_sub(modulus)
     } else {
         t
     }
@@ -266,7 +241,7 @@ where
 
 /// Montgomery multiplication (Constrained): (a * R) * (b * R) -> (a * b * R) mod N
 pub fn constrained_montgomery_mul<T>(
-    a_mont: T,
+    a_mont: &T,
     b_mont: &T,
     modulus: &T,
     n_prime: &T,
@@ -282,15 +257,11 @@ where
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T> + core::ops::ShrAssign<usize>,
-    for<'a> &'a T: core::ops::Add<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
-        + core::ops::BitAnd<Output = T>,
+    for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
 {
     // Step 1: Regular modular multiplication in Montgomery domain
-    let product = crate::mul::constrained_mod_mul(a_mont, b_mont, modulus);
+    let product = crate::mul::constrained_mod_mul(a_mont.clone(), b_mont, modulus);
 
     // Step 2: Apply Montgomery reduction to get result in Montgomery form
     constrained_from_montgomery(product, modulus, n_prime, r_bits)
@@ -308,24 +279,21 @@ where
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
+        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T>
-        + core::ops::DivAssign<&'a T>
-        + core::ops::ShrAssign<usize>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Add<&'a T, Output = T>
+    for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
+        + core::ops::RemAssign<&'a T>,
+    for<'a> &'a T: core::ops::Sub<T, Output = T>
         + core::ops::Div<&'a T, Output = T>
-        + core::ops::BitAnd<Output = T>
-        + core::ops::Sub<T, Output = T>,
+        + core::ops::Rem<&'a T, Output = T>
+        + core::ops::BitAnd<Output = T>,
 {
     let (r, _r_inv, n_prime, r_bits) = constrained_compute_montgomery_params(modulus);
     let a_mont = constrained_to_montgomery(a, modulus, &r);
     let b_mont = constrained_to_montgomery(b.clone(), modulus, &r);
-    let result_mont = constrained_montgomery_mul(a_mont, &b_mont, modulus, &n_prime, r_bits);
+    let result_mont = constrained_montgomery_mul(&a_mont, &b_mont, modulus, &n_prime, r_bits);
     constrained_from_montgomery(result_mont, modulus, &n_prime, r_bits)
 }
 
@@ -343,18 +311,16 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
+        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
-        + core::ops::DivAssign<&'a T>
         + core::ops::Add<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
+        + core::ops::Mul<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Sub<T, Output = T>
         + core::ops::Div<&'a T, Output = T>
-        + core::ops::BitAnd<Output = T>
-        + core::ops::Sub<T, Output = T>,
+        + core::ops::Rem<&'a T, Output = T>
+        + core::ops::BitAnd<Output = T>,
 {
     // Compute Montgomery parameters
     let (r, _r_inv, n_prime, r_bits) = constrained_compute_montgomery_params(modulus);
@@ -374,12 +340,12 @@ where
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
         if &exp % &two == T::one() {
-            result = constrained_montgomery_mul(result, &base, modulus, &n_prime, r_bits);
+            result = constrained_montgomery_mul(&result, &base, modulus, &n_prime, r_bits);
         }
 
         // Square the base for next iteration
         exp >>= 1;
-        base = constrained_montgomery_mul(base, &base, modulus, &n_prime, r_bits);
+        base = constrained_montgomery_mul(&base, &base, modulus, &n_prime, r_bits);
     }
 
     // Convert result back from Montgomery form

@@ -387,7 +387,7 @@ macro_rules! montgomery_test_module {
                     });
                     let a = U256::from(a_val);
                     crate::maybe_test!($constrained, {
-                        let result = super::constrained_mont::constrained_montgomery_mod_mul(a, &b, &modulus);
+                        let result = super::constrained_mont::constrained_montgomery_mod_mul(a.clone(), &b, &modulus);
                         assert_eq!(result, expected);
 
                         // Verify against regular modular multiplication
@@ -425,7 +425,7 @@ macro_rules! montgomery_test_module {
                     });
                     let base = U256::from(base_val);
                     crate::maybe_test!($constrained, {
-                        let result = super::constrained_mont::constrained_montgomery_mod_exp(base, &exponent, &modulus);
+                        let result = super::constrained_mont::constrained_montgomery_mod_exp(base.clone(), &exponent, &modulus);
                         assert_eq!(result, expected);
 
                         // Verify against regular modular exponentiation
@@ -469,10 +469,10 @@ macro_rules! montgomery_test_module {
 
                             // Verify mathematical properties
                             // 1. R * R^(-1) ≡ 1 (mod N)
-                            assert_eq!((r * r_inv) % *modulus, U256::from(1u8));
+                            assert_eq!((r.clone() * r_inv.clone()) % modulus, U256::from(1u8));
 
                             // 2. N * N' ≡ -1 (mod R) which means N * N' ≡ R - 1 (mod R)
-                            assert_eq!((*modulus * n_prime) % r, r - U256::from(1u8));
+                            assert_eq!((modulus.clone() * n_prime.clone()) % r.clone(), r.clone() - U256::from(1u8));
 
                             // 3. R should be > N and a power of 2
                             assert!(r > *modulus);
@@ -556,7 +556,7 @@ macro_rules! montgomery_test_module {
                         // Test values from 0 to modulus-1
                         for i in 0u8..13u8 {
                             let value = U256::from(i);
-                            let montgomery_form = super::constrained_mont::constrained_to_montgomery(value, &modulus, &r);
+                            let montgomery_form = super::constrained_mont::constrained_to_montgomery(value.clone(), &modulus, &r);
                             let back_to_normal = super::constrained_mont::constrained_from_montgomery(montgomery_form, &modulus, &n_prime, r_bits);
                             assert_eq!(back_to_normal, value, "Round-trip failed for {}", i);
                         }
@@ -594,7 +594,7 @@ macro_rules! montgomery_test_module {
                             let a_big = U256::from(a);
                             let b_big = U256::from(b);
                             crate::maybe_test!($constrained, {
-                                let montgomery_result = super::constrained_mont::constrained_montgomery_mod_mul(a_big, &b_big, &modulus);
+                                let montgomery_result = super::constrained_mont::constrained_montgomery_mod_mul(a_big.clone(), &b_big, &modulus);
                                 let regular_result = crate::mul::constrained_mod_mul(a_big, &b_big, &modulus);
                                 assert_eq!(montgomery_result, regular_result,
                                     "Montgomery vs regular mismatch: {} * {} mod 13: {:?} != {:?}",
@@ -649,7 +649,7 @@ mod bnum_montgomery_tests {
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
         strict: off, // &T + &T and &T - &T operations missing for Montgomery needs
-        constrained: off, // &T + &T and &T - &T operations missing for constrained needs
+        constrained: on, // Fixed trait bounds - now works with patched libraries
         basic: on,
     );
 
@@ -667,7 +667,7 @@ mod bnum_montgomery_tests {
         num_bigint_patched::BigUint,
         type U256 = num_bigint_patched::BigUint;
         strict: off, // Complex trait bounds for Montgomery operations not fully compatible
-        constrained: off, // Copy issues with heap allocation
+        constrained: on, // Fixed trait bounds - now works with patched libraries
         basic: off, // Copy is not implemented, heap allocation
     );
 
@@ -685,7 +685,7 @@ mod bnum_montgomery_tests {
         ibig_patched::UBig,
         type U256 = ibig_patched::UBig;
         strict: off, // Complex trait bounds for Montgomery operations not fully compatible
-        constrained: off, // Copy issues and complex trait bounds
+        constrained: on, // Fixed trait bounds - now works with patched libraries
         basic: off, // Copy is not implemented, heap allocation
     );
 
