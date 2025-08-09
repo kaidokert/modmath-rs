@@ -334,7 +334,7 @@ where
 
     // Copy exponent for manipulation
     let mut exp = exponent.clone();
-    let two = T::one().wrapping_add(&T::one());
+    let two = T::one().clone().wrapping_add(&T::one());
 
     // Binary exponentiation using Montgomery multiplication
     while exp > T::zero() {
