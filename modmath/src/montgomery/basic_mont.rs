@@ -79,7 +79,9 @@ where
             r - modulus_inv
         }
     } else {
-        panic!("Could not find modular inverse - gcd(modulus, R) should be 1 for valid Montgomery parameters");
+        panic!(
+            "Could not find modular inverse - gcd(modulus, R) should be 1 for valid Montgomery parameters"
+        );
     }
 }
 
@@ -255,11 +257,7 @@ where
     let t = (a_mont + m * modulus) >> r_bits; // Divide by R = 2^r_bits
 
     // Step 3: Final reduction
-    if t >= modulus {
-        t - modulus
-    } else {
-        t
-    }
+    if t >= modulus { t - modulus } else { t }
 }
 
 /// Montgomery multiplication (Basic): (a * R) * (b * R) -> (a * b * R) mod N

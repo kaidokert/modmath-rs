@@ -9,9 +9,9 @@ pub mod strict_mont;
 
 // Re-export basic functions for backwards compatibility
 pub use basic_mont::{
-    basic_compute_montgomery_params, basic_compute_montgomery_params_with_method,
+    NPrimeMethod, basic_compute_montgomery_params, basic_compute_montgomery_params_with_method,
     basic_from_montgomery, basic_montgomery_mod_exp, basic_montgomery_mod_mul,
-    basic_montgomery_mul, basic_to_montgomery, NPrimeMethod,
+    basic_montgomery_mul, basic_to_montgomery,
 };
 
 // Re-export constrained functions

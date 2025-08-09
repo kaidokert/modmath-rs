@@ -19,6 +19,8 @@
 //! wont work with `num-bigint` and `ibig` as both require heap
 //! allocation.
 
+#![cfg_attr(not(test), no_std)]
+
 mod add;
 mod exp;
 mod mul;
@@ -31,14 +33,14 @@ pub use add::{basic_mod_add, constrained_mod_add, strict_mod_add};
 pub use exp::{basic_mod_exp, constrained_mod_exp, strict_mod_exp};
 pub use inv::{basic_mod_inv, constrained_mod_inv, strict_mod_inv};
 pub use montgomery::{
-    basic_compute_montgomery_params, basic_compute_montgomery_params_with_method,
+    NPrimeMethod, basic_compute_montgomery_params, basic_compute_montgomery_params_with_method,
     basic_from_montgomery, basic_montgomery_mod_exp, basic_montgomery_mod_mul,
     basic_montgomery_mul, basic_to_montgomery, constrained_compute_montgomery_params,
     constrained_compute_montgomery_params_with_method, constrained_from_montgomery,
     constrained_montgomery_mod_exp, constrained_montgomery_mod_mul, constrained_montgomery_mul,
     constrained_to_montgomery, strict_compute_montgomery_params,
     strict_compute_montgomery_params_with_method, strict_from_montgomery,
-    strict_montgomery_mod_exp, strict_montgomery_mod_mul, strict_to_montgomery, NPrimeMethod,
+    strict_montgomery_mod_exp, strict_montgomery_mod_mul, strict_to_montgomery,
 };
 pub use mul::{basic_mod_mul, constrained_mod_mul, strict_mod_mul};
 pub use sub::{basic_mod_sub, constrained_mod_sub, strict_mod_sub};

@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+
+on:
+    push:
+      branches:
+        - main
+        - 'feature/**'
+    pull_request:
+
+name: Cross-compile
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - thumbv6m-none-eabi
+          - thumbv7m-none-eabi
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build for target
+        run: cargo build --release --target=${{ matrix.target }}

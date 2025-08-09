@@ -79,7 +79,9 @@ where
             r - &modulus_inv
         }
     } else {
-        panic!("Could not find modular inverse - gcd(modulus, R) should be 1 for valid Montgomery parameters");
+        panic!(
+            "Could not find modular inverse - gcd(modulus, R) should be 1 for valid Montgomery parameters"
+        );
     }
 }
 
@@ -295,11 +297,7 @@ where
     let t = sum >> r_bits; // Divide by R = 2^r_bits
 
     // Step 3: Final reduction
-    if &t >= modulus {
-        t - modulus
-    } else {
-        t
-    }
+    if &t >= modulus { t - modulus } else { t }
 }
 
 /// Convert to Montgomery form (Strict): a -> (a * R) mod N

@@ -63,7 +63,9 @@ where
             r.clone().wrapping_sub(&modulus_inv)
         }
     } else {
-        panic!("Could not find modular inverse - gcd(modulus, R) should be 1 for valid Montgomery parameters");
+        panic!(
+            "Could not find modular inverse - gcd(modulus, R) should be 1 for valid Montgomery parameters"
+        );
     }
 }
 
