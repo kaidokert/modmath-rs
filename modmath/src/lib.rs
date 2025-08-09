@@ -33,7 +33,10 @@ pub use inv::{basic_mod_inv, constrained_mod_inv, strict_mod_inv};
 pub use montgomery::{
     basic_compute_montgomery_params, basic_compute_montgomery_params_with_method,
     basic_from_montgomery, basic_montgomery_mod_exp, basic_montgomery_mod_mul,
-    basic_montgomery_mul, basic_to_montgomery, strict_compute_montgomery_params,
+    basic_montgomery_mul, basic_to_montgomery, constrained_compute_montgomery_params,
+    constrained_compute_montgomery_params_with_method, constrained_from_montgomery,
+    constrained_montgomery_mod_exp, constrained_montgomery_mod_mul, constrained_montgomery_mul,
+    constrained_to_montgomery, strict_compute_montgomery_params,
     strict_compute_montgomery_params_with_method, strict_from_montgomery,
     strict_montgomery_mod_exp, strict_montgomery_mod_mul, strict_to_montgomery, NPrimeMethod,
 };
