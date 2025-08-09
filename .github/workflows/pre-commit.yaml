@@ -1,6 +1,13 @@
-name: pre-commit
+# SPDX-License-Identifier: Apache-2.0
 
-on: [ push, pull_request ]
+on:
+    push:
+      branches:
+        - main
+        - 'feature/**'
+    pull_request:
+
+name: pre-commit
 
 jobs:
   pre-commit:
