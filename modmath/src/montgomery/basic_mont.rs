@@ -4,20 +4,15 @@
 use crate::inv::basic_mod_inv;
 
 /// Methods for computing N' in Montgomery parameter computation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum NPrimeMethod {
     /// Trial search - O(R) complexity, simple but slow for large R
+    #[default]
     TrialSearch,
     /// Extended Euclidean Algorithm - O(log R) complexity
     ExtendedEuclidean,
     /// Hensel's lifting - O(log R) complexity, optimized for R = 2^k
     HenselsLifting,
-}
-
-impl Default for NPrimeMethod {
-    fn default() -> Self {
-        NPrimeMethod::TrialSearch
-    }
 }
 
 /// Compute N' using trial search method - O(R) complexity
