@@ -13,8 +13,8 @@ Implements:
 - Unsigned modular multiplication
 - Unsigned modular exponentiation
 - Unsigned modular inverse
-- Unsigned modular Montgomery mutliply
-- Unsigned modular Mongomery exponentation
+- Unsigned modular Montgomery multiply
+- Unsigned modular Montgomery exponentiation
 
 The code isn't intended to be fast or efficient, just as generic as possible
 to work with multiple implementations.

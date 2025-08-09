@@ -367,7 +367,7 @@ where
     let mut result = constrained_to_montgomery(T::one(), modulus, &r);
 
     // Copy exponent for manipulation
-    let mut exp = T::zero().wrapping_add(exponent);
+    let mut exp = exponent.clone();
     let two = T::one().wrapping_add(&T::one());
 
     // Binary exponentiation using Montgomery multiplication
@@ -379,10 +379,7 @@ where
 
         // Square the base for next iteration
         exp >>= 1;
-        if exp > T::zero() {
-            let tmp_base = T::zero().wrapping_add(&base);
-            base = constrained_montgomery_mul(base, &tmp_base, modulus, &n_prime, r_bits);
-        }
+        base = constrained_montgomery_mul(base, &base, modulus, &n_prime, r_bits);
     }
 
     // Convert result back from Montgomery form
