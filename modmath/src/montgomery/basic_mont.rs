@@ -7,9 +7,9 @@ use crate::inv::basic_mod_inv;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum NPrimeMethod {
     /// Trial search - O(R) complexity, simple but slow for large R
-    #[default]
     TrialSearch,
     /// Extended Euclidean Algorithm - O(log R) complexity
+    #[default]
     ExtendedEuclidean,
     /// Hensel's lifting - O(log R) complexity, optimized for R = 2^k
     HenselsLifting,
