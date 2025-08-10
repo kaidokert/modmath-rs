@@ -36,7 +36,7 @@ mod tests {
     fn test_basic_compute_montgomery_params() {
         // Test with our documented example: N = 13
         // Expected: R = 16, R^(-1) = 9, N' = 11, r_bits = 4
-        let (r, r_inv, n_prime, r_bits) = basic_compute_montgomery_params(13u32);
+        let (r, r_inv, n_prime, r_bits) = basic_compute_montgomery_params(13u32).unwrap();
 
         assert_eq!(r, 16);
         assert_eq!(r_inv, 9);
@@ -58,9 +58,9 @@ mod tests {
     #[test]
     fn test_basic_compute_montgomery_params_with_method() {
         // Test that the parametrized version produces identical results
-        let default_result = basic_compute_montgomery_params(13u32);
+        let default_result = basic_compute_montgomery_params(13u32).unwrap();
         let explicit_trial_result =
-            basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::TrialSearch);
+            basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::TrialSearch).unwrap();
 
         // Both should produce identical results since TrialSearch is the default
         assert_eq!(default_result, explicit_trial_result);
@@ -83,9 +83,10 @@ mod tests {
     fn test_extended_euclidean_n_prime_method() {
         // Test Extended Euclidean method produces same results as trial search
         let trial_result =
-            basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::TrialSearch);
+            basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::TrialSearch).unwrap();
         let euclidean_result =
-            basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::ExtendedEuclidean);
+            basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::ExtendedEuclidean)
+                .unwrap();
 
         assert_eq!(
             trial_result, euclidean_result,
@@ -110,11 +111,13 @@ mod tests {
 
         for modulus in test_cases.iter() {
             let trial_result =
-                basic_compute_montgomery_params_with_method(*modulus, NPrimeMethod::TrialSearch);
+                basic_compute_montgomery_params_with_method(*modulus, NPrimeMethod::TrialSearch)
+                    .unwrap();
             let euclidean_result = basic_compute_montgomery_params_with_method(
                 *modulus,
                 NPrimeMethod::ExtendedEuclidean,
-            );
+            )
+            .unwrap();
 
             assert_eq!(
                 trial_result, euclidean_result,
@@ -137,9 +140,10 @@ mod tests {
     fn test_hensels_lifting_n_prime_method() {
         // Test Hensel's lifting method produces same results as other methods
         let trial_result =
-            basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::TrialSearch);
+            basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::TrialSearch).unwrap();
         let hensels_result =
-            basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::HenselsLifting);
+            basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::HenselsLifting)
+                .unwrap();
 
         assert_eq!(
             trial_result, hensels_result,
@@ -164,13 +168,16 @@ mod tests {
 
         for modulus in test_cases.iter() {
             let trial_result =
-                basic_compute_montgomery_params_with_method(*modulus, NPrimeMethod::TrialSearch);
+                basic_compute_montgomery_params_with_method(*modulus, NPrimeMethod::TrialSearch)
+                    .unwrap();
             let euclidean_result = basic_compute_montgomery_params_with_method(
                 *modulus,
                 NPrimeMethod::ExtendedEuclidean,
-            );
+            )
+            .unwrap();
             let hensels_result =
-                basic_compute_montgomery_params_with_method(*modulus, NPrimeMethod::HenselsLifting);
+                basic_compute_montgomery_params_with_method(*modulus, NPrimeMethod::HenselsLifting)
+                    .unwrap();
 
             assert_eq!(
                 trial_result, euclidean_result,
@@ -202,7 +209,7 @@ mod tests {
     #[test]
     fn test_basic_to_montgomery() {
         // Test with our documented example: N = 13, R = 16
-        let (r, _r_inv, _n_prime, _r_bits) = basic_compute_montgomery_params(13u32);
+        let (r, _r_inv, _n_prime, _r_bits) = basic_compute_montgomery_params(13u32).unwrap();
 
         // From EXAMPLE1_COMPUTE_PARAM.md:
         // 7 -> Montgomery: 7 * 16 mod 13 = 112 mod 13 = 8
@@ -218,7 +225,7 @@ mod tests {
     #[test]
     fn test_basic_from_montgomery() {
         // Test with our documented example: N = 13
-        let (r, _r_inv, n_prime, r_bits) = basic_compute_montgomery_params(13u32);
+        let (r, _r_inv, n_prime, r_bits) = basic_compute_montgomery_params(13u32).unwrap();
 
         // Test round-trip conversions
         // 7 -> Montgomery (8) -> back to normal form (should be 7)
@@ -253,7 +260,7 @@ mod tests {
     #[test]
     fn test_basic_montgomery_mul() {
         // Test Montgomery domain multiplication with N = 13
-        let (r, _r_inv, n_prime, r_bits) = basic_compute_montgomery_params(13u32);
+        let (r, _r_inv, n_prime, r_bits) = basic_compute_montgomery_params(13u32).unwrap();
 
         // Test: 7 * 5 = 35 ≡ 9 (mod 13)
         let a_mont = basic_to_montgomery(7u32, 13u32, r); // 7 -> 8 (Montgomery form)
@@ -290,7 +297,7 @@ mod tests {
         // This function does: compute params, convert to Montgomery, multiply, convert back
 
         // Test: 7 * 5 mod 13 = 9
-        let result = basic_montgomery_mod_mul(7u32, 5u32, 13u32);
+        let result = basic_montgomery_mod_mul(7u32, 5u32, 13u32).unwrap();
         assert_eq!(result, 9u32);
 
         // Verify against regular modular multiplication
@@ -299,7 +306,7 @@ mod tests {
         // Test more cases to ensure correctness
         for a in 0u32..13u32 {
             for b in 0u32..13u32 {
-                let montgomery_result = basic_montgomery_mod_mul(a, b, 13u32);
+                let montgomery_result = basic_montgomery_mod_mul(a, b, 13u32).unwrap();
                 let regular_result = crate::mul::basic_mod_mul(a, b, 13u32);
                 assert_eq!(
                     montgomery_result, regular_result,
@@ -315,21 +322,21 @@ mod tests {
         // Test Montgomery-based exponentiation against regular exponentiation
 
         // Test: 7^5 mod 13 = 16807 mod 13 = 11
-        let montgomery_result = basic_montgomery_mod_exp(7u32, 5u32, 13u32);
+        let montgomery_result = basic_montgomery_mod_exp(7u32, 5u32, 13u32).unwrap();
         let regular_result = crate::exp::basic_mod_exp(7u32, 5u32, 13u32);
         assert_eq!(montgomery_result, regular_result);
         assert_eq!(montgomery_result, 11u32);
 
         // Test edge cases
-        assert_eq!(basic_montgomery_mod_exp(0u32, 5u32, 13u32), 0u32); // 0^5 = 0
-        assert_eq!(basic_montgomery_mod_exp(7u32, 0u32, 13u32), 1u32); // 7^0 = 1
-        assert_eq!(basic_montgomery_mod_exp(1u32, 100u32, 13u32), 1u32); // 1^100 = 1
-        assert_eq!(basic_montgomery_mod_exp(7u32, 1u32, 13u32), 7u32); // 7^1 = 7
+        assert_eq!(basic_montgomery_mod_exp(0u32, 5u32, 13u32).unwrap(), 0u32); // 0^5 = 0
+        assert_eq!(basic_montgomery_mod_exp(7u32, 0u32, 13u32).unwrap(), 1u32); // 7^0 = 1
+        assert_eq!(basic_montgomery_mod_exp(1u32, 100u32, 13u32).unwrap(), 1u32); // 1^100 = 1
+        assert_eq!(basic_montgomery_mod_exp(7u32, 1u32, 13u32).unwrap(), 7u32); // 7^1 = 7
 
         // Comprehensive test: verify Montgomery exp matches regular exp for all small values
         for base in 0u32..13u32 {
             for exponent in 0u32..10u32 {
-                let montgomery_result = basic_montgomery_mod_exp(base, exponent, 13u32);
+                let montgomery_result = basic_montgomery_mod_exp(base, exponent, 13u32).unwrap();
                 let regular_result = crate::exp::basic_mod_exp(base, exponent, 13u32);
                 assert_eq!(
                     montgomery_result, regular_result,
@@ -341,13 +348,141 @@ mod tests {
 
         // Test with larger exponents to verify efficiency benefits would apply
         assert_eq!(
-            basic_montgomery_mod_exp(2u32, 100u32, 13u32),
+            basic_montgomery_mod_exp(2u32, 100u32, 13u32).unwrap(),
             crate::exp::basic_mod_exp(2u32, 100u32, 13u32)
         );
         assert_eq!(
-            basic_montgomery_mod_exp(3u32, 1000u32, 13u32),
+            basic_montgomery_mod_exp(3u32, 1000u32, 13u32).unwrap(),
             crate::exp::basic_mod_exp(3u32, 1000u32, 13u32)
         );
+    }
+
+    #[test]
+    fn test_re_exported_function_error_paths() {
+        // Test error paths in re-exported functions from this module
+
+        // Test basic functions return None for invalid inputs
+        let invalid_modulus = 4u32; // Even modulus should fail
+
+        assert!(
+            basic_compute_montgomery_params(invalid_modulus).is_none(),
+            "basic_compute_montgomery_params should return None for even modulus"
+        );
+
+        assert!(
+            basic_compute_montgomery_params_with_method(invalid_modulus, NPrimeMethod::TrialSearch)
+                .is_none(),
+            "basic_compute_montgomery_params_with_method should return None for even modulus"
+        );
+
+        assert!(
+            basic_montgomery_mod_mul(2u32, 3u32, invalid_modulus).is_none(),
+            "basic_montgomery_mod_mul should return None for even modulus"
+        );
+
+        assert!(
+            basic_montgomery_mod_exp(2u32, 3u32, invalid_modulus).is_none(),
+            "basic_montgomery_mod_exp should return None for even modulus"
+        );
+    }
+
+    #[test]
+    fn test_re_exported_constrained_function_error_paths() {
+        // Test error paths in re-exported constrained functions
+        let invalid_modulus = 4u32; // Even modulus should fail
+
+        assert!(
+            constrained_compute_montgomery_params(&invalid_modulus).is_none(),
+            "constrained_compute_montgomery_params should return None for even modulus"
+        );
+
+        assert!(
+            constrained_compute_montgomery_params_with_method(
+                &invalid_modulus,
+                NPrimeMethod::ExtendedEuclidean
+            )
+            .is_none(),
+            "constrained_compute_montgomery_params_with_method should return None for even modulus"
+        );
+
+        assert!(
+            constrained_montgomery_mod_mul(2u32, &3u32, &invalid_modulus).is_none(),
+            "constrained_montgomery_mod_mul should return None for even modulus"
+        );
+
+        assert!(
+            constrained_montgomery_mod_exp(2u32, &3u32, &invalid_modulus).is_none(),
+            "constrained_montgomery_mod_exp should return None for even modulus"
+        );
+    }
+
+    #[test]
+    fn test_re_exported_strict_function_error_paths() {
+        // Test error paths in re-exported strict functions
+        let invalid_modulus = 4u32; // Even modulus should fail
+
+        assert!(
+            strict_compute_montgomery_params(&invalid_modulus).is_none(),
+            "strict_compute_montgomery_params should return None for even modulus"
+        );
+
+        assert!(
+            strict_compute_montgomery_params_with_method(
+                &invalid_modulus,
+                NPrimeMethod::HenselsLifting
+            )
+            .is_none(),
+            "strict_compute_montgomery_params_with_method should return None for even modulus"
+        );
+
+        assert!(
+            strict_montgomery_mod_mul(2u32, &3u32, &invalid_modulus).is_none(),
+            "strict_montgomery_mod_mul should return None for even modulus"
+        );
+
+        assert!(
+            strict_montgomery_mod_exp(2u32, &3u32, &invalid_modulus).is_none(),
+            "strict_montgomery_mod_exp should return None for even modulus"
+        );
+    }
+
+    #[test]
+    fn test_conversion_functions_with_edge_cases() {
+        // Test the conversion functions with additional edge cases
+        let modulus = 17u32; // Different modulus for variety
+        let (r, _r_inv, n_prime, r_bits) = basic_compute_montgomery_params(modulus).unwrap();
+
+        // Test basic_to_montgomery with edge values
+        assert_eq!(basic_to_montgomery(0u32, modulus, r), 0u32);
+        assert_eq!(basic_to_montgomery(modulus - 1, modulus, r), 2);
+
+        // Test basic_from_montgomery with edge values
+        let mont_zero = basic_to_montgomery(0u32, modulus, r);
+        assert_eq!(
+            basic_from_montgomery(mont_zero, modulus, n_prime, r_bits),
+            0u32
+        );
+
+        let mont_max = basic_to_montgomery(modulus - 1, modulus, r);
+        assert_eq!(
+            basic_from_montgomery(mont_max, modulus, n_prime, r_bits),
+            modulus - 1
+        );
+
+        // Test strict versions
+        let (r_s, _r_inv_s, n_prime_s, r_bits_s) =
+            strict_compute_montgomery_params(&modulus).unwrap();
+        let mont_strict = strict_to_montgomery(5u32, &modulus, &r_s);
+        let back_strict = strict_from_montgomery(mont_strict, &modulus, &n_prime_s, r_bits_s);
+        assert_eq!(back_strict, 5u32);
+
+        // Test constrained versions
+        let (r_c, _r_inv_c, n_prime_c, r_bits_c) =
+            constrained_compute_montgomery_params(&modulus).unwrap();
+        let mont_constrained = constrained_to_montgomery(8u32, &modulus, &r_c);
+        let back_constrained =
+            constrained_from_montgomery(mont_constrained, &modulus, &n_prime_c, r_bits_c);
+        assert_eq!(back_constrained, 8u32);
     }
 }
 
@@ -378,7 +513,7 @@ macro_rules! montgomery_test_module {
                     let expected = U256::from(9u8); // 7 * 5 mod 13 = 9
 
                     crate::maybe_test!($strict, {
-                        let result = super::strict_mont::strict_montgomery_mod_mul(a, &b, &modulus);
+                        let result = super::strict_mont::strict_montgomery_mod_mul(a, &b, &modulus).unwrap();
                         assert_eq!(result, expected);
 
                         // Verify against regular modular multiplication
@@ -387,7 +522,7 @@ macro_rules! montgomery_test_module {
                     });
                     let a = U256::from(a_val);
                     crate::maybe_test!($constrained, {
-                        let result = super::constrained_mont::constrained_montgomery_mod_mul(a.clone(), &b, &modulus);
+                        let result = super::constrained_mont::constrained_montgomery_mod_mul(a.clone(), &b, &modulus).unwrap();
                         assert_eq!(result, expected);
 
                         // Verify against regular modular multiplication
@@ -396,7 +531,7 @@ macro_rules! montgomery_test_module {
                     });
                     let a = U256::from(a_val);
                     crate::maybe_test!($basic, {
-                        let result = super::basic_montgomery_mod_mul(a, b, modulus);
+                        let result = super::basic_montgomery_mod_mul(a, b, modulus).unwrap();
                         assert_eq!(result, expected);
 
                         // Verify against regular modular multiplication
@@ -416,7 +551,7 @@ macro_rules! montgomery_test_module {
                     let expected = U256::from(11u8); // 7^5 mod 13 = 11
 
                     crate::maybe_test!($strict, {
-                        let result = super::strict_mont::strict_montgomery_mod_exp(base, &exponent, &modulus);
+                        let result = super::strict_mont::strict_montgomery_mod_exp(base, &exponent, &modulus).unwrap();
                         assert_eq!(result, expected);
 
                         // Verify against regular modular exponentiation
@@ -425,7 +560,7 @@ macro_rules! montgomery_test_module {
                     });
                     let base = U256::from(base_val);
                     crate::maybe_test!($constrained, {
-                        let result = super::constrained_mont::constrained_montgomery_mod_exp(base.clone(), &exponent, &modulus);
+                        let result = super::constrained_mont::constrained_montgomery_mod_exp(base.clone(), &exponent, &modulus).unwrap();
                         assert_eq!(result, expected);
 
                         // Verify against regular modular exponentiation
@@ -434,7 +569,7 @@ macro_rules! montgomery_test_module {
                     });
                     let base = U256::from(base_val);
                     crate::maybe_test!($basic, {
-                        let result = super::basic_montgomery_mod_exp(base, exponent, modulus);
+                        let result = super::basic_montgomery_mod_exp(base, exponent, modulus).unwrap();
                         assert_eq!(result, expected);
 
                         // Verify against regular modular exponentiation
@@ -451,7 +586,7 @@ macro_rules! montgomery_test_module {
 
                     for modulus in test_moduli.iter() {
                         crate::maybe_test!($strict, {
-                            let (r, r_inv, n_prime, r_bits) = super::strict_mont::strict_compute_montgomery_params(modulus);
+                            let (r, r_inv, n_prime, r_bits) = super::strict_mont::strict_compute_montgomery_params(modulus).unwrap();
 
                             // Verify mathematical properties
                             // 1. R * R^(-1) ≡ 1 (mod N)
@@ -465,7 +600,7 @@ macro_rules! montgomery_test_module {
                             assert_eq!(r, U256::from(1u8) << r_bits);
                         });
                         crate::maybe_test!($constrained, {
-                            let (r, r_inv, n_prime, r_bits) = super::constrained_mont::constrained_compute_montgomery_params(modulus);
+                            let (r, r_inv, n_prime, r_bits) = super::constrained_mont::constrained_compute_montgomery_params(modulus).unwrap();
 
                             // Verify mathematical properties
                             // 1. R * R^(-1) ≡ 1 (mod N)
@@ -479,7 +614,7 @@ macro_rules! montgomery_test_module {
                             assert_eq!(r, U256::from(1u8) << r_bits);
                         });
                         crate::maybe_test!($basic, {
-                            let (r, r_inv, n_prime, r_bits) = super::basic_compute_montgomery_params(*modulus);
+                            let (r, r_inv, n_prime, r_bits) = super::basic_compute_montgomery_params(*modulus).unwrap();
 
                             // Verify mathematical properties
                             // 1. R * R^(-1) ≡ 1 (mod N)
@@ -502,9 +637,9 @@ macro_rules! montgomery_test_module {
                     let modulus = U256::from(13u8);
 
                     crate::maybe_test!($strict, {
-                        let trial_result = super::strict_mont::strict_compute_montgomery_params_with_method(&modulus, super::NPrimeMethod::TrialSearch);
-                        let euclidean_result = super::strict_mont::strict_compute_montgomery_params_with_method(&modulus, super::NPrimeMethod::ExtendedEuclidean);
-                        let hensels_result = super::strict_mont::strict_compute_montgomery_params_with_method(&modulus, super::NPrimeMethod::HenselsLifting);
+                        let trial_result = super::strict_mont::strict_compute_montgomery_params_with_method(&modulus, super::NPrimeMethod::TrialSearch).unwrap();
+                        let euclidean_result = super::strict_mont::strict_compute_montgomery_params_with_method(&modulus, super::NPrimeMethod::ExtendedEuclidean).unwrap();
+                        let hensels_result = super::strict_mont::strict_compute_montgomery_params_with_method(&modulus, super::NPrimeMethod::HenselsLifting).unwrap();
 
                         // All methods should produce identical results
                         assert_eq!(trial_result, euclidean_result);
@@ -522,9 +657,9 @@ macro_rules! montgomery_test_module {
                         assert_eq!(euclidean_result, hensels_result);
                     });
                     crate::maybe_test!($basic, {
-                        let trial_result = super::basic_compute_montgomery_params_with_method(modulus, super::NPrimeMethod::TrialSearch);
-                        let euclidean_result = super::basic_compute_montgomery_params_with_method(modulus, super::NPrimeMethod::ExtendedEuclidean);
-                        let hensels_result = super::basic_compute_montgomery_params_with_method(modulus, super::NPrimeMethod::HenselsLifting);
+                        let trial_result = super::basic_compute_montgomery_params_with_method(modulus, super::NPrimeMethod::TrialSearch).unwrap();
+                        let euclidean_result = super::basic_compute_montgomery_params_with_method(modulus, super::NPrimeMethod::ExtendedEuclidean).unwrap();
+                        let hensels_result = super::basic_compute_montgomery_params_with_method(modulus, super::NPrimeMethod::HenselsLifting).unwrap();
 
                         // All methods should produce identical results
                         assert_eq!(trial_result, euclidean_result);
@@ -540,7 +675,7 @@ macro_rules! montgomery_test_module {
                     let modulus = U256::from(13u8);
 
                     crate::maybe_test!($strict, {
-                        let (r, _r_inv, n_prime, r_bits) = super::strict_mont::strict_compute_montgomery_params(&modulus);
+                        let (r, _r_inv, n_prime, r_bits) = super::strict_mont::strict_compute_montgomery_params(&modulus).unwrap();
 
                         // Test values from 0 to modulus-1
                         for i in 0u8..13u8 {
@@ -551,7 +686,7 @@ macro_rules! montgomery_test_module {
                         }
                     });
                     crate::maybe_test!($constrained, {
-                        let (r, _r_inv, n_prime, r_bits) = super::constrained_mont::constrained_compute_montgomery_params(&modulus);
+                        let (r, _r_inv, n_prime, r_bits) = super::constrained_mont::constrained_compute_montgomery_params(&modulus).unwrap();
 
                         // Test values from 0 to modulus-1
                         for i in 0u8..13u8 {
@@ -562,7 +697,7 @@ macro_rules! montgomery_test_module {
                         }
                     });
                     crate::maybe_test!($basic, {
-                        let (r, _r_inv, n_prime, r_bits) = super::basic_compute_montgomery_params(modulus);
+                        let (r, _r_inv, n_prime, r_bits) = super::basic_compute_montgomery_params(modulus).unwrap();
 
                         // Test values from 0 to modulus-1
                         for i in 0u8..13u8 {
@@ -585,7 +720,7 @@ macro_rules! montgomery_test_module {
                             let a_big = U256::from(a);
                             let b_big = U256::from(b);
                             crate::maybe_test!($strict, {
-                                let montgomery_result = super::strict_mont::strict_montgomery_mod_mul(a_big, &b_big, &modulus);
+                                let montgomery_result = super::strict_mont::strict_montgomery_mod_mul(a_big, &b_big, &modulus).unwrap();
                                 let regular_result = crate::mul::strict_mod_mul(a_big, &b_big, &modulus);
                                 assert_eq!(montgomery_result, regular_result,
                                     "Montgomery vs regular mismatch: {} * {} mod 13: {:?} != {:?}",
@@ -594,7 +729,7 @@ macro_rules! montgomery_test_module {
                             let a_big = U256::from(a);
                             let b_big = U256::from(b);
                             crate::maybe_test!($constrained, {
-                                let montgomery_result = super::constrained_mont::constrained_montgomery_mod_mul(a_big.clone(), &b_big, &modulus);
+                                let montgomery_result = super::constrained_mont::constrained_montgomery_mod_mul(a_big.clone(), &b_big, &modulus).unwrap();
                                 let regular_result = crate::mul::constrained_mod_mul(a_big, &b_big, &modulus);
                                 assert_eq!(montgomery_result, regular_result,
                                     "Montgomery vs regular mismatch: {} * {} mod 13: {:?} != {:?}",
@@ -603,7 +738,7 @@ macro_rules! montgomery_test_module {
                             let a_big = U256::from(a);
                             let b_big = U256::from(b);
                             crate::maybe_test!($basic, {
-                                let montgomery_result = super::basic_montgomery_mod_mul(a_big, b_big, modulus);
+                                let montgomery_result = super::basic_montgomery_mod_mul(a_big, b_big, modulus).unwrap();
                                 let regular_result = crate::mul::basic_mod_mul(a_big, b_big, modulus);
                                 assert_eq!(montgomery_result, regular_result,
                                     "Montgomery vs regular mismatch: {} * {} mod 13: {:?} != {:?}",
