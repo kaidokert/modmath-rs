@@ -1,15 +1,49 @@
 use core::cmp::Ordering;
 
-/// Partial signed implementation
-/// Only here to support mod_inv minimal operations
-
+/// Partial signed implementation for modular inverse calculations
+///
+/// This type represents a signed number using a magnitude-sign representation.
+///
+/// # Type Parameter Requirements
+///
+/// **IMPORTANT**: The type parameter `T` **MUST** be an unsigned/non-negative type
+/// (such as `u32`, `u64`, `BigUint`, etc.). Using signed types (like `i32`, `i64`)
+/// will break the internal invariant that `value` represents a non-negative magnitude.
+///
+/// # Representation Invariant
+///
+/// - `value`: Always represents the **absolute magnitude** (non-negative)
+/// - `negative`: The sign bit (`false` = positive, `true` = negative)
+/// - Zero is canonicalized to have `negative = false`
+///
+/// # Examples
+///
+/// ```rust
+/// use modmath::inv::signed::Signed;
+///
+/// // Correct usage with unsigned types
+/// let positive_five = Signed::new(5u32, false);  // +5
+/// let negative_three = Signed::new(3u32, true);  // -3
+/// let zero = Signed::new(0u32, false);           // +0 (canonical)
+///
+/// // DO NOT use with signed types - breaks invariants!
+/// // let bad_example = Signed::new(-5i32, false); // ❌ WRONG!
+/// ```
+///
+/// Only here to support mod_inv minimal operations.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Signed<T> {
+    /// The absolute magnitude of the number (must be non-negative)
     value: T,
+    /// The sign: false for positive/zero, true for negative
     negative: bool,
 }
 
 impl<T> From<T> for Signed<T> {
+    /// Creates a positive Signed<T> from an unsigned value.
+    ///
+    /// # Requirements
+    /// `T` must be an unsigned type (u32, u64, BigUint, etc.)
     fn from(value: T) -> Self {
         Self {
             value,
@@ -19,9 +53,23 @@ impl<T> From<T> for Signed<T> {
 }
 
 impl<T> Signed<T> {
+    /// Creates a new Signed<T> with the specified magnitude and sign.
+    ///
+    /// # Requirements
+    /// - `value` must represent a non-negative magnitude
+    /// - `T` must be an unsigned type (u32, u64, BigUint, etc.)
+    ///
+    /// # Arguments
+    /// - `value`: The absolute magnitude (must be non-negative)
+    /// - `negative`: The sign (false = positive, true = negative)
     pub fn new(value: T, negative: bool) -> Self {
         Self { value, negative }
     }
+
+    /// Returns the inner magnitude value.
+    ///
+    /// Note: This returns only the magnitude; use the `negative` field
+    /// to determine the actual sign of the number.
     pub fn into_inner(self) -> T {
         self.value
     }
@@ -68,12 +116,33 @@ where
 
 impl<'a, T> core::ops::AddAssign<&'a T> for Signed<T>
 where
-    T: core::ops::AddAssign<&'a T> + core::ops::SubAssign<&'a T>,
+    T: core::ops::AddAssign<&'a T>
+        + core::ops::SubAssign<&'a T>
+        + PartialEq
+        + PartialOrd
+        + num_traits::Zero
+        + Clone,
+    for<'b> &'b T: core::ops::Sub<T, Output = T>,
 {
     fn add_assign(&mut self, other: &'a T) {
         match self.negative {
             false => self.value += other,
-            true => self.value -= other,
+            true => {
+                // Handle negative case: -self.value + other
+                if &self.value >= other {
+                    // |self| >= other, result stays negative: -(|self| - other)
+                    self.value -= other;
+                } else {
+                    // |self| < other, result becomes positive: other - |self|
+                    self.value = other - self.value.clone();
+                    self.negative = false; // Flip sign to positive
+                }
+            }
+        }
+
+        // Canonicalize zero: ensure zero is always represented as positive
+        if self.value == T::zero() {
+            self.negative = false;
         }
     }
 }
@@ -82,13 +151,15 @@ impl<T> core::ops::Add<&T> for Signed<T>
 where
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::cmp::PartialOrd,
+        + core::cmp::PartialOrd
+        + num_traits::Zero
+        + PartialEq,
     for<'a> &'a T: core::ops::Sub<T, Output = T>,
 {
     type Output = Self;
 
     fn add(self, other: &T) -> Self::Output {
-        match self.negative {
+        let mut result = match self.negative {
             false => Self::new(self.value + other, self.negative),
             true => {
                 if self.value >= *other {
@@ -97,7 +168,14 @@ where
                     Self::new(other - self.value, !self.negative)
                 }
             }
+        };
+
+        // Canonicalize zero: ensure zero is always represented as positive
+        if result.value == T::zero() {
+            result.negative = false;
         }
+
+        result
     }
 }
 
@@ -135,6 +213,11 @@ where
     }
 }
 
+/// Multiplication of two Signed<T> values.
+///
+/// # Requirements
+/// `T` must be an unsigned type to maintain the invariant that `value` represents
+/// a non-negative magnitude. Using signed types will break this assumption.
 impl<T> core::ops::Mul for Signed<T>
 where
     T: core::ops::Mul<Output = T>,
@@ -149,6 +232,11 @@ where
     }
 }
 
+/// Multiplication of Signed<T> with an unsigned value T.
+///
+/// # Requirements
+/// Both `T` and `other` must be unsigned types. The `other` parameter should
+/// represent a non-negative value to maintain correctness.
 impl<T> core::ops::Mul<T> for Signed<T>
 where
     T: core::ops::Mul<Output = T>,
@@ -163,6 +251,11 @@ where
     }
 }
 
+/// Multiplication of Signed<T> with a reference to an unsigned value &T.
+///
+/// # Requirements
+/// Both `T` and `other` must be unsigned types. The `other` parameter should
+/// represent a non-negative value to maintain correctness.
 impl<'a, T> core::ops::Mul<&'a T> for Signed<T>
 where
     T: core::ops::Mul<&'a T, Output = T> + 'a,
@@ -373,7 +466,7 @@ mod signed_tests {
         let mut a = Signed::new(7u32, true); // -7
         a += &7u32; // -7 += 7 = 0 (7 - 7 = 0)
         assert_eq!(a.value, 0u32);
-        assert_eq!(a.negative, true); // Current implementation doesn't flip sign or canonicalize zero
+        assert_eq!(a.negative, false); // Fixed: zero is canonicalized to positive
 
         // Test another valid case where subtraction doesn't underflow
         let mut a = Signed::new(20u32, true); // -20
@@ -395,80 +488,95 @@ mod signed_tests {
 
         // Extended test cases for sign flips and zero canonicalization:
 
-        // These tests reveal bugs in the current AddAssign implementation.
-        // The current implementation doesn't handle sign flips properly and
-        // panics on underflow instead of flipping signs.
+        // These tests verify the fixed AddAssign implementation.
+        // The fixed implementation handles sign flips properly and
+        // canonicalizes zero to always be positive.
 
         // Test case: Zero result should be canonicalized to positive
-        // Note: Current implementation leaves zero as negative, which is incorrect
         let mut zero_case = Signed::new(5u32, true); // -5
         zero_case += &5u32; // -5 + 5 should be +0 (canonicalized)
         assert_eq!(zero_case.value, 0u32);
-        // Bug: Current implementation keeps negative=true for zero
-        assert_eq!(zero_case.negative, true); // Should be false for canonical zero
+        assert_eq!(zero_case.negative, false); // Fixed: zero is canonicalized to positive
 
         // Test case: Multiple operations that should result in zero
         let mut multiple_zero = Signed::new(3u32, true); // -3
         multiple_zero += &3u32; // -3 + 3 = 0
         assert_eq!(multiple_zero.value, 0u32);
-        assert_eq!(multiple_zero.negative, true); // Bug: zero should be positive
+        assert_eq!(multiple_zero.negative, false); // Fixed: zero is canonicalized to positive
 
         // Test case: Large exact cancellation
         let mut large_cancel = Signed::new(100u32, true); // -100
         large_cancel += &100u32; // -100 + 100 = 0
         assert_eq!(large_cancel.value, 0u32);
-        assert_eq!(large_cancel.negative, true); // Bug: zero should be positive
+        assert_eq!(large_cancel.negative, false); // Fixed: zero is canonicalized to positive
 
         // Additional edge cases with zero
         let mut zero_to_zero = Signed::new(0u32, true); // -0 (invalid state)
         zero_to_zero += &0u32; // -0 + 0 = 0
         assert_eq!(zero_to_zero.value, 0u32);
-        assert_eq!(zero_to_zero.negative, true); // Bug: zero should be positive
+        assert_eq!(zero_to_zero.negative, false); // Fixed: zero is canonicalized to positive
+
+        // Test cases that should now work: sign flips from negative to positive
+        let mut sign_flip1 = Signed::new(8u32, true); // -8
+        sign_flip1 += &12u32; // -8 + 12 = +4
+        assert_eq!(sign_flip1.value, 4u32);
+        assert_eq!(sign_flip1.negative, false); // Should become positive
+
+        let mut sign_flip2 = Signed::new(3u32, true); // -3
+        sign_flip2 += &7u32; // -3 + 7 = +4
+        assert_eq!(sign_flip2.value, 4u32);
+        assert_eq!(sign_flip2.negative, false); // Should become positive
+
+        let mut sign_flip3 = Signed::new(1u32, true); // -1
+        sign_flip3 += &10u32; // -1 + 10 = +9
+        assert_eq!(sign_flip3.value, 9u32);
+        assert_eq!(sign_flip3.negative, false); // Should become positive
     }
 
     #[test]
-    #[should_panic(expected = "attempt to subtract with overflow")]
-    fn test_signed_add_assign_underflow_bug() {
-        // This test documents a bug in the current AddAssign implementation
-        // When adding to a negative number causes underflow, it panics instead of handling sign flip
+    fn test_signed_add_assign_sign_flip_fixed() {
+        // This test verifies the fixed AddAssign implementation
+        // When adding to a negative number causes sign flip, it should work correctly
         let mut a = Signed::new(8u32, true); // -8
-        a += &12u32; // This should be -8 + 12 = +4, but current impl tries 8 - 12 and panics
+        a += &12u32; // -8 + 12 = +4
+        assert_eq!(a.value, 4u32);
+        assert_eq!(a.negative, false); // Should be positive
     }
 
     #[test]
-    #[should_panic(expected = "attempt to subtract with overflow")]
-    fn test_signed_add_assign_sign_flip_negative_to_positive_bug() {
-        // Test case that should flip from negative to positive but currently panics
+    fn test_signed_add_assign_sign_flip_negative_to_positive_fixed() {
+        // Test case that flips from negative to positive - now working correctly
         // -3 + 7 should equal +4
         let mut a = Signed::new(3u32, true); // -3
-        a += &7u32; // Should become +4, but panics due to 3 - 7 underflow
+        a += &7u32; // Should become +4
+        assert_eq!(a.value, 4u32);
+        assert_eq!(a.negative, false); // Should be positive
     }
 
     #[test]
-    #[should_panic(expected = "attempt to subtract with overflow")]
-    fn test_signed_add_assign_small_negative_large_positive_bug() {
+    fn test_signed_add_assign_small_negative_large_positive_fixed() {
         // Test case: small negative + large positive should become positive
         // -1 + 10 should equal +9
         let mut a = Signed::new(1u32, true); // -1
-        a += &10u32; // Should become +9, but panics due to 1 - 10 underflow
+        a += &10u32; // Should become +9
+        assert_eq!(a.value, 9u32);
+        assert_eq!(a.negative, false); // Should be positive
     }
 
     #[test]
-    #[should_panic(expected = "attempt to subtract with overflow")]
-    fn test_signed_add_assign_edge_case_maximum_flip_bug() {
+    fn test_signed_add_assign_edge_case_maximum_flip_fixed() {
         // Test case: maximum negative flip
         // -1 + u32::MAX should become +(u32::MAX - 1)
         let mut a = Signed::new(1u32, true); // -1
-        a += &u32::MAX; // Should become +(u32::MAX - 1), but panics
+        a += &u32::MAX; // Should become +(u32::MAX - 1)
+        assert_eq!(a.value, u32::MAX - 1);
+        assert_eq!(a.negative, false); // Should be positive
     }
 
     #[test]
-    fn test_signed_add_assign_expected_correct_behavior() {
-        // This test documents what the CORRECT behavior should be for AddAssign
-        // and shows that Add<&T> handles sign flips correctly (but not zero canonicalization)
-
-        // The Add<&T> implementation correctly handles sign flips, unlike AddAssign
-        // which panics on underflow
+    fn test_signed_add_t_reference_correct_behavior() {
+        // This test verifies the correct behavior of Add<&T> implementation
+        // Both sign flips and zero canonicalization should work properly
 
         // Case 1: -8 + 12 should equal +4
         let a = Signed::new(8u32, true); // -8
@@ -488,18 +596,17 @@ mod signed_tests {
         assert_eq!(result.value, 9u32);
         assert_eq!(result.negative, false); // Correctly becomes positive
 
-        // Case 4: Zero canonicalization bug exists in Add<&T> too
+        // Case 4: Zero canonicalization should work correctly now
         let a = Signed::new(5u32, true); // -5
         let result = a + &5u32;
         assert_eq!(result.value, 0u32);
-        // Bug: Even Add<&T> doesn't canonicalize zero properly
-        assert_eq!(result.negative, true); // Should be false, but Add<&T> also has this bug
+        assert_eq!(result.negative, false); // Fixed: zero is now canonicalized to positive
 
         // Case 5: Test edge case where negative value equals the addend
         let a = Signed::new(7u32, true); // -7
         let result = a + &7u32; // -7 + 7 = 0
         assert_eq!(result.value, 0u32);
-        assert_eq!(result.negative, true); // Bug: zero should be positive
+        assert_eq!(result.negative, false); // Fixed: zero is now canonicalized to positive
 
         // Case 6: Show that positive + positive works correctly
         let a = Signed::new(3u32, false); // +3
