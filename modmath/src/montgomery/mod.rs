@@ -454,10 +454,7 @@ mod tests {
 
         // Test basic_to_montgomery with edge values
         assert_eq!(basic_to_montgomery(0u32, modulus, r), 0u32);
-        assert_eq!(
-            basic_to_montgomery(modulus - 1, modulus, r),
-            basic_to_montgomery(modulus - 1, modulus, r)
-        );
+        assert_eq!(basic_to_montgomery(modulus - 1, modulus, r), 2);
 
         // Test basic_from_montgomery with edge values
         let mont_zero = basic_to_montgomery(0u32, modulus, r);
