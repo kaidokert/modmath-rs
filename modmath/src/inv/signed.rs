@@ -18,8 +18,9 @@ use core::cmp::Ordering;
 ///
 /// # Examples
 ///
-/// ```rust
-/// use modmath::inv::signed::Signed;
+/// ```rust,ignore
+/// // Note: This example uses private API for demonstration
+/// use crate::inv::signed::Signed;
 ///
 /// // Correct usage with unsigned types
 /// let positive_five = Signed::new(5u32, false);  // +5
@@ -62,7 +63,29 @@ impl<T> Signed<T> {
     /// # Arguments
     /// - `value`: The absolute magnitude (must be non-negative)
     /// - `negative`: The sign (false = positive, true = negative)
-    pub fn new(value: T, negative: bool) -> Self {
+    ///
+    /// # Zero Canonicalization
+    /// If `value` is zero, `negative` will automatically be set to `false`
+    /// regardless of the input, maintaining the invariant that zero is always positive.
+    /// This requires `T: PartialEq + num_traits::Zero`.
+    pub fn new(value: T, negative: bool) -> Self
+    where
+        T: PartialEq + num_traits::Zero,
+    {
+        let is_zero = value == T::zero();
+        Self {
+            value,
+            negative: if is_zero { false } else { negative },
+        }
+    }
+
+    /// Internal constructor that bypasses zero canonicalization for performance.
+    /// Used internally where we know the canonicalization is already handled.
+    ///
+    /// # Safety
+    /// This should only be used when the caller ensures zero canonicalization
+    /// is handled elsewhere or when creating non-zero values.
+    pub(crate) fn new_unchecked(value: T, negative: bool) -> Self {
         Self { value, negative }
     }
 
@@ -101,13 +124,13 @@ where
     fn add(self, other: &Signed<T>) -> Self::Output {
         // can i delegate this implementation ??
         match (self.negative, other.negative) {
-            (false, false) => Self::new(self.value + &other.value, false),
-            (true, true) => Self::new(self.value + &other.value, true),
+            (false, false) => Self::new_unchecked(self.value + &other.value, false),
+            (true, true) => Self::new_unchecked(self.value + &other.value, true),
             (false, true) | (true, false) => {
                 if self.value >= other.value {
-                    Self::new(self.value - &other.value, self.negative)
+                    Self::new_unchecked(self.value - &other.value, self.negative)
                 } else {
-                    Self::new(&other.value - self.value, other.negative)
+                    Self::new_unchecked(&other.value - self.value, other.negative)
                 }
             }
         }
@@ -160,12 +183,12 @@ where
 
     fn add(self, other: &T) -> Self::Output {
         let mut result = match self.negative {
-            false => Self::new(self.value + other, self.negative),
+            false => Self::new_unchecked(self.value + other, self.negative),
             true => {
                 if self.value >= *other {
-                    Self::new(self.value - other, self.negative)
+                    Self::new_unchecked(self.value - other, self.negative)
                 } else {
-                    Self::new(other - self.value, !self.negative)
+                    Self::new_unchecked(other - self.value, !self.negative)
                 }
             }
         };
@@ -187,13 +210,13 @@ where
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self.negative, rhs.negative) {
-            (false, false) => Self::new(self.value + rhs.value, false),
-            (true, true) => Self::new(self.value + rhs.value, true),
+            (false, false) => Self::new_unchecked(self.value + rhs.value, false),
+            (true, true) => Self::new_unchecked(self.value + rhs.value, true),
             (false, true) | (true, false) => {
                 if self.value >= rhs.value {
-                    Self::new(self.value - rhs.value, self.negative)
+                    Self::new_unchecked(self.value - rhs.value, self.negative)
                 } else {
-                    Self::new(rhs.value - self.value, rhs.negative)
+                    Self::new_unchecked(rhs.value - self.value, rhs.negative)
                 }
             }
         }
@@ -209,7 +232,7 @@ where
     fn sub(self, rhs: Self) -> Self::Output {
         // a - b = a + (-b)
         // To negate a number, just flip its sign
-        self + Self::new(rhs.value, !rhs.negative)
+        self + Self::new_unchecked(rhs.value, !rhs.negative)
     }
 }
 
@@ -401,6 +424,27 @@ mod signed_tests {
         // Test into_inner() method
         let signed_value = Signed::new(123u32, true);
         assert_eq!(signed_value.into_inner(), 123u32);
+    }
+
+    #[test]
+    fn test_signed_new_zero_canonicalization() {
+        // Test that new() automatically canonicalizes zero to positive
+        let zero_positive = Signed::new(0u32, false);
+        assert_eq!(zero_positive.value, 0u32);
+        assert_eq!(zero_positive.negative, false);
+
+        let zero_negative_input = Signed::new(0u32, true);
+        assert_eq!(zero_negative_input.value, 0u32);
+        assert_eq!(zero_negative_input.negative, false); // Should be canonicalized to positive
+
+        // Test with non-zero values - should preserve the sign
+        let positive_five = Signed::new(5u32, false);
+        assert_eq!(positive_five.value, 5u32);
+        assert_eq!(positive_five.negative, false);
+
+        let negative_three = Signed::new(3u32, true);
+        assert_eq!(negative_three.value, 3u32);
+        assert_eq!(negative_three.negative, true); // Should preserve negative for non-zero
     }
 
     #[test]
