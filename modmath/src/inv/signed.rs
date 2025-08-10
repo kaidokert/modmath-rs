@@ -116,14 +116,16 @@ impl<T> core::ops::Add<&Signed<T>> for Signed<T>
 where
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::cmp::PartialOrd,
+        + core::cmp::PartialOrd
+        + PartialEq
+        + num_traits::Zero,
     for<'a> &'a T: core::ops::Sub<T, Output = T>,
 {
     type Output = Self;
 
     fn add(self, other: &Signed<T>) -> Self::Output {
         // can i delegate this implementation ??
-        match (self.negative, other.negative) {
+        let mut result = match (self.negative, other.negative) {
             (false, false) => Self::new_unchecked(self.value + &other.value, false),
             (true, true) => Self::new_unchecked(self.value + &other.value, true),
             (false, true) | (true, false) => {
@@ -133,7 +135,14 @@ where
                     Self::new_unchecked(&other.value - self.value, other.negative)
                 }
             }
+        };
+
+        // Canonicalize zero: ensure zero is always represented as positive
+        if result.value == T::zero() {
+            result.negative = false;
         }
+
+        result
     }
 }
 
@@ -469,6 +478,57 @@ mod signed_tests {
         let result = a + &b; // -4 + (-6) = -10
         assert_eq!(result.value, 10u32);
         assert_eq!(result.negative, true);
+
+        // Test zero canonicalization: positive + negative with equal magnitude
+        let a = Signed::new(5u32, false); // +5
+        let b = Signed::new(5u32, true); // -5
+        let result = a + &b; // +5 + (-5) = 0
+        assert_eq!(result.value, 0u32);
+        assert_eq!(result.negative, false); // Fixed: zero should be canonicalized to positive
+
+        // Test zero canonicalization: negative + positive with equal magnitude
+        let a = Signed::new(7u32, true); // -7
+        let b = Signed::new(7u32, false); // +7
+        let result = a + &b; // -7 + 7 = 0
+        assert_eq!(result.value, 0u32);
+        assert_eq!(result.negative, false); // Fixed: zero should be canonicalized to positive
+
+        // Additional zero canonicalization test cases for Add<&Signed<T>>
+
+        // Test zero canonicalization with different values: +12 + (-12) = 0
+        let a = Signed::new(12u32, false); // +12
+        let b = Signed::new(12u32, true); // -12
+        let result = a + &b; // +12 + (-12) = 0
+        assert_eq!(result.value, 0u32);
+        assert_eq!(result.negative, false); // Zero should be canonicalized to positive
+
+        // Test zero canonicalization with different values: -25 + (+25) = 0
+        let a = Signed::new(25u32, true); // -25
+        let b = Signed::new(25u32, false); // +25
+        let result = a + &b; // -25 + 25 = 0
+        assert_eq!(result.value, 0u32);
+        assert_eq!(result.negative, false); // Zero should be canonicalized to positive
+
+        // Test zero canonicalization with larger values: +100 + (-100) = 0
+        let a = Signed::new(100u32, false); // +100
+        let b = Signed::new(100u32, true); // -100
+        let result = a + &b; // +100 + (-100) = 0
+        assert_eq!(result.value, 0u32);
+        assert_eq!(result.negative, false); // Zero should be canonicalized to positive
+
+        // Test zero canonicalization with edge case: +1 + (-1) = 0
+        let a = Signed::new(1u32, false); // +1
+        let b = Signed::new(1u32, true); // -1
+        let result = a + &b; // +1 + (-1) = 0
+        assert_eq!(result.value, 0u32);
+        assert_eq!(result.negative, false); // Zero should be canonicalized to positive
+
+        // Test zero canonicalization with maximum value: +u32::MAX + (-u32::MAX) = 0
+        let a = Signed::new(u32::MAX, false); // +u32::MAX
+        let b = Signed::new(u32::MAX, true); // -u32::MAX
+        let result = a + &b; // +u32::MAX + (-u32::MAX) = 0
+        assert_eq!(result.value, 0u32);
+        assert_eq!(result.negative, false); // Zero should be canonicalized to positive
     }
 
     #[test]
