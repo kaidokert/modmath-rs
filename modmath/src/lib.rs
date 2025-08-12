@@ -40,7 +40,8 @@ pub use montgomery::{
     constrained_montgomery_mod_exp, constrained_montgomery_mod_mul, constrained_montgomery_mul,
     constrained_to_montgomery, strict_compute_montgomery_params,
     strict_compute_montgomery_params_with_method, strict_from_montgomery,
-    strict_montgomery_mod_exp, strict_montgomery_mod_mul, strict_to_montgomery,
+    strict_montgomery_mod_exp, strict_montgomery_mod_exp_with_method, strict_montgomery_mod_mul,
+    strict_to_montgomery,
 };
 pub use mul::{basic_mod_mul, constrained_mod_mul, strict_mod_mul};
 pub use sub::{basic_mod_sub, constrained_mod_sub, strict_mod_sub};

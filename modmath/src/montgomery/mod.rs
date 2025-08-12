@@ -10,22 +10,25 @@ pub mod strict_mont;
 // Re-export basic functions for backwards compatibility
 pub use basic_mont::{
     NPrimeMethod, basic_compute_montgomery_params, basic_compute_montgomery_params_with_method,
-    basic_from_montgomery, basic_montgomery_mod_exp, basic_montgomery_mod_mul,
-    basic_montgomery_mul, basic_to_montgomery,
+    basic_from_montgomery, basic_montgomery_mod_exp, basic_montgomery_mod_exp_with_method,
+    basic_montgomery_mod_mul, basic_montgomery_mod_mul_with_method, basic_montgomery_mul,
+    basic_to_montgomery,
 };
 
 // Re-export constrained functions
 pub use constrained_mont::{
     constrained_compute_montgomery_params, constrained_compute_montgomery_params_with_method,
-    constrained_from_montgomery, constrained_montgomery_mod_exp, constrained_montgomery_mod_mul,
-    constrained_montgomery_mul, constrained_to_montgomery,
+    constrained_from_montgomery, constrained_montgomery_mod_exp,
+    constrained_montgomery_mod_exp_with_method, constrained_montgomery_mod_mul,
+    constrained_montgomery_mod_mul_with_method, constrained_montgomery_mul,
+    constrained_to_montgomery,
 };
 
 // Re-export strict functions
 pub use strict_mont::{
     strict_compute_montgomery_params, strict_compute_montgomery_params_with_method,
-    strict_from_montgomery, strict_montgomery_mod_exp, strict_montgomery_mod_mul,
-    strict_to_montgomery,
+    strict_from_montgomery, strict_montgomery_mod_exp, strict_montgomery_mod_exp_with_method,
+    strict_montgomery_mod_mul, strict_montgomery_mod_mul_with_method, strict_to_montgomery,
 };
 
 #[cfg(test)]

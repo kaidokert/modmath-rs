@@ -150,7 +150,7 @@ where
 }
 
 /// Montgomery parameter computation (Strict)
-/// Computes R, R^(-1) mod N, N', and R bit length for Montgomery arithmetic
+/// Computes R, R^(-1) mod N, N', and R bit length for Montgomery arithmetic using default method
 /// Uses reference-based operations to minimize copying of large integers
 pub fn strict_compute_montgomery_params<T>(modulus: &T) -> Option<(T, T, T, usize)>
 where
@@ -160,7 +160,8 @@ where
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
+        + num_traits::ops::overflowing::OverflowingSub
+        + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
@@ -172,27 +173,13 @@ where
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<T, Output = T>
-        + core::ops::Add<&'a T, Output = T>,
+        + core::ops::Add<&'a T, Output = T>
+        + core::ops::BitAnd<Output = T>,
 {
-    // Step 1: Find R = 2^k where R > modulus
-    let mut r = T::one();
-    let mut r_bits = 0usize;
-
-    while &r <= modulus {
-        r = r << 1; // r *= 2
-        r_bits += 1;
-    }
-
-    // Create a clone using reference-based addition to avoid moving r
-    let r_clone = &r + &T::zero(); // Clone r using references
-
-    // Step 2: Compute R^(-1) mod modulus using strict_mod_inv
-    let r_inv = crate::inv::strict_mod_inv(r_clone, modulus)?;
-
-    // Step 3: Compute N' using strict trial search
-    let n_prime = strict_compute_n_prime_trial_search(modulus, &r)?;
-
-    Some((r, r_inv, n_prime, r_bits))
+    strict_compute_montgomery_params_with_method(
+        modulus,
+        crate::montgomery::NPrimeMethod::default(),
+    )
 }
 
 /// Montgomery parameter computation with method selection (Strict)
@@ -316,10 +303,15 @@ where
     crate::mul::strict_mod_mul(a, r, modulus)
 }
 
-/// Complete Montgomery modular multiplication (Strict): A * B mod N
+/// Complete Montgomery modular multiplication with method selection (Strict): A * B mod N
 /// Uses reference-based operations throughout to minimize copying of large integers
 /// Returns None if Montgomery parameter computation fails
-pub fn strict_montgomery_mod_mul<T>(a: T, b: &T, modulus: &T) -> Option<T>
+pub fn strict_montgomery_mod_mul_with_method<T>(
+    a: T,
+    b: &T,
+    modulus: &T,
+    method: crate::montgomery::NPrimeMethod,
+) -> Option<T>
 where
     T: num_traits::Zero
         + num_traits::One
@@ -329,7 +321,8 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
+        + num_traits::ops::overflowing::OverflowingSub
+        + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
@@ -344,8 +337,9 @@ where
         + core::ops::Add<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
 {
-    // Step 1: Compute Montgomery parameters
-    let (r, _r_inv, n_prime, r_bits) = strict_compute_montgomery_params(modulus)?;
+    // Step 1: Compute Montgomery parameters using specified method
+    let (r, _r_inv, n_prime, r_bits) =
+        strict_compute_montgomery_params_with_method(modulus, method)?;
 
     // Step 2: Convert inputs to Montgomery form
     let a_mont = strict_to_montgomery(a, modulus, &r);
@@ -368,6 +362,107 @@ where
     ))
 }
 
+/// Complete Montgomery modular multiplication (Strict): A * B mod N
+/// Uses reference-based operations throughout to minimize copying of large integers
+/// Returns None if Montgomery parameter computation fails
+pub fn strict_montgomery_mod_mul<T>(a: T, b: &T, modulus: &T) -> Option<T>
+where
+    T: num_traits::Zero
+        + num_traits::One
+        + PartialEq
+        + PartialOrd
+        + core::ops::Shl<usize, Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Shr<usize, Output = T>
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::ops::overflowing::OverflowingSub
+        + for<'a> core::ops::Rem<&'a T, Output = T>,
+    for<'a> T: core::ops::RemAssign<&'a T>
+        + core::ops::Mul<&'a T, Output = T>
+        + core::ops::Div<&'a T, Output = T>
+        + core::ops::Sub<&'a T, Output = T>
+        + core::ops::Add<&'a T, Output = T>
+        + core::ops::AddAssign<&'a T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
+        + core::ops::Mul<&'a T, Output = T>
+        + core::ops::Sub<&'a T, Output = T>
+        + core::ops::Div<&'a T, Output = T>
+        + core::ops::Sub<T, Output = T>
+        + core::ops::Add<&'a T, Output = T>
+        + core::ops::BitAnd<Output = T>,
+{
+    strict_montgomery_mod_mul_with_method(a, b, modulus, crate::montgomery::NPrimeMethod::default())
+}
+
+/// Montgomery-based modular exponentiation with method selection (Strict): base^exponent mod modulus
+/// Uses Montgomery arithmetic for efficient repeated multiplication with reference-based operations
+/// to minimize copying of large integers
+/// Returns None if Montgomery parameter computation fails
+pub fn strict_montgomery_mod_exp_with_method<T>(
+    mut base: T,
+    exponent: &T,
+    modulus: &T,
+    method: crate::montgomery::NPrimeMethod,
+) -> Option<T>
+where
+    T: num_traits::Zero
+        + num_traits::One
+        + PartialEq
+        + PartialOrd
+        + core::ops::Shl<usize, Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Shr<usize, Output = T>
+        + core::ops::ShrAssign<usize>
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::ops::overflowing::OverflowingSub,
+    for<'a> T: core::ops::RemAssign<&'a T>
+        + core::ops::Rem<&'a T, Output = T>
+        + core::ops::Mul<&'a T, Output = T>
+        + core::ops::Div<&'a T, Output = T>
+        + core::ops::Sub<&'a T, Output = T>
+        + core::ops::Add<&'a T, Output = T>
+        + core::ops::AddAssign<&'a T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
+        + core::ops::Mul<&'a T, Output = T>
+        + core::ops::Sub<&'a T, Output = T>
+        + core::ops::Div<&'a T, Output = T>
+        + core::ops::Sub<T, Output = T>
+        + core::ops::Add<&'a T, Output = T>
+        + core::ops::BitAnd<Output = T>,
+{
+    // Step 1: Compute Montgomery parameters using specified method
+    let (r, _r_inv, n_prime, r_bits) =
+        strict_compute_montgomery_params_with_method(modulus, method)?;
+
+    // Step 2: Reduce base and convert to Montgomery form
+    base.rem_assign(modulus); // Reduce base first to ensure base < modulus
+    base = strict_to_montgomery(base, modulus, &r);
+
+    // Step 3: Initialize result to Montgomery form of 1
+    let mut result = strict_to_montgomery(T::one(), modulus, &r);
+
+    // Step 4: Clone exponent for manipulation to avoid moving the reference
+    let mut exp = exponent + &T::zero(); // Clone exponent
+
+    // Step 5: Binary exponentiation using Montgomery multiplication
+    while exp > T::zero() {
+        // If exponent is odd, multiply result by current base power
+        if &exp & &T::one() == T::one() {
+            result = strict_montgomery_mod_mul_internal(result, &base, modulus, &n_prime, r_bits);
+        }
+
+        // Square the base for next iteration
+        exp >>= 1;
+        if exp > T::zero() {
+            let base_clone = &base + &T::zero(); // Clone base using references
+            base = strict_montgomery_mod_mul_internal(base, &base_clone, modulus, &n_prime, r_bits);
+        }
+    }
+
+    // Step 6: Convert result back from Montgomery form
+    Some(strict_from_montgomery(result, modulus, &n_prime, r_bits))
+}
+
 /// Montgomery-based modular exponentiation (Strict): base^exponent mod modulus
 /// Uses Montgomery arithmetic for efficient repeated multiplication with reference-based operations
 /// to minimize copying of large integers
@@ -383,7 +478,8 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
         + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
+        + num_traits::ops::overflowing::OverflowingSub
+        + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
