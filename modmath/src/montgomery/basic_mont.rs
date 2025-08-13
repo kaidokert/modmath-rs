@@ -292,6 +292,38 @@ where
     basic_from_montgomery(product, modulus, n_prime, r_bits)
 }
 
+/// Complete Montgomery modular multiplication with method selection (Basic): A * B mod N
+/// Returns None if Montgomery parameter computation fails
+pub fn basic_montgomery_mod_mul_with_method<T>(
+    a: T,
+    b: T,
+    modulus: T,
+    method: NPrimeMethod,
+) -> Option<T>
+where
+    T: Copy
+        + num_traits::Zero
+        + num_traits::One
+        + PartialEq
+        + PartialOrd
+        + core::ops::Shl<usize, Output = T>
+        + core::ops::Div<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
+        + core::ops::Rem<Output = T>
+        + core::ops::BitAnd<Output = T>
+        + num_traits::ops::wrapping::WrappingAdd
+        + num_traits::ops::wrapping::WrappingSub
+        + core::ops::Shr<usize, Output = T>,
+{
+    let (r, _r_inv, n_prime, r_bits) =
+        basic_compute_montgomery_params_with_method(modulus, method)?;
+    let a_mont = basic_to_montgomery(a, modulus, r);
+    let b_mont = basic_to_montgomery(b, modulus, r);
+    let result_mont = basic_montgomery_mul(a_mont, b_mont, modulus, n_prime, r_bits);
+    Some(basic_from_montgomery(result_mont, modulus, n_prime, r_bits))
+}
+
 /// Complete Montgomery modular multiplication (Basic): A * B mod N
 /// Returns None if Montgomery parameter computation fails
 pub fn basic_montgomery_mod_mul<T>(a: T, b: T, modulus: T) -> Option<T>
@@ -311,17 +343,18 @@ where
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shr<usize, Output = T>,
 {
-    let (r, _r_inv, n_prime, r_bits) = basic_compute_montgomery_params(modulus)?;
-    let a_mont = basic_to_montgomery(a, modulus, r);
-    let b_mont = basic_to_montgomery(b, modulus, r);
-    let result_mont = basic_montgomery_mul(a_mont, b_mont, modulus, n_prime, r_bits);
-    Some(basic_from_montgomery(result_mont, modulus, n_prime, r_bits))
+    basic_montgomery_mod_mul_with_method(a, b, modulus, NPrimeMethod::default())
 }
 
-/// Montgomery-based modular exponentiation (Basic): base^exponent mod modulus
+/// Montgomery-based modular exponentiation with method selection (Basic): base^exponent mod modulus
 /// Uses Montgomery arithmetic for efficient repeated multiplication
 /// Returns None if Montgomery parameter computation fails
-pub fn basic_montgomery_mod_exp<T>(mut base: T, exponent: T, modulus: T) -> Option<T>
+pub fn basic_montgomery_mod_exp_with_method<T>(
+    mut base: T,
+    exponent: T,
+    modulus: T,
+    method: NPrimeMethod,
+) -> Option<T>
 where
     T: Copy
         + num_traits::Zero
@@ -339,8 +372,9 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>,
 {
-    // Compute Montgomery parameters
-    let (r, _r_inv, n_prime, r_bits) = basic_compute_montgomery_params(modulus)?;
+    // Compute Montgomery parameters using specified method
+    let (r, _r_inv, n_prime, r_bits) =
+        basic_compute_montgomery_params_with_method(modulus, method)?;
 
     // Convert base to Montgomery form
     base = basic_to_montgomery(base % modulus, modulus, r); // Reduce base first
@@ -367,6 +401,30 @@ where
 
     // Convert result back from Montgomery form
     Some(basic_from_montgomery(result, modulus, n_prime, r_bits))
+}
+
+/// Montgomery-based modular exponentiation (Basic): base^exponent mod modulus
+/// Uses Montgomery arithmetic for efficient repeated multiplication
+/// Returns None if Montgomery parameter computation fails
+pub fn basic_montgomery_mod_exp<T>(base: T, exponent: T, modulus: T) -> Option<T>
+where
+    T: Copy
+        + num_traits::Zero
+        + num_traits::One
+        + PartialEq
+        + PartialOrd
+        + core::ops::Shl<usize, Output = T>
+        + core::ops::Div<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
+        + core::ops::Rem<Output = T>
+        + core::ops::BitAnd<Output = T>
+        + num_traits::ops::wrapping::WrappingAdd
+        + num_traits::ops::wrapping::WrappingSub
+        + core::ops::Shr<usize, Output = T>
+        + core::ops::ShrAssign<usize>,
+{
+    basic_montgomery_mod_exp_with_method(base, exponent, modulus, NPrimeMethod::default())
 }
 
 #[cfg(test)]
