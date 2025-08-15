@@ -115,38 +115,51 @@ where
     // So we need N' ≡ 1 (mod 2), hence N' starts as 1
     let mut n_prime = T::one();
 
-    // Lift from 2^1 to 2^r_bits using Hensel lifting, 1-bit per step
+    // Hensel's lifting iteration: lift precision from 2^1 to 2^r_bits, one bit at a time
+    // At each step k, we ensure: modulus * n_prime ≡ -1 (mod 2^k)
     for k in 2..=r_bits {
-        // We have: modulus * n_prime ≡ -1 (mod 2^(k-1))
-        // We want: modulus * n_prime_new ≡ -1 (mod 2^k)
-
+        // Current goal: extend modulus * n_prime ≡ -1 (mod 2^(k-1)) to modulus * n_prime ≡ -1 (mod 2^k)
+        // This is the core of Hensel lifting: extending solutions modulo increasing powers
+        
         let target_mod = T::one() << k; // 2^k
         let temp_prod = modulus * &n_prime;
         let (temp_sum, _overflow) = temp_prod.overflowing_add(&T::one());
         let check_val = &temp_sum % &target_mod;
 
         if check_val != T::zero() {
-            // Need to adjust n_prime
-            // If modulus * n_prime + 1 = t * 2^(k-1) for odd t, add 2^(k-1) to n_prime
+            // The current n_prime doesn't satisfy the congruence modulo 2^k
+            // Hensel lifting theorem: if f(x) ≡ 0 (mod p^k) and f'(x) ≢ 0 (mod p),
+            // then there exists a unique lift x' such that f(x') ≡ 0 (mod p^(k+1))
+            // Here f(x) = modulus * x + 1, so f'(x) = modulus (odd, hence invertible mod 2)
             let prev_power = T::one() << (k - 1); // 2^(k-1)
 
             if check_val == prev_power {
+                // Need to add 2^(k-1) to n_prime to satisfy the congruence
                 let (adjusted, _overflow) = n_prime.overflowing_add(&prev_power);
                 n_prime = adjusted;
             }
         }
     }
 
-    // Final check and adjustment to ensure modulus * N' ≡ -1 (mod R)
+    // Verification: ensure the computed N' satisfies modulus * N' ≡ -1 (mod R)
+    // This check validates the mathematical correctness of our Hensel lifting
     let final_check = (modulus * &n_prime) % r;
     let target = r - &T::one(); // -1 mod R
 
     if final_check != target {
-        // This shouldn't happen with correct Hensel lifting, but safety check
+        // Safety check: In theory, correct Hensel lifting should always produce a valid N'
+        // This branch should never execute for valid odd moduli, but provides defensive programming
+        // against potential edge cases or implementation errors
         None // Hensel lifting failed to produce correct N'
     } else {
         // Canonicalize N' to [0, R) range
-        let canonical_n_prime = &n_prime % r;
+        // Use manual euclidean remainder to ensure non-negative result
+        let remainder = &n_prime % r;
+        let canonical_n_prime = if remainder < T::zero() {
+            &remainder + r
+        } else {
+            remainder
+        };
         Some(canonical_n_prime)
     }
 }
@@ -266,8 +279,8 @@ where
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
 {
-    // Step 1: Raw multiplication (no modular reduction yet)
-    let product = a_mont * b_mont;
+    // Step 1: Modular multiplication to prevent overflow
+    let product = crate::mul::strict_mod_mul(a_mont, b_mont, modulus);
     // Step 2: Apply Montgomery reduction to get result in Montgomery form
     strict_from_montgomery(product, modulus, n_prime, r_bits)
 }
@@ -299,6 +312,12 @@ where
     // 3. t = (a_mont + m * N) >> r_bits     [bit shift, no division!]
     // 4. if t >= N then return t - N else return t
 
+    // Check for r_bits == 0 to avoid underflow in mask calculation
+    if r_bits == 0 {
+        // When r_bits = 0, R = 1, so Montgomery reduction is just a_mont % modulus
+        return if &a_mont >= modulus { a_mont - modulus } else { a_mont };
+    }
+    
     let mask = (T::one() << r_bits) - T::one(); // mask = 2^r_bits - 1
 
     // Step 1: m = ((a_mont & mask) * N') & mask
@@ -394,6 +413,11 @@ where
 
 /// Complete Montgomery modular multiplication (Strict): A * B mod N
 /// Uses reference-based operations throughout to minimize copying of large integers
+/// 
+/// This function uses the default NPrimeMethod (ExtendedEuclidean) for N' computation.
+/// For performance-critical applications, consider using `strict_montgomery_mod_mul_with_method`
+/// to select the optimal N' computation method for your specific use case.
+/// 
 /// Returns None if Montgomery parameter computation fails
 pub fn strict_montgomery_mod_mul<T>(a: T, b: &T, modulus: &T) -> Option<T>
 where
@@ -497,6 +521,14 @@ where
 /// Montgomery-based modular exponentiation (Strict): base^exponent mod modulus
 /// Uses Montgomery arithmetic for efficient repeated multiplication with reference-based operations
 /// to minimize copying of large integers
+/// 
+/// This function uses the default NPrimeMethod (ExtendedEuclidean) for N' computation.
+/// For performance-critical applications or specific hardware optimization, consider using
+/// `strict_montgomery_mod_exp_with_method` to select the optimal N' computation method:
+/// - `ExtendedEuclidean`: Balanced performance, good for most use cases (default)
+/// - `TrialSearch`: Simple but O(R) complexity, suitable for small moduli
+/// - `HenselsLifting`: Optimal for R = 2^k, best performance for power-of-2 radix
+/// 
 /// Returns None if Montgomery parameter computation fails
 pub fn strict_montgomery_mod_exp<T>(base: T, exponent: &T, modulus: &T) -> Option<T>
 where
@@ -1138,5 +1170,127 @@ mod tests {
         let result_large = strict_montgomery_mod_exp(2u32, &large_exp, &modulus).unwrap();
         let expected_large = crate::exp::strict_mod_exp(2u32, &large_exp, &modulus);
         assert_eq!(result_large, expected_large);
+    }
+
+    #[test]
+    fn test_strict_montgomery_mul_basic() {
+        // Test the new strict_montgomery_mul function directly
+        let modulus = 13u32;
+        let (r, _r_inv, n_prime, r_bits) = strict_compute_montgomery_params(&modulus).unwrap();
+
+        // Convert test values to Montgomery form
+        let a = 7u32;
+        let b = 5u32;
+        let a_mont = strict_to_montgomery(a, &modulus, &r);
+        let b_mont = strict_to_montgomery(b, &modulus, &r);
+
+        // Test Montgomery multiplication
+        let result_mont = strict_montgomery_mul(a_mont, &b_mont, &modulus, &n_prime, r_bits);
+        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+
+        // Verify against regular multiplication
+        let expected = (a * b) % modulus;
+        assert_eq!(result, expected, "Montgomery multiplication failed: {} * {} = {} (expected {})", a, b, result, expected);
+    }
+
+    #[test]
+    fn test_strict_montgomery_mul_edge_cases() {
+        // Test edge cases for Montgomery multiplication
+        let modulus = 17u32;
+        let (r, _r_inv, n_prime, r_bits) = strict_compute_montgomery_params(&modulus).unwrap();
+
+        // Test with zero
+        let zero_mont = strict_to_montgomery(0u32, &modulus, &r);
+        let a_mont = strict_to_montgomery(5u32, &modulus, &r);
+        let result_mont = strict_montgomery_mul(zero_mont, &a_mont, &modulus, &n_prime, r_bits);
+        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+        assert_eq!(result, 0u32, "Montgomery multiplication with zero failed");
+
+        // Test with one (Montgomery form)
+        let one_mont = strict_to_montgomery(1u32, &modulus, &r);
+        let result_mont = strict_montgomery_mul(one_mont, &a_mont, &modulus, &n_prime, r_bits);
+        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+        assert_eq!(result, 5u32, "Montgomery multiplication with one failed");
+
+        // Test with maximum value less than modulus
+        let max_val = modulus - 1;
+        let max_mont = strict_to_montgomery(max_val, &modulus, &r);
+        let result_mont = strict_montgomery_mul(max_mont, &max_mont, &modulus, &n_prime, r_bits);
+        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+        let expected = (max_val * max_val) % modulus;
+        assert_eq!(result, expected, "Montgomery multiplication with max values failed");
+    }
+
+    #[test]
+    fn test_strict_montgomery_mul_overflow_prevention() {
+        // Test that our overflow fix works by using large values that would overflow in raw multiplication
+        let modulus = 65521u32; // Large prime
+        let (r, _r_inv, n_prime, r_bits) = strict_compute_montgomery_params(&modulus).unwrap();
+
+        // Test with values that would cause overflow if multiplied directly
+        let a = 65520u32; // Near maximum
+        let b = 65519u32; // Near maximum
+        let a_mont = strict_to_montgomery(a, &modulus, &r);
+        let b_mont = strict_to_montgomery(b, &modulus, &r);
+
+        // This should not panic due to our modular multiplication fix
+        let result_mont = strict_montgomery_mul(a_mont, &b_mont, &modulus, &n_prime, r_bits);
+        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+
+        // Verify correctness
+        let expected = crate::mul::strict_mod_mul(a, &b, &modulus);
+        assert_eq!(result, expected, "Overflow prevention test failed");
+    }
+
+    #[test]
+    fn test_strict_montgomery_mul_various_moduli() {
+        // Test Montgomery multiplication with various moduli sizes
+        let test_cases = [
+            (7u32, 3u32, 5u32),      // Small modulus
+            (11u32, 8u32, 9u32),     // Prime modulus
+            (15u32, 14u32, 13u32),   // Composite modulus
+            (21u32, 20u32, 19u32),   // Another composite
+            (97u32, 96u32, 95u32),   // Larger prime
+        ];
+
+        for (modulus, a, b) in test_cases.iter() {
+            if let Some((r, _r_inv, n_prime, r_bits)) = strict_compute_montgomery_params(modulus) {
+                let a_mont = strict_to_montgomery(*a, modulus, &r);
+                let b_mont = strict_to_montgomery(*b, modulus, &r);
+
+                let result_mont = strict_montgomery_mul(a_mont, &b_mont, modulus, &n_prime, r_bits);
+                let result = strict_from_montgomery(result_mont, modulus, &n_prime, r_bits);
+
+                let expected = (a * b) % modulus;
+                assert_eq!(result, expected, 
+                    "Montgomery multiplication failed for modulus {}: {} * {} = {} (expected {})", 
+                    modulus, a, b, result, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn test_strict_montgomery_mul_consistency() {
+        // Test that Montgomery multiplication is consistent with regular Montgomery operations
+        let modulus = 23u32;
+        let (r, _r_inv, n_prime, r_bits) = strict_compute_montgomery_params(&modulus).unwrap();
+
+        // Test multiple pairs to ensure consistency
+        for a in 1u32..10u32 {
+            for b in 1u32..10u32 {
+                let a_mont = strict_to_montgomery(a, &modulus, &r);
+                let b_mont = strict_to_montgomery(b, &modulus, &r);
+
+                // Use our new function
+                let result_mont = strict_montgomery_mul(a_mont, &b_mont, &modulus, &n_prime, r_bits);
+                let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+
+                // Compare with the expected result
+                let expected = (a * b) % modulus;
+                assert_eq!(result, expected, 
+                    "Consistency check failed: {} * {} mod {} = {} (expected {})", 
+                    a, b, modulus, result, expected);
+            }
+        }
     }
 }
