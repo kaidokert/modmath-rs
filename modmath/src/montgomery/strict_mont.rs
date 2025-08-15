@@ -120,7 +120,7 @@ where
     for k in 2..=r_bits {
         // Current goal: extend modulus * n_prime ≡ -1 (mod 2^(k-1)) to modulus * n_prime ≡ -1 (mod 2^k)
         // This is the core of Hensel lifting: extending solutions modulo increasing powers
-        
+
         let target_mod = T::one() << k; // 2^k
         let temp_prod = modulus * &n_prime;
         let (temp_sum, _overflow) = temp_prod.overflowing_add(&T::one());
@@ -315,9 +315,13 @@ where
     // Check for r_bits == 0 to avoid underflow in mask calculation
     if r_bits == 0 {
         // When r_bits = 0, R = 1, so Montgomery reduction is just a_mont % modulus
-        return if &a_mont >= modulus { a_mont - modulus } else { a_mont };
+        return if &a_mont >= modulus {
+            a_mont - modulus
+        } else {
+            a_mont
+        };
     }
-    
+
     let mask = (T::one() << r_bits) - T::one(); // mask = 2^r_bits - 1
 
     // Step 1: m = ((a_mont & mask) * N') & mask
@@ -413,11 +417,11 @@ where
 
 /// Complete Montgomery modular multiplication (Strict): A * B mod N
 /// Uses reference-based operations throughout to minimize copying of large integers
-/// 
+///
 /// This function uses the default NPrimeMethod (ExtendedEuclidean) for N' computation.
 /// For performance-critical applications, consider using `strict_montgomery_mod_mul_with_method`
 /// to select the optimal N' computation method for your specific use case.
-/// 
+///
 /// Returns None if Montgomery parameter computation fails
 pub fn strict_montgomery_mod_mul<T>(a: T, b: &T, modulus: &T) -> Option<T>
 where
@@ -521,14 +525,14 @@ where
 /// Montgomery-based modular exponentiation (Strict): base^exponent mod modulus
 /// Uses Montgomery arithmetic for efficient repeated multiplication with reference-based operations
 /// to minimize copying of large integers
-/// 
+///
 /// This function uses the default NPrimeMethod (ExtendedEuclidean) for N' computation.
 /// For performance-critical applications or specific hardware optimization, consider using
 /// `strict_montgomery_mod_exp_with_method` to select the optimal N' computation method:
 /// - `ExtendedEuclidean`: Balanced performance, good for most use cases (default)
 /// - `TrialSearch`: Simple but O(R) complexity, suitable for small moduli
 /// - `HenselsLifting`: Optimal for R = 2^k, best performance for power-of-2 radix
-/// 
+///
 /// Returns None if Montgomery parameter computation fails
 pub fn strict_montgomery_mod_exp<T>(base: T, exponent: &T, modulus: &T) -> Option<T>
 where
@@ -1190,7 +1194,11 @@ mod tests {
 
         // Verify against regular multiplication
         let expected = (a * b) % modulus;
-        assert_eq!(result, expected, "Montgomery multiplication failed: {} * {} = {} (expected {})", a, b, result, expected);
+        assert_eq!(
+            result, expected,
+            "Montgomery multiplication failed: {} * {} = {} (expected {})",
+            a, b, result, expected
+        );
     }
 
     #[test]
@@ -1218,7 +1226,10 @@ mod tests {
         let result_mont = strict_montgomery_mul(max_mont, &max_mont, &modulus, &n_prime, r_bits);
         let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
         let expected = (max_val * max_val) % modulus;
-        assert_eq!(result, expected, "Montgomery multiplication with max values failed");
+        assert_eq!(
+            result, expected,
+            "Montgomery multiplication with max values failed"
+        );
     }
 
     #[test]
@@ -1246,11 +1257,11 @@ mod tests {
     fn test_strict_montgomery_mul_various_moduli() {
         // Test Montgomery multiplication with various moduli sizes
         let test_cases = [
-            (7u32, 3u32, 5u32),      // Small modulus
-            (11u32, 8u32, 9u32),     // Prime modulus
-            (15u32, 14u32, 13u32),   // Composite modulus
-            (21u32, 20u32, 19u32),   // Another composite
-            (97u32, 96u32, 95u32),   // Larger prime
+            (7u32, 3u32, 5u32),    // Small modulus
+            (11u32, 8u32, 9u32),   // Prime modulus
+            (15u32, 14u32, 13u32), // Composite modulus
+            (21u32, 20u32, 19u32), // Another composite
+            (97u32, 96u32, 95u32), // Larger prime
         ];
 
         for (modulus, a, b) in test_cases.iter() {
@@ -1262,9 +1273,11 @@ mod tests {
                 let result = strict_from_montgomery(result_mont, modulus, &n_prime, r_bits);
 
                 let expected = (a * b) % modulus;
-                assert_eq!(result, expected, 
-                    "Montgomery multiplication failed for modulus {}: {} * {} = {} (expected {})", 
-                    modulus, a, b, result, expected);
+                assert_eq!(
+                    result, expected,
+                    "Montgomery multiplication failed for modulus {}: {} * {} = {} (expected {})",
+                    modulus, a, b, result, expected
+                );
             }
         }
     }
@@ -1282,14 +1295,17 @@ mod tests {
                 let b_mont = strict_to_montgomery(b, &modulus, &r);
 
                 // Use our new function
-                let result_mont = strict_montgomery_mul(a_mont, &b_mont, &modulus, &n_prime, r_bits);
+                let result_mont =
+                    strict_montgomery_mul(a_mont, &b_mont, &modulus, &n_prime, r_bits);
                 let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
 
                 // Compare with the expected result
                 let expected = (a * b) % modulus;
-                assert_eq!(result, expected, 
-                    "Consistency check failed: {} * {} mod {} = {} (expected {})", 
-                    a, b, modulus, result, expected);
+                assert_eq!(
+                    result, expected,
+                    "Consistency check failed: {} * {} mod {} = {} (expected {})",
+                    a, b, modulus, result, expected
+                );
             }
         }
     }
