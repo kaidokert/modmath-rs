@@ -87,7 +87,7 @@ where
 
 /// Compute N' using Hensel's lifting - O(log R) complexity, optimized for R = 2^k (strict version)
 /// Finds N' such that modulus * N' ≡ -1 (mod R)
-/// Uses Newton's method to iteratively lift from small powers to full R
+/// Uses Hensel lifting, 1-bit per step, from 2^1 to 2^r_bits
 /// Returns None if Hensel's lifting fails
 fn strict_compute_n_prime_hensels_lifting<T>(modulus: &T, r: &T, r_bits: usize) -> Option<T>
 where
@@ -115,7 +115,7 @@ where
     // So we need N' ≡ 1 (mod 2), hence N' starts as 1
     let mut n_prime = T::one();
 
-    // Lift from 2^1 to 2^r_bits using Newton's method
+    // Lift from 2^1 to 2^r_bits using Hensel lifting, 1-bit per step
     for k in 2..=r_bits {
         // We have: modulus * n_prime ≡ -1 (mod 2^(k-1))
         // We want: modulus * n_prime_new ≡ -1 (mod 2^k)
@@ -145,7 +145,9 @@ where
         // This shouldn't happen with correct Hensel lifting, but safety check
         None // Hensel lifting failed to produce correct N'
     } else {
-        Some(n_prime)
+        // Canonicalize N' to [0, R) range
+        let canonical_n_prime = &n_prime % r;
+        Some(canonical_n_prime)
     }
 }
 
@@ -244,6 +246,32 @@ where
     Some((r, r_inv, n_prime, r_bits))
 }
 
+/// Montgomery multiplication (Strict): (a * R) * (b * R) -> (a * b * R) mod N
+/// Multiplies two values already in Montgomery form and returns result in Montgomery form
+pub fn strict_montgomery_mul<T>(a_mont: T, b_mont: &T, modulus: &T, n_prime: &T, r_bits: usize) -> T
+where
+    T: num_traits::Zero
+        + num_traits::One
+        + PartialOrd
+        + core::ops::Sub<Output = T>
+        + core::ops::Shr<usize, Output = T>
+        + core::ops::Shl<usize, Output = T>
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::ops::overflowing::OverflowingSub,
+    for<'a> T: core::ops::Mul<&'a T, Output = T>
+        + core::ops::RemAssign<&'a T>
+        + core::ops::Sub<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
+        + core::ops::Sub<&'a T, Output = T>
+        + core::ops::Mul<&'a T, Output = T>
+        + core::ops::BitAnd<Output = T>,
+{
+    // Step 1: Raw multiplication (no modular reduction yet)
+    let product = a_mont * b_mont;
+    // Step 2: Apply Montgomery reduction to get result in Montgomery form
+    strict_from_montgomery(product, modulus, n_prime, r_bits)
+}
+
 /// Convert from Montgomery form (Strict): (a * R) -> a mod N
 /// Uses Montgomery reduction algorithm with reference-based operations
 /// to minimize copying of large integers
@@ -261,27 +289,29 @@ where
         + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>,
+        + core::ops::Mul<&'a T, Output = T>
+        + core::ops::BitAnd<&'a T, Output = T>,
 {
     // Montgomery reduction algorithm:
     // Input: a_mont (Montgomery form), N (modulus), N', r_bits
-    // 1. R = 2^r_bits
-    // 2. m = (a_mont * N') mod R
-    // 3. t = (a_mont + m * N) / R
+    // 1. R = 2^r_bits, mask = R - 1 = (1 << r_bits) - 1
+    // 2. m = ((a_mont & mask) * N') & mask  [only low bits, no expensive modulo!]
+    // 3. t = (a_mont + m * N) >> r_bits     [bit shift, no division!]
     // 4. if t >= N then return t - N else return t
 
-    let r = T::one() << r_bits; // R = 2^r_bits
+    let mask = (T::one() << r_bits) - T::one(); // mask = 2^r_bits - 1
 
-    // Step 1: m = (a_mont * N') mod R
-    // Use reference for a_mont to avoid moving it
-    let product = &a_mont * n_prime;
-    let m = &product % &r;
+    // Step 1: m = ((a_mont & mask) * N') & mask
+    // Only use low r_bits of a_mont, then mask result to low r_bits
+    let a_low = &a_mont & &mask;
+    let product = &a_low * n_prime;
+    let m = &product & &mask;
 
-    // Step 2: t = (a_mont + m * N) / R
+    // Step 2: t = (a_mont + m * N) >> r_bits
     // Use overflowing_add for strict arithmetic
-    let m_times_n = m * modulus;
+    let m_times_n = &m * modulus;
     let (sum, _overflow) = a_mont.overflowing_add(&m_times_n);
-    let t = sum >> r_bits; // Divide by R = 2^r_bits
+    let t = sum >> r_bits; // Divide by R = 2^r_bits using bit shift
 
     // Step 3: Final reduction
     if &t >= modulus { t - modulus } else { t }
@@ -444,18 +474,19 @@ where
     // Step 4: Clone exponent for manipulation to avoid moving the reference
     let mut exp = exponent + &T::zero(); // Clone exponent
 
-    // Step 5: Binary exponentiation using Montgomery multiplication
+    // Step 5: Binary exponentiation staying in Montgomery form
+    // Use Montgomery multiplication to stay in Montgomery domain throughout
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
         if &exp & &T::one() == T::one() {
-            result = strict_montgomery_mod_mul_internal(result, &base, modulus, &n_prime, r_bits);
+            result = strict_montgomery_mul(result, &base, modulus, &n_prime, r_bits);
         }
 
         // Square the base for next iteration
         exp >>= 1;
         if exp > T::zero() {
             let base_clone = &base + &T::zero(); // Clone base using references
-            base = strict_montgomery_mod_mul_internal(base, &base_clone, modulus, &n_prime, r_bits);
+            base = strict_montgomery_mul(base, &base_clone, modulus, &n_prime, r_bits);
         }
     }
 
@@ -467,7 +498,7 @@ where
 /// Uses Montgomery arithmetic for efficient repeated multiplication with reference-based operations
 /// to minimize copying of large integers
 /// Returns None if Montgomery parameter computation fails
-pub fn strict_montgomery_mod_exp<T>(mut base: T, exponent: &T, modulus: &T) -> Option<T>
+pub fn strict_montgomery_mod_exp<T>(base: T, exponent: &T, modulus: &T) -> Option<T>
 where
     T: num_traits::Zero
         + num_traits::One
@@ -478,9 +509,9 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
         + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + num_traits::ops::overflowing::OverflowingSub,
     for<'a> T: core::ops::RemAssign<&'a T>
+        + core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -494,73 +525,12 @@ where
         + core::ops::Add<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
 {
-    // Step 1: Compute Montgomery parameters
-    let (r, _r_inv, n_prime, r_bits) = strict_compute_montgomery_params(modulus)?;
-
-    // Step 2: Reduce base and convert to Montgomery form
-    base.rem_assign(modulus); // Reduce base first to ensure base < modulus
-    base = strict_to_montgomery(base, modulus, &r);
-
-    // Step 3: Initialize result to Montgomery form of 1
-    let mut result = strict_to_montgomery(T::one(), modulus, &r);
-
-    // Step 4: Clone exponent for manipulation to avoid moving the reference
-    let mut exp = exponent + &T::zero(); // Clone exponent
-
-    // Step 5: Binary exponentiation using Montgomery multiplication
-    while exp > T::zero() {
-        // If exponent is odd, multiply result by current base power
-        if &exp & &T::one() == T::one() {
-            result = strict_montgomery_mod_mul_internal(result, &base, modulus, &n_prime, r_bits);
-        }
-
-        // Square the base for next iteration
-        exp >>= 1;
-        if exp > T::zero() {
-            let base_clone = &base + &T::zero(); // Clone base using references
-            base = strict_montgomery_mod_mul_internal(base, &base_clone, modulus, &n_prime, r_bits);
-        }
-    }
-
-    // Step 6: Convert result back from Montgomery form
-    Some(strict_from_montgomery(result, modulus, &n_prime, r_bits))
-}
-
-/// Internal Montgomery multiplication for use within strict_montgomery_mod_exp
-/// This avoids recomputing Montgomery parameters on each multiplication
-fn strict_montgomery_mod_mul_internal<T>(
-    a_mont: T,
-    b_mont: &T,
-    modulus: &T,
-    n_prime: &T,
-    r_bits: usize,
-) -> T
-where
-    T: num_traits::Zero
-        + num_traits::One
-        + PartialOrd
-        + core::ops::Shl<usize, Output = T>
-        + core::ops::Shr<usize, Output = T>
-        + core::ops::Sub<Output = T>
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
-    for<'a> T: core::ops::RemAssign<&'a T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::BitAnd<Output = T>,
-{
-    // Montgomery multiplication in Montgomery domain
-    // a_mont and b_mont are already in Montgomery form
-    // Result should be (a * b * R) mod N (still in Montgomery form)
-
-    // Step 1: Regular modular multiplication: (a_mont * b_mont) mod N
-    let product = crate::mul::strict_mod_mul(a_mont, b_mont, modulus);
-
-    // Step 2: Apply Montgomery reduction once to get (a * b * R) mod N
-    strict_from_montgomery(product, modulus, n_prime, r_bits)
+    strict_montgomery_mod_exp_with_method(
+        base,
+        exponent,
+        modulus,
+        crate::montgomery::NPrimeMethod::default(),
+    )
 }
 
 #[cfg(test)]
@@ -965,25 +935,6 @@ mod tests {
             strict_montgomery_mod_exp(7u32, &999999u32, &modulus).unwrap(),
             crate::exp::strict_mod_exp(7u32, &999999u32, &modulus)
         );
-    }
-
-    #[test]
-    fn test_strict_montgomery_internal_mul() {
-        // Test the internal Montgomery multiplication function
-        let modulus = 13u32;
-        let (r, _r_inv, n_prime, r_bits) = strict_compute_montgomery_params(&modulus).unwrap();
-
-        // Convert values to Montgomery form
-        let a_mont = strict_to_montgomery(7u32, &modulus, &r);
-        let b_mont = strict_to_montgomery(5u32, &modulus, &r);
-
-        // Use internal multiplication (should stay in Montgomery form)
-        let result_mont =
-            strict_montgomery_mod_mul_internal(a_mont, &b_mont, &modulus, &n_prime, r_bits);
-
-        // Convert back to normal form to verify
-        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
-        assert_eq!(result, 9u32); // 7 * 5 mod 13 = 9
     }
 
     #[test]
