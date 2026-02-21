@@ -35,14 +35,16 @@ c0nst::c0nst! {
                 };
             }
 
-            let (doubled, overflow) = a.overflowing_add(&a);
-            a = if doubled >= m || overflow {
-                doubled.overflowing_sub(&m).0
-            } else {
-                doubled
-            };
-
             b = b >> 1;
+
+            if b > T::zero() {
+                let (doubled, overflow) = a.overflowing_add(&a);
+                a = if doubled >= m || overflow {
+                    doubled.overflowing_sub(&m).0
+                } else {
+                    doubled
+                };
+            }
         }
 
         result

@@ -24,17 +24,15 @@ c0nst::c0nst! {
             + [c0nst] ConstOverflowingSub
             + [c0nst] core::ops::Shr<usize, Output = T>
             + [c0nst] core::ops::ShrAssign<usize>
-            + [c0nst] core::ops::Rem<Output = T>
-            + [c0nst] core::ops::RemAssign<T>,
+            + [c0nst] core::ops::Rem<Output = T>,
     {
-        let two = T::one().overflowing_add(&T::one()).0;
-        let mut result = T::one();
+        let mut result = T::one() % modulus;
         let mut exp = exponent;
 
-        base %= modulus;
+        base = base % modulus;
 
         while exp > T::zero() {
-            if exp % two == T::one() {
+            if exp & T::one() == T::one() {
                 result = const_mod_mul(result, base, modulus);
             }
             exp >>= 1;

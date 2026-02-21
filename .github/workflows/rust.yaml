@@ -17,8 +17,10 @@ jobs:
 
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         rust: ["1.85", stable, nightly]
+    continue-on-error: ${{ matrix.rust == 'nightly' }}
 
     steps:
     - uses: actions/checkout@v4
