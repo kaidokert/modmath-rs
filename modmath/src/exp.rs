@@ -1,4 +1,49 @@
+#[cfg(feature = "nightly")]
+use super::mul::const_mod_mul;
 use super::mul::{basic_mod_mul, constrained_mod_mul, strict_mod_mul};
+
+#[cfg(feature = "nightly")]
+use fixed_bigint::const_numtraits::{
+    ConstOne, ConstOverflowingAdd, ConstOverflowingSub, ConstZero,
+};
+
+#[cfg(feature = "nightly")]
+c0nst::c0nst! {
+    /// # Const Modular Exponentiation
+    /// Const-evaluable version of modular exponentiation. Uses const traits from
+    /// `fixed_bigint::const_numtraits` instead of `num_traits`.
+    pub c0nst fn const_mod_exp<T>(mut base: T, exponent: T, modulus: T) -> T
+    where
+        T: [c0nst] core::cmp::PartialOrd
+            + [c0nst] core::cmp::PartialEq
+            + Copy
+            + [c0nst] ConstZero
+            + [c0nst] ConstOne
+            + [c0nst] core::ops::BitAnd<Output = T>
+            + [c0nst] ConstOverflowingAdd
+            + [c0nst] ConstOverflowingSub
+            + [c0nst] core::ops::Shr<usize, Output = T>
+            + [c0nst] core::ops::ShrAssign<usize>
+            + [c0nst] core::ops::Rem<Output = T>,
+    {
+        let mut result = T::one() % modulus;
+        let mut exp = exponent;
+
+        base = base % modulus;
+
+        while exp > T::zero() {
+            if exp & T::one() == T::one() {
+                result = const_mod_mul(result, base, modulus);
+            }
+            exp >>= 1;
+
+            if exp > T::zero() {
+                base = const_mod_mul(base, base, modulus);
+            }
+        }
+        result
+    }
+}
 
 /// # Modular Exponentiation (Basic)
 /// Simple version that operates on values and copies them. Requires
@@ -310,6 +355,32 @@ mod basic_mod_exp_tests {
     }
     mod u32_tests {
         generate_mod_exp_tests_block_32!(super::basic_mod_exp, u32, by_val);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "nightly")]
+const _: () = {
+    let result = const_mod_exp(2u64, 3u64, 5u64);
+    assert!(result == 3u64);
+};
+
+#[cfg(test)]
+#[cfg(feature = "nightly")]
+mod const_mod_exp_tests {
+    use super::const_mod_exp;
+
+    mod u64_tests {
+        generate_mod_exp_tests_block_64!(super::const_mod_exp, u64, by_val);
+    }
+    mod u8_tests {
+        generate_mod_exp_tests_block_8!(super::const_mod_exp, u8, by_val);
+    }
+    mod u16_tests {
+        generate_mod_exp_tests_block_16!(super::const_mod_exp, u16, by_val);
+    }
+    mod u32_tests {
+        generate_mod_exp_tests_block_32!(super::const_mod_exp, u32, by_val);
     }
 }
 

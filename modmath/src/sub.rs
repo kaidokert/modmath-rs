@@ -1,3 +1,29 @@
+#[cfg(feature = "nightly")]
+use fixed_bigint::const_numtraits::{ConstOverflowingAdd, ConstOverflowingSub};
+
+#[cfg(feature = "nightly")]
+c0nst::c0nst! {
+    /// # Const Modular Subtraction
+    /// Const-evaluable version of modular subtraction. Uses const traits from
+    /// `fixed_bigint::const_numtraits` instead of `num_traits`.
+    pub c0nst fn const_mod_sub<T>(a: T, b: T, m: T) -> T
+    where
+        T: [c0nst] core::cmp::PartialOrd
+            + Copy
+            + [c0nst] ConstOverflowingAdd
+            + [c0nst] ConstOverflowingSub
+            + [c0nst] core::ops::Rem<Output = T>,
+    {
+        let a = a % m;
+        let (diff, overflow) = a.overflowing_sub(&(b % m));
+        if overflow {
+            m.overflowing_add(&diff).0
+        } else {
+            diff
+        }
+    }
+}
+
 /// # Modular Subtraction (Basic)
 /// Simple version that operates on values and copies them. Requires
 /// `WrappingAdd` and `WrappingSub` traits to be implemented.
@@ -168,6 +194,19 @@ mod constrained_mod_sub_tests {
 #[cfg(test)]
 mod basic_mod_sub_tests {
     generate_mod_sub_tests!(super::basic_mod_sub, u8, by_val);
+}
+
+#[cfg(test)]
+#[cfg(feature = "nightly")]
+const _: () = {
+    let result = const_mod_sub(5u8, 10u8, 20u8);
+    assert!(result == 15u8);
+};
+
+#[cfg(test)]
+#[cfg(feature = "nightly")]
+mod const_mod_sub_tests {
+    generate_mod_sub_tests!(super::const_mod_sub, u8, by_val);
 }
 
 #[cfg(test)]

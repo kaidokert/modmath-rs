@@ -1,4 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(feature = "nightly", feature(const_trait_impl, const_ops, const_cmp))]
+#![cfg_attr(feature = "nightly", allow(incomplete_features))]
 
 //! Modular math implemented with traits.
 //!
@@ -29,7 +31,11 @@ mod sub;
 mod inv;
 mod montgomery;
 
+#[cfg(feature = "nightly")]
+pub use add::const_mod_add;
 pub use add::{basic_mod_add, constrained_mod_add, strict_mod_add};
+#[cfg(feature = "nightly")]
+pub use exp::const_mod_exp;
 pub use exp::{basic_mod_exp, constrained_mod_exp, strict_mod_exp};
 pub use inv::{basic_mod_inv, constrained_mod_inv, strict_mod_inv};
 #[rustfmt::skip]
@@ -62,7 +68,11 @@ pub use montgomery::{
     strict_montgomery_mod_mul_with_method,
     strict_to_montgomery,
 };
+#[cfg(feature = "nightly")]
+pub use mul::const_mod_mul;
 pub use mul::{basic_mod_mul, constrained_mod_mul, strict_mod_mul};
+#[cfg(feature = "nightly")]
+pub use sub::const_mod_sub;
 pub use sub::{basic_mod_sub, constrained_mod_sub, strict_mod_sub};
 
 #[cfg(test)]

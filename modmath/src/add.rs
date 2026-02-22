@@ -1,3 +1,29 @@
+#[cfg(feature = "nightly")]
+use fixed_bigint::const_numtraits::{ConstOverflowingAdd, ConstOverflowingSub};
+
+#[cfg(feature = "nightly")]
+c0nst::c0nst! {
+    /// # Const Modular Addition
+    /// Const-evaluable version of modular addition. Uses const traits from
+    /// `fixed_bigint::const_numtraits` instead of `num_traits`.
+    pub c0nst fn const_mod_add<T>(a: T, b: T, m: T) -> T
+    where
+        T: [c0nst] core::cmp::PartialOrd
+            + Copy
+            + [c0nst] ConstOverflowingAdd
+            + [c0nst] ConstOverflowingSub
+            + [c0nst] core::ops::Rem<Output = T>,
+    {
+        let a = a % m;
+        let (sum, overflow) = a.overflowing_add(&(b % m));
+        if sum >= m || overflow {
+            sum.overflowing_sub(&m).0
+        } else {
+            sum
+        }
+    }
+}
+
 /// # Modular Addition (Basic)
 /// Simple version that operates on values and copies them. Requires
 /// `WrappingAdd` and `WrappingSub` traits to be implemented.
@@ -184,6 +210,20 @@ mod constrained_mod_add_tests {
 mod basic_mod_add_tests {
     use super::basic_mod_add;
     generate_mod_add_tests!(basic_mod_add, u8, by_val);
+}
+
+#[cfg(test)]
+#[cfg(feature = "nightly")]
+const _: () = {
+    let result = const_mod_add(5u8, 10u8, 20u8);
+    assert!(result == 15u8);
+};
+
+#[cfg(test)]
+#[cfg(feature = "nightly")]
+mod const_mod_add_tests {
+    use super::const_mod_add;
+    generate_mod_add_tests!(const_mod_add, u8, by_val);
 }
 
 #[cfg(test)]

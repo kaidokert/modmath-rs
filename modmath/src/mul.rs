@@ -1,3 +1,56 @@
+#[cfg(feature = "nightly")]
+use fixed_bigint::const_numtraits::{
+    ConstOne, ConstOverflowingAdd, ConstOverflowingSub, ConstZero,
+};
+
+#[cfg(feature = "nightly")]
+c0nst::c0nst! {
+    /// # Const Modular Multiplication
+    /// Const-evaluable version of modular multiplication. Uses const traits from
+    /// `fixed_bigint::const_numtraits` instead of `num_traits`.
+    pub c0nst fn const_mod_mul<T>(a: T, b: T, m: T) -> T
+    where
+        T: [c0nst] core::cmp::PartialOrd
+            + [c0nst] core::cmp::PartialEq
+            + Copy
+            + [c0nst] ConstZero
+            + [c0nst] ConstOne
+            + [c0nst] core::ops::BitAnd<Output = T>
+            + [c0nst] ConstOverflowingAdd
+            + [c0nst] ConstOverflowingSub
+            + [c0nst] core::ops::Shr<usize, Output = T>
+            + [c0nst] core::ops::Rem<Output = T>,
+    {
+        let mut a = a % m;
+        let mut b = b % m;
+        let mut result = T::zero();
+
+        while b > T::zero() {
+            if b & T::one() == T::one() {
+                let (sum, overflow) = result.overflowing_add(&a);
+                result = if sum >= m || overflow {
+                    sum.overflowing_sub(&m).0
+                } else {
+                    sum
+                };
+            }
+
+            b = b >> 1;
+
+            if b > T::zero() {
+                let (doubled, overflow) = a.overflowing_add(&a);
+                a = if doubled >= m || overflow {
+                    doubled.overflowing_sub(&m).0
+                } else {
+                    doubled
+                };
+            }
+        }
+
+        result
+    }
+}
+
 /// # Modular Multiplication (Basic)
 /// Simple version that operates on values and copies them. Requires
 /// `WrappingAdd` and `WrappingSub` traits to be implemented.
@@ -363,6 +416,27 @@ mod basic_mod_mul_tests {
     mod u64_tests {
         use super::basic_mod_mul;
         generate_mod_mul_tests_block_2!(basic_mod_mul, u64, by_val);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "nightly")]
+const _: () = {
+    let result = const_mod_mul(7u8, 13u8, 19u8);
+    assert!(result == 15u8);
+};
+
+#[cfg(test)]
+#[cfg(feature = "nightly")]
+mod const_mod_mul_tests {
+    use super::const_mod_mul;
+    mod u8_tests {
+        use super::const_mod_mul;
+        generate_mod_mul_tests_block_1!(const_mod_mul, u8, by_val);
+    }
+    mod u64_tests {
+        use super::const_mod_mul;
+        generate_mod_mul_tests_block_2!(const_mod_mul, u64, by_val);
     }
 }
 
