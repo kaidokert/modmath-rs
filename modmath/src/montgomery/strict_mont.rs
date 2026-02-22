@@ -258,6 +258,7 @@ pub fn strict_montgomery_mul<T>(a_mont: T, b_mont: &T, modulus: &T, n_prime: &T,
 where
     T: num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialOrd
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
@@ -340,6 +341,7 @@ where
     T: PartialOrd
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + num_traits::ops::overflowing::OverflowingAdd
         + num_traits::ops::overflowing::OverflowingSub
         + core::ops::Shr<usize, Output = T>,
@@ -361,6 +363,7 @@ pub fn strict_montgomery_mod_mul_with_method<T>(
 where
     T: num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -420,6 +423,7 @@ pub fn strict_montgomery_mod_mul<T>(a: T, b: &T, modulus: &T) -> Option<T>
 where
     T: num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -458,6 +462,7 @@ pub fn strict_montgomery_mod_exp_with_method<T>(
 where
     T: num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -499,7 +504,7 @@ where
     // Use Montgomery multiplication to stay in Montgomery domain throughout
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
-        if &exp & &T::one() == T::one() {
+        if exp.is_odd() {
             result = strict_montgomery_mul(result, &base, modulus, &n_prime, r_bits);
         }
 
@@ -531,6 +536,7 @@ pub fn strict_montgomery_mod_exp<T>(base: T, exponent: &T, modulus: &T) -> Optio
 where
     T: num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>

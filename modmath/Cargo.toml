@@ -14,11 +14,12 @@ keywords = ["numerics", "bignum"]
 
 [dependencies]
 num-traits = { version = "0.2", default-features = false }
+num-integer = { version = "0.1", default-features = false, optional = true }
 c0nst = { version = "0.2", optional = true }
-fixed-bigint = { version = "0.2.0", optional = true, default-features = false, features = ["nightly"] }
+fixed-bigint = { version = "0.2.1", optional = true, default-features = false, features = ["nightly"] }
 
 [dev-dependencies]
-fixed-bigint = { version = "0.2.0" }
+fixed-bigint = { version = "0.2.1" }
 num-bigint = { package = "num-bigint", version = "0.4"}
 # num-bigint_patched = { package = "num-bigint" , path = "../bn/num-bigint" }
 num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git" , tag = "v0.4.6_patch" }
@@ -41,4 +42,5 @@ std = []
 constrained = []
 basic = []
 strict = []
+num-integer = ["dep:num-integer"]
 nightly = ["dep:c0nst", "c0nst/nightly", "dep:fixed-bigint"]

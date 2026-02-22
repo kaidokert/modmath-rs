@@ -77,6 +77,7 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -88,7 +89,7 @@ where
 {
     // Hensel's lifting requires modulus to be odd (prerequisite for Montgomery arithmetic)
     debug_assert!(
-        modulus & &T::one() == T::one(),
+        modulus.is_odd(),
         "Hensel's lifting requires an odd modulus for Montgomery arithmetic"
     );
 
@@ -133,6 +134,7 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -183,6 +185,7 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -210,7 +213,8 @@ where
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::parity::Parity,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
 {
@@ -286,6 +290,7 @@ where
         + core::ops::Shr<usize, Output = T>
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
+        + crate::parity::Parity
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
@@ -310,6 +315,7 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -347,6 +353,7 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -380,6 +387,7 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -415,7 +423,7 @@ where
     // Binary exponentiation using Montgomery multiplication
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
-        if &exp & &T::one() == T::one() {
+        if exp.is_odd() {
             result = constrained_montgomery_mul(&result, &base, modulus, &n_prime, r_bits);
         }
 
@@ -440,6 +448,7 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
