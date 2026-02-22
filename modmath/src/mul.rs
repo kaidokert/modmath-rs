@@ -61,7 +61,6 @@ where
         + num_traits::Zero
         + num_traits::One
         + crate::parity::Parity
-        + core::ops::BitAnd<Output = T>
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shr<usize, Output = T>
@@ -111,7 +110,7 @@ where
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shr<usize, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     a.rem_assign(m);
     let mut b = b % m;
@@ -157,7 +156,7 @@ where
         + num_traits::ops::overflowing::OverflowingSub
         + core::ops::Shr<usize, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     a.rem_assign(m);
     let mut b = b % m;

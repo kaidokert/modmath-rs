@@ -346,7 +346,7 @@ where
         + num_traits::ops::overflowing::OverflowingSub
         + core::ops::Shr<usize, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     crate::mul::strict_mod_mul(a, r, modulus)
 }

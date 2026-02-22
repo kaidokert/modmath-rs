@@ -221,7 +221,6 @@ where
         + Copy
         + num_traits::Zero
         + num_traits::One
-        + core::ops::BitAnd<Output = T>
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shr<usize, Output = T>

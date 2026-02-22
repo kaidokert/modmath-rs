@@ -77,7 +77,6 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -85,14 +84,8 @@ where
         + core::ops::Shl<usize, Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
-    // Hensel's lifting requires modulus to be odd (prerequisite for Montgomery arithmetic)
-    debug_assert!(
-        modulus.is_odd(),
-        "Hensel's lifting requires an odd modulus for Montgomery arithmetic"
-    );
-
     // Hensel's lifting for N' computation when R = 2^k
     let mut n_prime = T::one();
 
@@ -134,7 +127,6 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -148,8 +140,7 @@ where
         + core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T>
         + core::ops::Div<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
-        + core::ops::BitAnd<&'a T, Output = T>,
+        + core::ops::Rem<&'a T, Output = T>,
 {
     // Step 1: Find R = 2^k where R > modulus
     let mut r = T::one();
@@ -185,7 +176,6 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -199,8 +189,7 @@ where
         + core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T>
         + core::ops::Div<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
-        + core::ops::BitAnd<&'a T, Output = T>,
+        + core::ops::Rem<&'a T, Output = T>,
 {
     constrained_compute_montgomery_params_with_method(modulus, NPrimeMethod::default())
 }
@@ -216,7 +205,7 @@ where
         + core::ops::Shr<usize, Output = T>
         + crate::parity::Parity,
     for<'a> T: core::ops::RemAssign<&'a T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     crate::mul::constrained_mod_mul(a, r, modulus)
 }
