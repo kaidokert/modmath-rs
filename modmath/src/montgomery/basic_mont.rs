@@ -145,13 +145,8 @@ where
         // This shouldn't happen with correct Hensel lifting, but safety check
         None // Hensel lifting failed to produce correct N'
     } else {
-        // Canonicalize N' to [0, R) range
-        let remainder = n_prime % r;
-        if remainder < T::zero() {
-            Some(remainder + r)
-        } else {
-            Some(remainder)
-        }
+        // N' is already in [0, R) after Hensel lifting (starts at 1, accumulates powers of 2)
+        Some(n_prime)
     }
 }
 
@@ -257,7 +252,7 @@ where
     // 3. t = (a_mont + m * N) >> r_bits     [bit shift, no division!]
     // 4. if t >= N then return t - N else return t
 
-    // Check for r_bits == 0 to avoid underflow in mask calculation
+    // Fast path for R=1 (r_bits == 0): Montgomery reduction simplifies to conditional subtraction
     if r_bits == 0 {
         return if a_mont >= modulus {
             a_mont - modulus
