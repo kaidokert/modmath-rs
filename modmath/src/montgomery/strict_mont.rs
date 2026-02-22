@@ -272,9 +272,11 @@ where
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
 {
-    // Step 1: Modular multiplication to prevent overflow
+    // TODO(Phase 1): Replace mod_mul + from_montgomery with proper Montgomery
+    // reduction using WideningMul. Current mod_mul is O(k) double-and-add which
+    // defeats the performance purpose of Montgomery, and from_montgomery's
+    // m * N intermediate can overflow at key sizes. See ROADMAP.md Phase 1.
     let product = crate::mul::strict_mod_mul(a_mont, b_mont, modulus);
-    // Step 2: Apply Montgomery reduction to get result in Montgomery form
     strict_from_montgomery(product, modulus, n_prime, r_bits)
 }
 
@@ -321,7 +323,8 @@ where
     let m = &product & &mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
-    // Use overflowing_add for strict arithmetic
+    // TODO(Phase 1): m * N can overflow for large moduli (m < R, N < R, so
+    // m*N can reach R²). Needs WideningMul for correctness at key sizes.
     let m_times_n = &m * modulus;
     let (sum, _overflow) = a_mont.overflowing_add(&m_times_n);
     let t = sum >> r_bits; // Divide by R = 2^r_bits using bit shift
@@ -615,7 +618,7 @@ mod tests {
         )
         .unwrap();
 
-        // Both should produce identical results since TrialSearch is the default
+        // All methods produce identical results (N' is unique mod R)
         assert_eq!(default_result, explicit_trial_result);
 
         // Verify the explicit method call produces correct values

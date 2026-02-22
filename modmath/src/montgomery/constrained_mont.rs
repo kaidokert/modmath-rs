@@ -255,6 +255,8 @@ where
     let m = &product & &mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
+    // TODO(Phase 1): m * N can overflow for large moduli (m < R, N < R, so
+    // m*N can reach R²). Needs WideningMul for correctness at key sizes.
     let m_times_n = m * modulus;
     let temp_sum = a_mont.wrapping_add(&m_times_n);
     let t = temp_sum >> r_bits;
@@ -288,10 +290,11 @@ where
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
 {
-    // Step 1: Regular modular multiplication in Montgomery domain
+    // TODO(Phase 1): Replace mod_mul + from_montgomery with proper Montgomery
+    // reduction using WideningMul. Current mod_mul is O(k) double-and-add which
+    // defeats the performance purpose of Montgomery, and from_montgomery's
+    // m * N intermediate can overflow at key sizes. See ROADMAP.md Phase 1.
     let product = crate::mul::constrained_mod_mul(a_mont.clone(), b_mont, modulus);
-
-    // Step 2: Apply Montgomery reduction to get result in Montgomery form
     constrained_from_montgomery(product, modulus, n_prime, r_bits)
 }
 

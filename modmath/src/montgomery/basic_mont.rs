@@ -267,6 +267,8 @@ where
     let m = ((a_mont & mask) * n_prime) & mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
+    // TODO(Phase 1): m * N can overflow for large moduli (m < R, N < R, so
+    // m*N can reach R²). Needs WideningMul for correctness at key sizes.
     let t = (a_mont + m * modulus) >> r_bits;
 
     // Step 3: Final reduction
@@ -295,10 +297,11 @@ where
     // 1. Compute product = a_mont * b_mont (mod N)
     // 2. Apply Montgomery reduction to get (a * b * R) mod N
 
-    // Step 1: Regular modular multiplication in Montgomery domain
+    // TODO(Phase 1): Replace mod_mul + from_montgomery with proper Montgomery
+    // reduction using WideningMul. Current mod_mul is O(k) double-and-add which
+    // defeats the performance purpose of Montgomery, and from_montgomery's
+    // m * N intermediate can overflow at key sizes. See ROADMAP.md Phase 1.
     let product = crate::mul::basic_mod_mul(a_mont, b_mont, modulus);
-
-    // Step 2: Apply Montgomery reduction to get result in Montgomery form
     basic_from_montgomery(product, modulus, n_prime, r_bits)
 }
 
