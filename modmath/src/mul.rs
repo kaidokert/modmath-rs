@@ -82,15 +82,16 @@ where
             };
         }
 
-        // Doubling logic
-        let sum = a.wrapping_add(&a);
-        a = if sum >= m1 || sum < a {
-            sum.wrapping_sub(&m1)
-        } else {
-            sum
-        };
-
         b = b >> 1;
+
+        if b > T::zero() {
+            let sum = a.wrapping_add(&a);
+            a = if sum >= m1 || sum < a {
+                sum.wrapping_sub(&m1)
+            } else {
+                sum
+            };
+        }
     }
 
     result
@@ -127,15 +128,16 @@ where
             };
         }
 
-        // Doubling logic
-        let sum = a.wrapping_add(&a);
-        a = if &sum >= m || sum < a {
-            sum.wrapping_sub(m)
-        } else {
-            sum
-        };
-
         b = b >> 1;
+
+        if b > T::zero() {
+            let sum = a.wrapping_add(&a);
+            a = if &sum >= m || sum < a {
+                sum.wrapping_sub(m)
+            } else {
+                sum
+            };
+        }
     }
 
     result
@@ -162,10 +164,7 @@ where
     let one = T::one();
 
     while b > T::zero() {
-        // TODO: Can we just do a first bit check here rather than
-        // a full bit and and equality check
         if &b & &one == one {
-            // Inline strict_mod_add but skip the redundant modulo on 'a' since we know it's reduced
             let (sum, overflow) = result.overflowing_add(&a);
             result = if &sum >= m || overflow {
                 sum.overflowing_sub(m).0
@@ -174,15 +173,16 @@ where
             };
         }
 
-        // Doubling logic
-        let (doubled, overflow) = a.overflowing_add(&a);
-        a = if &doubled >= m || overflow {
-            doubled.overflowing_sub(m).0
-        } else {
-            doubled
-        };
-
         b = b >> 1;
+
+        if b > T::zero() {
+            let (doubled, overflow) = a.overflowing_add(&a);
+            a = if &doubled >= m || overflow {
+                doubled.overflowing_sub(m).0
+            } else {
+                doubled
+            };
+        }
     }
 
     result
