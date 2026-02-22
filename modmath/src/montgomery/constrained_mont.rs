@@ -117,7 +117,13 @@ where
     if final_check != target {
         None // Hensel lifting failed to produce correct N'
     } else {
-        Some(n_prime)
+        // Canonicalize N' to [0, R) range
+        let remainder = &n_prime % r;
+        if remainder < T::zero() {
+            Some(remainder.wrapping_add(r))
+        } else {
+            Some(remainder)
+        }
     }
 }
 
@@ -227,21 +233,36 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + num_traits::ops::wrapping::WrappingSub,
     for<'a> T: core::ops::Mul<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::BitAnd<&'a T, Output = T>,
 {
     // Montgomery reduction algorithm:
-    let r = T::one() << r_bits; // R = 2^r_bits
+    // 1. mask = 2^r_bits - 1
+    // 2. m = ((a_mont & mask) * N') & mask  [only low bits, no expensive modulo!]
+    // 3. t = (a_mont + m * N) >> r_bits     [bit shift, no division!]
+    // 4. if t >= N then return t - N else return t
 
-    // Step 1: m = (a_mont * N') mod R
-    let m = (a_mont.clone() * n_prime) % &r;
+    // Check for r_bits == 0 to avoid underflow in mask calculation
+    if r_bits == 0 {
+        return if &a_mont >= modulus {
+            a_mont.wrapping_sub(modulus)
+        } else {
+            a_mont
+        };
+    }
 
-    // Step 2: t = (a_mont + m * N) / R
-    let temp_prod = m.clone() * modulus;
-    let temp_sum = a_mont.wrapping_add(&temp_prod);
-    let t = temp_sum >> r_bits; // Divide by R = 2^r_bits
+    let mask = (T::one() << r_bits).wrapping_sub(&T::one()); // mask = 2^r_bits - 1
+
+    // Step 1: m = ((a_mont & mask) * N') & mask
+    let a_low = &a_mont & &mask;
+    let product = a_low * n_prime;
+    let m = &product & &mask;
+
+    // Step 2: t = (a_mont + m * N) >> r_bits
+    let m_times_n = m * modulus;
+    let temp_sum = a_mont.wrapping_add(&m_times_n);
+    let t = temp_sum >> r_bits;
 
     // Step 3: Final reduction
     if &t >= modulus {
@@ -392,18 +413,19 @@ where
 
     // Copy exponent for manipulation
     let mut exp = exponent.clone();
-    let two = T::one().clone().wrapping_add(&T::one());
 
     // Binary exponentiation using Montgomery multiplication
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
-        if &exp % &two == T::one() {
+        if &exp & &T::one() == T::one() {
             result = constrained_montgomery_mul(&result, &base, modulus, &n_prime, r_bits);
         }
 
         // Square the base for next iteration
         exp >>= 1;
-        base = constrained_montgomery_mul(&base, &base, modulus, &n_prime, r_bits);
+        if exp > T::zero() {
+            base = constrained_montgomery_mul(&base, &base, modulus, &n_prime, r_bits);
+        }
     }
 
     // Convert result back from Montgomery form

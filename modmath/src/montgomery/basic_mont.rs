@@ -145,7 +145,13 @@ where
         // This shouldn't happen with correct Hensel lifting, but safety check
         None // Hensel lifting failed to produce correct N'
     } else {
-        Some(n_prime)
+        // Canonicalize N' to [0, R) range
+        let remainder = n_prime % r;
+        if remainder < T::zero() {
+            Some(remainder + r)
+        } else {
+            Some(remainder)
+        }
     }
 }
 
@@ -240,24 +246,33 @@ where
         + core::ops::Mul<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Rem<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + core::ops::Shl<usize, Output = T>,
+        + core::ops::Shl<usize, Output = T>
+        + core::ops::BitAnd<Output = T>,
 {
     // Montgomery reduction algorithm:
     // Input: a_mont (Montgomery form), N (modulus), N', r_bits
-    // 1. R = 2^r_bits
-    // 2. m = (a_mont * N') mod R
-    // 3. t = (a_mont + m * N) / R
+    // 1. mask = 2^r_bits - 1
+    // 2. m = ((a_mont & mask) * N') & mask  [only low bits, no expensive modulo!]
+    // 3. t = (a_mont + m * N) >> r_bits     [bit shift, no division!]
     // 4. if t >= N then return t - N else return t
 
-    let r = T::one() << r_bits; // R = 2^r_bits
+    // Check for r_bits == 0 to avoid underflow in mask calculation
+    if r_bits == 0 {
+        return if a_mont >= modulus {
+            a_mont - modulus
+        } else {
+            a_mont
+        };
+    }
 
-    // Step 1: m = (a_mont * N') mod R
-    let m = (a_mont * n_prime) % r;
+    let mask = (T::one() << r_bits) - T::one(); // mask = 2^r_bits - 1
 
-    // Step 2: t = (a_mont + m * N) / R
-    let t = (a_mont + m * modulus) >> r_bits; // Divide by R = 2^r_bits
+    // Step 1: m = ((a_mont & mask) * N') & mask
+    let m = ((a_mont & mask) * n_prime) & mask;
+
+    // Step 2: t = (a_mont + m * N) >> r_bits
+    let t = (a_mont + m * modulus) >> r_bits;
 
     // Step 3: Final reduction
     if t >= modulus { t - modulus } else { t }
