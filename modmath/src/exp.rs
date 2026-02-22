@@ -1,4 +1,49 @@
+#[cfg(feature = "nightly")]
+use super::mul::const_mod_mul;
 use super::mul::{basic_mod_mul, constrained_mod_mul, strict_mod_mul};
+
+#[cfg(feature = "nightly")]
+use fixed_bigint::const_numtraits::{
+    ConstOne, ConstOverflowingAdd, ConstOverflowingSub, ConstZero,
+};
+
+#[cfg(feature = "nightly")]
+c0nst::c0nst! {
+    /// # Const Modular Exponentiation
+    /// Const-evaluable version of modular exponentiation. Uses const traits from
+    /// `fixed_bigint::const_numtraits` instead of `num_traits`.
+    pub c0nst fn const_mod_exp<T>(mut base: T, exponent: T, modulus: T) -> T
+    where
+        T: [c0nst] core::cmp::PartialOrd
+            + [c0nst] core::cmp::PartialEq
+            + Copy
+            + [c0nst] ConstZero
+            + [c0nst] ConstOne
+            + [c0nst] core::ops::BitAnd<Output = T>
+            + [c0nst] ConstOverflowingAdd
+            + [c0nst] ConstOverflowingSub
+            + [c0nst] core::ops::Shr<usize, Output = T>
+            + [c0nst] core::ops::ShrAssign<usize>
+            + [c0nst] core::ops::Rem<Output = T>,
+    {
+        let mut result = T::one() % modulus;
+        let mut exp = exponent;
+
+        base = base % modulus;
+
+        while exp > T::zero() {
+            if exp & T::one() == T::one() {
+                result = const_mod_mul(result, base, modulus);
+            }
+            exp >>= 1;
+
+            if exp > T::zero() {
+                base = const_mod_mul(base, base, modulus);
+            }
+        }
+        result
+    }
+}
 
 /// # Modular Exponentiation (Basic)
 /// Simple version that operates on values and copies them. Requires
@@ -14,26 +59,20 @@ where
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::ShrAssign<usize>
-        + core::ops::RemAssign<T>
         + Copy,
 {
-    let two = T::one() + T::one();
-    let mut result = T::one();
+    let mut result = T::one() % modulus;
     let mut exp = exponent;
 
-    base %= modulus; // reduce base initially
+    base = base % modulus;
 
     while exp > T::zero() {
-        // If the exponent is odd, multiply the result by base
-        if exp % two == T::one() {
+        if exp & T::one() == T::one() {
             result = basic_mod_mul(result, base, modulus);
         }
-        // Right shift the exponent (divide by 2)
         exp >>= 1;
 
-        // Only square base if exp > 0 (avoid unnecessary squaring in final step)
         if exp > T::zero() {
-            // Square the base using modular multiplication
             base = basic_mod_mul(base, base, modulus);
         }
     }
@@ -58,11 +97,11 @@ where
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
 {
     base.rem_assign(modulus);
-    let mut result = T::one();
+    let mut result = T::one() % modulus;
     let mut exp = T::zero().wrapping_add(exponent);
-    let two = T::one().wrapping_add(&T::one());
+    let one = T::one();
     while exp > T::zero() {
-        if &exp % &two == T::one() {
+        if &exp & &one == one {
             result = constrained_mod_mul(result, &base, modulus);
         }
         exp >>= 1;
@@ -92,13 +131,13 @@ where
         + core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
 {
-    let two = T::one().overflowing_add(&T::one()).0;
-    let mut result = T::one();
+    let mut result = T::one() % modulus;
     base.rem_assign(modulus);
     let mut exp = T::zero().overflowing_add(exponent).0;
+    let one = T::one();
 
     while exp > T::zero() {
-        if &exp % &two == T::one() {
+        if &exp & &one == one {
             result = strict_mod_mul(result, &base, modulus);
         }
         exp >>= 1;
@@ -150,6 +189,12 @@ macro_rules! generate_mod_exp_tests_block_64 {
         #[test]
         fn test_identity_exponent_of_0() {
             assert_eq!(mod_exp(5_u64, &0_u64, &9_u64), 1_u64); // 5^0 % 9 = 1
+        }
+
+        #[test]
+        fn test_identity_exponent_of_0_modulus_of_1() {
+            assert_eq!(mod_exp(5_u64, &0_u64, &1_u64), 0_u64); // 5^0 % 1 = 0
+            assert_eq!(mod_exp(0_u64, &0_u64, &1_u64), 0_u64); // 0^0 % 1 = 0
         }
 
         #[test]
@@ -310,6 +355,32 @@ mod basic_mod_exp_tests {
     }
     mod u32_tests {
         generate_mod_exp_tests_block_32!(super::basic_mod_exp, u32, by_val);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "nightly")]
+const _: () = {
+    let result = const_mod_exp(2u64, 3u64, 5u64);
+    assert!(result == 3u64);
+};
+
+#[cfg(test)]
+#[cfg(feature = "nightly")]
+mod const_mod_exp_tests {
+    use super::const_mod_exp;
+
+    mod u64_tests {
+        generate_mod_exp_tests_block_64!(super::const_mod_exp, u64, by_val);
+    }
+    mod u8_tests {
+        generate_mod_exp_tests_block_8!(super::const_mod_exp, u8, by_val);
+    }
+    mod u16_tests {
+        generate_mod_exp_tests_block_16!(super::const_mod_exp, u16, by_val);
+    }
+    mod u32_tests {
+        generate_mod_exp_tests_block_32!(super::const_mod_exp, u32, by_val);
     }
 }
 

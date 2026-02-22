@@ -16,20 +16,34 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ["1.85", stable, nightly]
+    continue-on-error: ${{ matrix.rust == 'nightly' }}
 
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@stable
       with:
-          toolchain: stable
+          toolchain: ${{ matrix.rust }}
           targets: thumbv6m-none-eabi
           components: rustfmt, clippy
     - name: Check formatting
+      if: matrix.rust == 'stable'
       working-directory: modmath
       run: cargo fmt -- --check
     - name: Run clippy
+      if: matrix.rust == 'stable'
       working-directory: modmath
       run: cargo clippy -- -D warnings
     - name: Build
       working-directory: modmath
       run: cargo build
+    - name: Run tests
+      working-directory: modmath
+      run: cargo test --verbose
+    - name: Run tests with nightly feature
+      if: matrix.rust == 'nightly'
+      working-directory: modmath
+      run: cargo test --verbose --features nightly
