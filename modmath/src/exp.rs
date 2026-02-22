@@ -53,7 +53,7 @@ where
     T: PartialOrd
         + num_traits::One
         + num_traits::Zero
-        + core::ops::BitAnd<Output = T>
+        + crate::parity::Parity
         + core::ops::Rem<Output = T>
         + core::ops::Shr<usize, Output = T>
         + num_traits::ops::wrapping::WrappingAdd
@@ -67,7 +67,7 @@ where
     base = base % modulus;
 
     while exp > T::zero() {
-        if exp & T::one() == T::one() {
+        if exp.is_odd() {
             result = basic_mod_mul(result, base, modulus);
         }
         exp >>= 1;
@@ -87,6 +87,7 @@ where
     T: PartialOrd
         + num_traits::One
         + num_traits::Zero
+        + crate::parity::Parity
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::ShrAssign<usize>
@@ -94,14 +95,13 @@ where
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::DivAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     base.rem_assign(modulus);
     let mut result = T::one() % modulus;
     let mut exp = T::zero().wrapping_add(exponent);
-    let one = T::one();
     while exp > T::zero() {
-        if &exp & &one == one {
+        if exp.is_odd() {
             result = constrained_mod_mul(result, &base, modulus);
         }
         exp >>= 1;
@@ -122,6 +122,7 @@ where
     T: PartialOrd
         + num_traits::One
         + num_traits::Zero
+        + crate::parity::Parity
         + num_traits::ops::overflowing::OverflowingAdd
         + num_traits::ops::overflowing::OverflowingSub
         + core::ops::Shr<usize, Output = T>,
@@ -129,15 +130,14 @@ where
         + core::ops::DivAssign<&'a T>
         + core::ops::ShrAssign<usize>
         + core::ops::Rem<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     let mut result = T::one() % modulus;
     base.rem_assign(modulus);
     let mut exp = T::zero().overflowing_add(exponent).0;
-    let one = T::one();
 
     while exp > T::zero() {
-        if &exp & &one == one {
+        if exp.is_odd() {
             result = strict_mod_mul(result, &base, modulus);
         }
         exp >>= 1;

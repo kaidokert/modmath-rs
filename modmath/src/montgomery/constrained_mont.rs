@@ -84,14 +84,8 @@ where
         + core::ops::Shl<usize, Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
-    // Hensel's lifting requires modulus to be odd (prerequisite for Montgomery arithmetic)
-    debug_assert!(
-        modulus & &T::one() == T::one(),
-        "Hensel's lifting requires an odd modulus for Montgomery arithmetic"
-    );
-
     // Hensel's lifting for N' computation when R = 2^k
     let mut n_prime = T::one();
 
@@ -146,8 +140,7 @@ where
         + core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T>
         + core::ops::Div<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
-        + core::ops::BitAnd<&'a T, Output = T>,
+        + core::ops::Rem<&'a T, Output = T>,
 {
     // Step 1: Find R = 2^k where R > modulus
     let mut r = T::one();
@@ -196,8 +189,7 @@ where
         + core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T>
         + core::ops::Div<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
-        + core::ops::BitAnd<&'a T, Output = T>,
+        + core::ops::Rem<&'a T, Output = T>,
 {
     constrained_compute_montgomery_params_with_method(modulus, NPrimeMethod::default())
 }
@@ -210,9 +202,10 @@ where
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::parity::Parity,
     for<'a> T: core::ops::RemAssign<&'a T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     crate::mul::constrained_mod_mul(a, r, modulus)
 }
@@ -286,6 +279,7 @@ where
         + core::ops::Shr<usize, Output = T>
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
+        + crate::parity::Parity
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
@@ -310,6 +304,7 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -347,6 +342,7 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -380,6 +376,7 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
@@ -415,7 +412,7 @@ where
     // Binary exponentiation using Montgomery multiplication
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
-        if &exp & &T::one() == T::one() {
+        if exp.is_odd() {
             result = constrained_montgomery_mul(&result, &base, modulus, &n_prime, r_bits);
         }
 
@@ -440,6 +437,7 @@ where
     T: Clone
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd

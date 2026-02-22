@@ -60,7 +60,7 @@ where
         + Copy
         + num_traits::Zero
         + num_traits::One
-        + core::ops::BitAnd<Output = T>
+        + crate::parity::Parity
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shr<usize, Output = T>
@@ -72,7 +72,7 @@ where
     let mut result = T::zero();
 
     while b > T::zero() {
-        if b & T::one() == T::one() {
+        if b.is_odd() {
             // Inline basic_mod_add but skip the redundant modulo on 'a' since we know it's reduced
             let sum = result.wrapping_add(&a);
             result = if sum >= m1 || sum < result {
@@ -104,21 +104,21 @@ pub fn constrained_mod_mul<T>(mut a: T, b: &T, m: &T) -> T
 where
     T: num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialOrd
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shr<usize, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     a.rem_assign(m);
     let mut b = b % m;
 
     let mut result = T::zero();
-    let one = T::one();
 
     while b > T::zero() {
-        if &b & &one == one {
+        if b.is_odd() {
             // Inline constrained_mod_add but skip the redundant modulo on 'a' since we know it's reduced
             let sum = result.wrapping_add(&a);
             result = if &sum >= m || sum < result {
@@ -150,21 +150,21 @@ pub fn strict_mod_mul<T>(mut a: T, b: &T, m: &T) -> T
 where
     T: num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialOrd
         + num_traits::ops::overflowing::OverflowingAdd
         + num_traits::ops::overflowing::OverflowingSub
         + core::ops::Shr<usize, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     a.rem_assign(m);
     let mut b = b % m;
 
     let mut result = T::zero();
-    let one = T::one();
 
     while b > T::zero() {
-        if &b & &one == one {
+        if b.is_odd() {
             let (sum, overflow) = result.overflowing_add(&a);
             result = if &sum >= m || overflow {
                 sum.overflowing_sub(m).0

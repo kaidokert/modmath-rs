@@ -221,11 +221,11 @@ where
         + Copy
         + num_traits::Zero
         + num_traits::One
-        + core::ops::BitAnd<Output = T>
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Shr<usize, Output = T>
-        + core::ops::Rem<Output = T>,
+        + core::ops::Rem<Output = T>
+        + crate::parity::Parity,
 {
     crate::mul::basic_mod_mul(a, r, modulus)
 }
@@ -290,7 +290,8 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::BitAnd<Output = T>
         + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub,
+        + num_traits::ops::wrapping::WrappingSub
+        + crate::parity::Parity,
 {
     // Montgomery multiplication algorithm:
     // Input: a_mont, b_mont (both in Montgomery form), modulus N, N', r_bits
@@ -327,7 +328,8 @@ where
         + core::ops::BitAnd<Output = T>
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::parity::Parity,
 {
     let (r, _r_inv, n_prime, r_bits) =
         basic_compute_montgomery_params_with_method(modulus, method)?;
@@ -354,7 +356,8 @@ where
         + core::ops::BitAnd<Output = T>
         + num_traits::ops::wrapping::WrappingAdd
         + num_traits::ops::wrapping::WrappingSub
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::parity::Parity,
 {
     basic_montgomery_mod_mul_with_method(a, b, modulus, NPrimeMethod::default())
 }
@@ -372,6 +375,7 @@ where
     T: Copy
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -401,7 +405,7 @@ where
     // Binary exponentiation using Montgomery multiplication
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
-        if exp & T::one() == T::one() {
+        if exp.is_odd() {
             result = basic_montgomery_mul(result, base, modulus, n_prime, r_bits);
         }
 
@@ -424,6 +428,7 @@ where
     T: Copy
         + num_traits::Zero
         + num_traits::One
+        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
