@@ -117,6 +117,7 @@ where
     if final_check != target {
         None // Hensel lifting failed to produce correct N'
     } else {
+        // N' is already in [0, R) after Hensel lifting (starts at 1, accumulates powers of 2)
         Some(n_prime)
     }
 }
@@ -227,21 +228,38 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + num_traits::ops::wrapping::WrappingSub,
     for<'a> T: core::ops::Mul<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::BitAnd<&'a T, Output = T>,
 {
     // Montgomery reduction algorithm:
-    let r = T::one() << r_bits; // R = 2^r_bits
+    // 1. mask = 2^r_bits - 1
+    // 2. m = ((a_mont & mask) * N') & mask  [only low bits, no expensive modulo!]
+    // 3. t = (a_mont + m * N) >> r_bits     [bit shift, no division!]
+    // 4. if t >= N then return t - N else return t
 
-    // Step 1: m = (a_mont * N') mod R
-    let m = (a_mont.clone() * n_prime) % &r;
+    // Fast path for R=1 (r_bits == 0): Montgomery reduction simplifies to conditional subtraction
+    if r_bits == 0 {
+        return if &a_mont >= modulus {
+            a_mont.wrapping_sub(modulus)
+        } else {
+            a_mont
+        };
+    }
 
-    // Step 2: t = (a_mont + m * N) / R
-    let temp_prod = m.clone() * modulus;
-    let temp_sum = a_mont.wrapping_add(&temp_prod);
-    let t = temp_sum >> r_bits; // Divide by R = 2^r_bits
+    let mask = (T::one() << r_bits).wrapping_sub(&T::one()); // mask = 2^r_bits - 1
+
+    // Step 1: m = ((a_mont & mask) * N') & mask
+    let a_low = &a_mont & &mask;
+    let product = a_low * n_prime;
+    let m = &product & &mask;
+
+    // Step 2: t = (a_mont + m * N) >> r_bits
+    // TODO(Phase 1): m * N can overflow for large moduli (m < R, N < R, so
+    // m*N can reach R²). Needs WideningMul for correctness at key sizes.
+    let m_times_n = m * modulus;
+    let temp_sum = a_mont.wrapping_add(&m_times_n);
+    let t = temp_sum >> r_bits;
 
     // Step 3: Final reduction
     if &t >= modulus {
@@ -272,10 +290,11 @@ where
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
 {
-    // Step 1: Regular modular multiplication in Montgomery domain
+    // TODO(Phase 1): Replace mod_mul + from_montgomery with proper Montgomery
+    // reduction using WideningMul. Current mod_mul is O(k) double-and-add which
+    // defeats the performance purpose of Montgomery, and from_montgomery's
+    // m * N intermediate can overflow at key sizes. See ROADMAP.md Phase 1.
     let product = crate::mul::constrained_mod_mul(a_mont.clone(), b_mont, modulus);
-
-    // Step 2: Apply Montgomery reduction to get result in Montgomery form
     constrained_from_montgomery(product, modulus, n_prime, r_bits)
 }
 
@@ -392,18 +411,19 @@ where
 
     // Copy exponent for manipulation
     let mut exp = exponent.clone();
-    let two = T::one().clone().wrapping_add(&T::one());
 
     // Binary exponentiation using Montgomery multiplication
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
-        if &exp % &two == T::one() {
+        if &exp & &T::one() == T::one() {
             result = constrained_montgomery_mul(&result, &base, modulus, &n_prime, r_bits);
         }
 
         // Square the base for next iteration
         exp >>= 1;
-        base = constrained_montgomery_mul(&base, &base, modulus, &n_prime, r_bits);
+        if exp > T::zero() {
+            base = constrained_montgomery_mul(&base, &base, modulus, &n_prime, r_bits);
+        }
     }
 
     // Convert result back from Montgomery form
