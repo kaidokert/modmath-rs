@@ -290,11 +290,8 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::Sub<Output = T>
         + num_traits::ops::overflowing::OverflowingAdd,
-    for<'a> T: core::ops::Mul<&'a T, Output = T>
-        + core::ops::RemAssign<&'a T>
-        + core::ops::Sub<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
+    for<'a> T: core::ops::Mul<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::BitAnd<&'a T, Output = T>,
 {
@@ -1226,8 +1223,11 @@ mod tests {
     }
 
     #[test]
-    fn test_strict_montgomery_mul_overflow_prevention() {
-        // Test that our overflow fix works by using large values that would overflow in raw multiplication
+    fn test_strict_montgomery_mul_large_modulus() {
+        // Test Montgomery multiplication with a large prime modulus.
+        // Note: strict_mod_mul prevents overflow in the a*b step, but
+        // strict_from_montgomery's intermediate a_low * n_prime can still
+        // overflow for some input combinations with this modulus.
         let modulus = 65521u32; // Large prime
         let (r, _r_inv, n_prime, r_bits) = strict_compute_montgomery_params(&modulus).unwrap();
 
