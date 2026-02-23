@@ -370,32 +370,54 @@ where
     T::zero().wrapping_sub(&x)
 }
 
+/// Compute (val * 2^w) mod N via w modular doublings.
+fn mod_exp2<T>(val: T, modulus: T, w: usize) -> T
+where
+    T: Copy
+        + PartialEq
+        + PartialOrd
+        + num_traits::Zero
+        + num_traits::One
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingSub,
+{
+    // For modulus == 1, any value mod 1 == 0
+    if modulus == T::one() {
+        return T::zero();
+    }
+    let mut result = val;
+    for _ in 0..w {
+        result = mod_double(result, modulus);
+    }
+    result
+}
+
 /// Compute R mod N = 2^W mod N via W modular doublings starting from 1.
 fn compute_r_mod_n<T>(modulus: T, w: usize) -> T
 where
     T: Copy
-        + num_traits::One
+        + PartialEq
         + PartialOrd
+        + num_traits::Zero
+        + num_traits::One
         + num_traits::ops::overflowing::OverflowingAdd
         + num_traits::WrappingSub,
 {
-    let mut val = T::one();
-    for _ in 0..w {
-        val = mod_double(val, modulus);
-    }
-    val
+    mod_exp2(T::one(), modulus, w)
 }
 
 /// Compute R^2 mod N via W more modular doublings from (R mod N).
 fn compute_r2_mod_n<T>(r_mod_n: T, modulus: T, w: usize) -> T
 where
-    T: Copy + PartialOrd + num_traits::ops::overflowing::OverflowingAdd + num_traits::WrappingSub,
+    T: Copy
+        + PartialEq
+        + PartialOrd
+        + num_traits::Zero
+        + num_traits::One
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingSub,
 {
-    let mut val = r_mod_n;
-    for _ in 0..w {
-        val = mod_double(val, modulus);
-    }
-    val
+    mod_exp2(r_mod_n, modulus, w)
 }
 
 /// REDC on a double-width input (t_lo, t_hi).
