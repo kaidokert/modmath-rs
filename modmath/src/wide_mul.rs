@@ -17,6 +17,18 @@ pub trait WideMul {
 /// Uses double-and-add algorithm that works with any type supporting
 /// the required traits. Uses `is_zero()` instead of comparison to
 /// minimize trait bounds.
+///
+/// # Overflow invariants
+///
+/// The algorithm maintains a double-width accumulator (result_lo, result_hi) and
+/// a double-width shift register (shift_lo, shift_hi). The product of two W-bit
+/// values fits in 2W bits, so:
+/// - The shift register holds at most `rhs * 2^k` where k is the current bit position,
+///   which is bounded by `rhs * 2^(W-1) < 2^(2W)`.
+/// - The result accumulator holds at most `lhs * rhs < 2^(2W)`.
+///
+/// Therefore, high-half additions that overflow would indicate a bug in the algorithm,
+/// not in the inputs. We assert this in debug builds.
 #[cfg(not(feature = "wide-mul"))]
 fn wide_mul_fallback<T>(lhs: T, rhs: T) -> (T, T)
 where
@@ -38,21 +50,31 @@ where
         if a_rem.is_odd() {
             let (new_lo, carry) = result_lo.overflowing_add(&shift_lo);
             result_lo = new_lo;
-            let (new_hi, _) = result_hi.overflowing_add(&shift_hi);
+            let (new_hi, overflow1) = result_hi.overflowing_add(&shift_hi);
             result_hi = new_hi;
             if carry {
-                let (new_hi, _) = result_hi.overflowing_add(&one);
+                let (new_hi, overflow2) = result_hi.overflowing_add(&one);
                 result_hi = new_hi;
+                // High-half overflow means result > 2^(2W), which is impossible
+                // for the product of two W-bit values.
+                debug_assert!(!overflow2, "wide_mul: result high-half overflow");
+            } else {
+                debug_assert!(!overflow1, "wide_mul: result high-half overflow");
             }
         }
         // double the shift register
         let (new_shift_lo, carry) = shift_lo.overflowing_add(&shift_lo);
         shift_lo = new_shift_lo;
-        let (new_shift_hi, _) = shift_hi.overflowing_add(&shift_hi);
+        let (new_shift_hi, overflow1) = shift_hi.overflowing_add(&shift_hi);
         shift_hi = new_shift_hi;
         if carry {
-            let (new_shift_hi, _) = shift_hi.overflowing_add(&one);
+            let (new_shift_hi, overflow2) = shift_hi.overflowing_add(&one);
             shift_hi = new_shift_hi;
+            // Shift register overflow means shift > 2^(2W), impossible for rhs * 2^k
+            // where k < W.
+            debug_assert!(!overflow2, "wide_mul: shift high-half overflow");
+        } else {
+            debug_assert!(!overflow1, "wide_mul: shift high-half overflow");
         }
         a_rem = a_rem >> 1;
     }

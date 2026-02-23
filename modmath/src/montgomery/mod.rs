@@ -20,6 +20,7 @@ pub use basic_mont::{
     basic_montgomery_mod_mul_with_method,
     basic_montgomery_mul,
     basic_to_montgomery,
+    // wide_from_montgomery available via basic_mont::wide_from_montgomery
 };
 
 // Re-export constrained functions

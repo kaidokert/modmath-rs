@@ -248,7 +248,11 @@ where
 }
 
 /// Convert from Montgomery form (Basic): (a * R) -> a mod N
-/// Uses Montgomery reduction algorithm
+/// Uses Montgomery reduction algorithm with legacy R > N semantics.
+///
+/// **Warning**: This function can overflow for large moduli where m * N exceeds
+/// the type width. For overflow-free reduction, use [`wide_from_montgomery`]
+/// which uses wide-REDC with R = 2^W.
 pub fn basic_from_montgomery<T>(a_mont: T, modulus: T, n_prime: T, r_bits: usize) -> T
 where
     T: Copy
@@ -284,12 +288,31 @@ where
     let m = ((a_mont & mask) * n_prime) & mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
-    // TODO(Phase 1): m * N can overflow for large moduli (m < R, N < R, so
-    // m*N can reach R^2). Needs WideningMul for correctness at key sizes.
+    // WARNING: m * N can overflow for large moduli (m < R, N < R, so
+    // m*N can reach R^2). Use wide_from_montgomery for overflow-free reduction.
     let t = (a_mont + m * modulus) >> r_bits;
 
     // Step 3: Final reduction
     if t >= modulus { t - modulus } else { t }
+}
+
+/// Convert from Montgomery form using wide-REDC: (a * R) -> a mod N
+///
+/// Uses R = 2^W (full type width) semantics with overflow-free reduction.
+/// The N' parameter must be computed for R = 2^W (e.g., via Newton's method).
+#[allow(dead_code)] // Public API for external use
+pub fn wide_from_montgomery<T>(a_mont: T, modulus: T, n_prime: T) -> T
+where
+    T: Copy
+        + num_traits::Zero
+        + num_traits::One
+        + PartialOrd
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingMul
+        + num_traits::WrappingSub,
+{
+    wide_redc(a_mont, T::zero(), modulus, n_prime)
 }
 
 /// Montgomery multiplication (Basic): (a * R) * (b * R) -> (a * b * R) mod N
@@ -428,7 +451,6 @@ where
 /// Invariants maintained:
 /// - `result` is in range [0, modulus + 1] on entry (sum of two values < modulus plus carry)
 /// - Returns (result + carry1, extra_bit) where extra_bit indicates overflow
-#[inline]
 fn accumulate_high_half_carry<T>(result: T, carry1: bool, carry2: bool) -> (T, bool)
 where
     T: Copy + num_traits::One + num_traits::ops::overflowing::OverflowingAdd,
@@ -534,9 +556,23 @@ where
     basic_montgomery_mod_mul(a, b, modulus)
 }
 
+/// Reduce value modulo modulus using repeated subtraction.
+/// For values close to modulus this is efficient; for very large values
+/// callers should pre-reduce before calling Montgomery functions.
+fn reduce_mod<T>(mut val: T, modulus: T) -> T
+where
+    T: Copy + PartialOrd + num_traits::WrappingSub,
+{
+    while val >= modulus {
+        val = val.wrapping_sub(&modulus);
+    }
+    val
+}
+
 /// Complete Montgomery modular multiplication (Basic): A * B mod N
 ///
 /// Uses wide REDC (R = 2^W) with Newton's method for N'.
+/// Inputs are reduced modulo N before conversion to Montgomery form.
 /// Returns None if modulus is even or zero.
 pub fn basic_montgomery_mod_mul<T>(a: T, b: T, modulus: T) -> Option<T>
 where
@@ -560,10 +596,14 @@ where
     let r_mod_n = compute_r_mod_n(modulus, w);
     let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
 
+    // Reduce inputs to [0, modulus) before Montgomery conversion
+    let a_red = reduce_mod(a, modulus);
+    let b_red = reduce_mod(b, modulus);
+
     // Convert to Montgomery form via REDC(a * R^2)
-    let (lo, hi) = a.wide_mul(&r2_mod_n);
+    let (lo, hi) = a_red.wide_mul(&r2_mod_n);
     let a_m = wide_redc(lo, hi, modulus, n_prime);
-    let (lo, hi) = b.wide_mul(&r2_mod_n);
+    let (lo, hi) = b_red.wide_mul(&r2_mod_n);
     let b_m = wide_redc(lo, hi, modulus, n_prime);
 
     // Multiply in Montgomery domain
@@ -607,6 +647,7 @@ where
 /// Montgomery-based modular exponentiation (Basic): base^exponent mod modulus
 ///
 /// Uses wide REDC (R = 2^W) with Newton's method for N'.
+/// The base is reduced modulo N before conversion to Montgomery form.
 /// Returns None if modulus is even or zero.
 pub fn basic_montgomery_mod_exp<T>(base: T, exponent: T, modulus: T) -> Option<T>
 where
@@ -632,11 +673,12 @@ where
     let r_mod_n = compute_r_mod_n(modulus, w);
     let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
 
-    // 1 in Montgomery form = REDC(1 * R^2)
-    let (lo, hi) = T::one().wide_mul(&r2_mod_n);
-    let one_mont = wide_redc(lo, hi, modulus, n_prime);
+    // 1 in Montgomery form = R mod N (since REDC(1 * R²) = 1 * R² * R⁻¹ = R mod N)
+    let one_mont = r_mod_n;
 
-    let (lo, hi) = base.wide_mul(&r2_mod_n);
+    // Reduce base to [0, modulus) before Montgomery conversion
+    let base_red = reduce_mod(base, modulus);
+    let (lo, hi) = base_red.wide_mul(&r2_mod_n);
     let mut base_mont = wide_redc(lo, hi, modulus, n_prime);
     let mut result = one_mont;
     let mut exp = exponent;
@@ -1141,5 +1183,68 @@ mod tests {
         let expected = crate::exp::basic_mod_exp(base, exp, modulus);
         let got = basic_montgomery_mod_exp(base, exp, modulus).unwrap();
         assert_eq!(got, expected);
+    }
+
+    // -- Input reduction tests -----------------------------------------------
+
+    #[test]
+    fn test_input_reduction_mod_mul() {
+        // Test that inputs >= modulus are handled correctly via reduction
+        let modulus = 13u32;
+
+        // Inputs larger than modulus should be reduced before Montgomery conversion
+        let a = 27u32; // 27 mod 13 = 1
+        let b = 39u32; // 39 mod 13 = 0
+        let got = basic_montgomery_mod_mul(a, b, modulus).unwrap();
+        assert_eq!(got, 0, "27 * 39 mod 13 should be 0");
+
+        // Another case: both inputs need reduction
+        let a = 100u32; // 100 mod 13 = 9
+        let b = 200u32; // 200 mod 13 = 5
+        let expected = (9 * 5) % 13; // 45 mod 13 = 6
+        let got = basic_montgomery_mod_mul(a, b, modulus).unwrap();
+        assert_eq!(got, expected);
+
+        // Edge case: input equals modulus (should reduce to 0)
+        let got = basic_montgomery_mod_mul(13u32, 5u32, modulus).unwrap();
+        assert_eq!(got, 0, "modulus * 5 mod modulus should be 0");
+    }
+
+    #[test]
+    fn test_input_reduction_mod_exp() {
+        // Test that base >= modulus is handled correctly
+        let modulus = 13u32;
+
+        // Base larger than modulus
+        let base = 27u32; // 27 mod 13 = 1
+        let exp = 100u32;
+        let expected = 1u32; // 1^100 = 1
+        let got = basic_montgomery_mod_exp(base, exp, modulus).unwrap();
+        assert_eq!(got, expected);
+
+        // Another case
+        let base = 100u32; // 100 mod 13 = 9
+        let exp = 3u32;
+        let expected = crate::exp::basic_mod_exp(9u32, 3, modulus); // 729 mod 13 = 1
+        let got = basic_montgomery_mod_exp(base, exp, modulus).unwrap();
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn test_wide_from_montgomery() {
+        // Test the wide-REDC based from_montgomery function
+        let modulus = 13u8;
+        let w = type_bit_width::<u8>();
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r_mod_n = compute_r_mod_n(modulus, w);
+        let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
+
+        // Convert to Montgomery form and back for various values
+        for a in 0u8..13 {
+            let (lo, hi) = a.wide_mul(&r2_mod_n);
+            let a_m = wide_redc(lo, hi, modulus, n_prime);
+            let back = wide_from_montgomery(a_m, modulus, n_prime);
+            assert_eq!(back, a, "wide_from_montgomery roundtrip failed for {a}");
+        }
     }
 }
