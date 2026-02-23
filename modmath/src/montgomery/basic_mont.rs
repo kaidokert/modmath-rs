@@ -19,7 +19,8 @@ pub enum NPrimeMethod {
     HenselsLifting,
     /// Newton's method - O(log W) complexity, works with R = 2^W (full type width).
     /// Uses wrapping arithmetic so R never needs to be represented explicitly.
-    /// This is the only method compatible with the wide-REDC path.
+    /// This is the method used internally by the wide-REDC path; other methods
+    /// are accepted for API compatibility but all use Newton internally.
     #[default]
     Newton,
 }
@@ -464,55 +465,40 @@ where
 // Public API: mod_mul / mod_exp using wide REDC
 // ---------------------------------------------------------------------------
 
-/// Compute N' for the wide-REDC path (R = 2^W) using the specified method.
+/// Compute N' for the wide-REDC path (R = 2^W).
 ///
-/// `Newton` uses wrapping arithmetic and works directly with R = 2^W.
-/// The other methods (`TrialSearch`, `ExtendedEuclidean`, `HenselsLifting`) use
-/// `basic_compute_montgomery_params_with_method` (where R is the smallest power
-/// of 2 exceeding the modulus), then re-derive N' for full-width R via Newton.
-fn wide_n_prime<T>(modulus: T, method: NPrimeMethod) -> Option<T>
+/// All methods use Newton's method internally since it's designed for R = 2^W
+/// with wrapping arithmetic. The `method` parameter is accepted for API
+/// compatibility but doesn't affect the computation.
+///
+/// Returns None if modulus is zero or even.
+fn wide_n_prime<T>(modulus: T, _method: NPrimeMethod) -> Option<T>
 where
     T: Copy
         + num_traits::Zero
         + num_traits::One
         + PartialEq
-        + PartialOrd
-        + num_traits::ops::overflowing::OverflowingAdd
         + num_traits::WrappingMul
         + num_traits::WrappingAdd
         + num_traits::WrappingSub
-        + Parity
-        // Legacy methods need these for basic_compute_montgomery_params_with_method
-        + core::ops::Shl<usize, Output = T>
-        + core::ops::Div<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
-        + core::ops::Rem<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::BitAnd<Output = T>,
+        + Parity,
 {
     if modulus == T::zero() || modulus.is_even() {
         return None;
     }
     let w = type_bit_width::<T>();
-    match method {
-        NPrimeMethod::Newton => Some(compute_n_prime_newton(modulus, w)),
-        // The legacy methods validate the modulus through the old param path,
-        // then we compute N' for R = 2^W via Newton anyway (the old R doesn't
-        // apply to wide REDC).  This preserves the "returns None on bad input"
-        // behaviour of each legacy method.
-        other => {
-            // Will return None for even modulus, zero, etc.
-            basic_compute_montgomery_params_with_method(modulus, other)?;
-            Some(compute_n_prime_newton(modulus, w))
-        }
-    }
+    // All methods use Newton for wide-REDC since it's designed for R = 2^W.
+    // The modulus is already validated (odd, non-zero) above, so Newton will succeed.
+    // We don't call the legacy param path because it can hang when modulus = T::MAX
+    // (the `while r <= modulus` loop never terminates for max values).
+    Some(compute_n_prime_newton(modulus, w))
 }
 
 /// Complete Montgomery modular multiplication with method selection (Basic): A * B mod N
 ///
 /// Uses wide REDC (R = 2^W) for correct overflow-free Montgomery reduction.
-/// `method` selects how N' is validated/computed — see [`NPrimeMethod`].
+/// Note: The `method` parameter is accepted for API compatibility but all methods
+/// use Newton internally since it's designed for R = 2^W.
 /// Returns None if modulus is even or zero.
 pub fn basic_montgomery_mod_mul_with_method<T>(
     a: T,
@@ -601,7 +587,8 @@ where
 /// Montgomery-based modular exponentiation with method selection (Basic): base^exponent mod modulus
 ///
 /// Uses wide REDC (R = 2^W) for correct overflow-free Montgomery reduction.
-/// `method` selects how N' is validated/computed — see [`NPrimeMethod`].
+/// Note: The `method` parameter is accepted for API compatibility but all methods
+/// use Newton internally since it's designed for R = 2^W.
 /// Returns None if modulus is even or zero.
 pub fn basic_montgomery_mod_exp_with_method<T>(
     base: T,
