@@ -300,7 +300,6 @@ where
 ///
 /// Uses R = 2^W (full type width) semantics with overflow-free reduction.
 /// The N' parameter must be computed for R = 2^W (e.g., via Newton's method).
-#[allow(dead_code)] // Public API for external use
 pub fn wide_from_montgomery<T>(a_mont: T, modulus: T, n_prime: T) -> T
 where
     T: Copy
@@ -550,23 +549,19 @@ where
         + num_traits::WrappingMul
         + num_traits::WrappingAdd
         + num_traits::WrappingSub
-        + Parity,
+        + Parity
+        + core::ops::Rem<Output = T>,
 {
     // All methods use Newton internally, so delegate to the simple version
     basic_montgomery_mod_mul(a, b, modulus)
 }
 
-/// Reduce value modulo modulus using repeated subtraction.
-/// For values close to modulus this is efficient; for very large values
-/// callers should pre-reduce before calling Montgomery functions.
-fn reduce_mod<T>(mut val: T, modulus: T) -> T
+/// Reduce value modulo modulus.
+fn reduce_mod<T>(val: T, modulus: T) -> T
 where
-    T: Copy + PartialOrd + num_traits::WrappingSub,
+    T: Copy + core::ops::Rem<Output = T>,
 {
-    while val >= modulus {
-        val = val.wrapping_sub(&modulus);
-    }
-    val
+    val % modulus
 }
 
 /// Complete Montgomery modular multiplication (Basic): A * B mod N
@@ -586,7 +581,8 @@ where
         + num_traits::WrappingMul
         + num_traits::WrappingAdd
         + num_traits::WrappingSub
-        + Parity,
+        + Parity
+        + core::ops::Rem<Output = T>,
 {
     if modulus == T::zero() || modulus.is_even() {
         return None;
@@ -637,6 +633,7 @@ where
         + num_traits::WrappingAdd
         + num_traits::WrappingSub
         + Parity
+        + core::ops::Rem<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>,
 {
@@ -662,6 +659,7 @@ where
         + num_traits::WrappingAdd
         + num_traits::WrappingSub
         + Parity
+        + core::ops::Rem<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>,
 {

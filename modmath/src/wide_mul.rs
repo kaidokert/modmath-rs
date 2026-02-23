@@ -99,6 +99,9 @@ where
 }
 
 // --- With wide-mul: optimized impl for WideningMul types ---
+// Note: fixed-bigint implements WideningMul for all primitive integers
+// (u8, u16, u32, u64) as well as FixedUInt, so this blanket impl
+// covers the same set of types as the fallback above.
 #[cfg(feature = "wide-mul")]
 impl<T> WideMul for T
 where

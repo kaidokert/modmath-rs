@@ -55,6 +55,7 @@ pub use montgomery::{
     basic_montgomery_mod_mul_with_method,
     basic_montgomery_mul,
     basic_to_montgomery,
+    wide_from_montgomery,
     constrained_compute_montgomery_params,
     constrained_compute_montgomery_params_with_method,
     constrained_from_montgomery,
