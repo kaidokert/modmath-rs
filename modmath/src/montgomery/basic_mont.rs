@@ -209,7 +209,8 @@ where
 }
 
 /// Montgomery parameter computation (Basic) with default method
-/// Computes R, R^(-1) mod N, N', and R bit length for Montgomery arithmetic using trial search
+/// Computes R, R^(-1) mod N, N', and R bit length for Montgomery arithmetic
+/// Uses the default NPrimeMethod (Newton).
 /// Returns None if parameter computation fails
 pub fn basic_compute_montgomery_params<T>(modulus: T) -> Option<(T, T, T, usize)>
 where

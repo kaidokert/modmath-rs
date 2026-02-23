@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn test_n_prime_method_enum() {
-        // Test that the enum default is ExtendedEuclidean
+        // Test that the enum default is Newton
         assert_eq!(NPrimeMethod::default(), NPrimeMethod::Newton);
     }
 

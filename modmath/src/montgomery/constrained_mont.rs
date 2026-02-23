@@ -157,6 +157,11 @@ where
     // Step 3: Compute N' such that N * N' ≡ -1 (mod R) using selected method
     let n_prime = match method {
         NPrimeMethod::TrialSearch => compute_n_prime_trial_search_constrained(modulus, &r)?,
+        // Newton is mapped to ExtendedEuclidean in the constrained path.
+        // This is because constrained/strict paths use legacy R > N semantics
+        // (R = smallest power of 2 exceeding N), not the wide-REDC R = 2^W approach.
+        // Newton's method is designed for R = 2^W with wrapping arithmetic, so we
+        // fall back to ExtendedEuclidean which computes the same N' = -N^{-1} mod R.
         NPrimeMethod::ExtendedEuclidean | NPrimeMethod::Newton => {
             compute_n_prime_extended_euclidean_constrained(modulus, &r)?
         }

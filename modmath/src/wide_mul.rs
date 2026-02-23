@@ -1,9 +1,10 @@
 /// Widening multiplication producing a double-width result.
 ///
-/// When the `wide-mul` feature is enabled, delegates to
-/// `fixed_bigint::patch_num_traits::WideningMul`.
+/// When the `wide-mul` feature is enabled, types implementing
+/// `fixed_bigint::patch_num_traits::WideningMul` use an optimized path,
+/// while primitive integers use the fallback bit-by-bit algorithm.
 ///
-/// Without the feature, falls back to a generic bit-by-bit
+/// Without the feature, all types use the generic bit-by-bit
 /// algorithm using OverflowingAdd and Parity.
 pub trait WideMul {
     fn wide_mul(&self, rhs: &Self) -> (Self, Self)
@@ -11,7 +12,55 @@ pub trait WideMul {
         Self: Sized;
 }
 
-// --- Fallback: bit-by-bit double-and-add ---
+/// Bit-by-bit widening multiplication fallback.
+///
+/// Uses double-and-add algorithm that works with any type supporting
+/// the required traits. Uses `is_zero()` instead of comparison to
+/// minimize trait bounds.
+#[cfg(not(feature = "wide-mul"))]
+fn wide_mul_fallback<T>(lhs: T, rhs: T) -> (T, T)
+where
+    T: num_traits::ops::overflowing::OverflowingAdd
+        + crate::parity::Parity
+        + core::ops::Shr<usize, Output = T>
+        + num_traits::Zero
+        + num_traits::One
+        + Copy,
+{
+    let one = T::one();
+    let mut result_lo = T::zero();
+    let mut result_hi = T::zero();
+    let mut shift_lo = rhs;
+    let mut shift_hi = T::zero();
+    let mut a_rem = lhs;
+
+    while !a_rem.is_zero() {
+        if a_rem.is_odd() {
+            let (new_lo, carry) = result_lo.overflowing_add(&shift_lo);
+            result_lo = new_lo;
+            let (new_hi, _) = result_hi.overflowing_add(&shift_hi);
+            result_hi = new_hi;
+            if carry {
+                let (new_hi, _) = result_hi.overflowing_add(&one);
+                result_hi = new_hi;
+            }
+        }
+        // double the shift register
+        let (new_shift_lo, carry) = shift_lo.overflowing_add(&shift_lo);
+        shift_lo = new_shift_lo;
+        let (new_shift_hi, _) = shift_hi.overflowing_add(&shift_hi);
+        shift_hi = new_shift_hi;
+        if carry {
+            let (new_shift_hi, _) = shift_hi.overflowing_add(&one);
+            shift_hi = new_shift_hi;
+        }
+        a_rem = a_rem >> 1;
+    }
+
+    (result_lo, result_hi)
+}
+
+// --- Without wide-mul: blanket impl using fallback for all types ---
 #[cfg(not(feature = "wide-mul"))]
 impl<T> WideMul for T
 where
@@ -20,46 +69,14 @@ where
         + core::ops::Shr<usize, Output = T>
         + num_traits::Zero
         + num_traits::One
-        + Copy
-        + PartialOrd,
+        + Copy,
 {
     fn wide_mul(&self, rhs: &Self) -> (Self, Self) {
-        let zero = T::zero();
-        let one = T::one();
-        let mut result_lo = zero;
-        let mut result_hi = zero;
-        let mut shift_lo = *rhs;
-        let mut shift_hi = zero;
-        let mut a_rem = *self;
-
-        while a_rem > zero {
-            if a_rem.is_odd() {
-                let (new_lo, carry) = result_lo.overflowing_add(&shift_lo);
-                result_lo = new_lo;
-                let (new_hi, _) = result_hi.overflowing_add(&shift_hi);
-                result_hi = new_hi;
-                if carry {
-                    let (new_hi, _) = result_hi.overflowing_add(&one);
-                    result_hi = new_hi;
-                }
-            }
-            // double the shift register
-            let (new_shift_lo, carry) = shift_lo.overflowing_add(&shift_lo);
-            shift_lo = new_shift_lo;
-            let (new_shift_hi, _) = shift_hi.overflowing_add(&shift_hi);
-            shift_hi = new_shift_hi;
-            if carry {
-                let (new_shift_hi, _) = shift_hi.overflowing_add(&one);
-                shift_hi = new_shift_hi;
-            }
-            a_rem = a_rem >> 1;
-        }
-
-        (result_lo, result_hi)
+        wide_mul_fallback(*self, *rhs)
     }
 }
 
-// --- Optimized: delegate to WideningMul ---
+// --- With wide-mul: optimized impl for WideningMul types ---
 #[cfg(feature = "wide-mul")]
 impl<T> WideMul for T
 where
