@@ -157,7 +157,7 @@ where
     // Step 3: Compute N' such that N * N' ≡ -1 (mod R) using selected method
     let n_prime = match method {
         NPrimeMethod::TrialSearch => compute_n_prime_trial_search_constrained(modulus, &r)?,
-        NPrimeMethod::ExtendedEuclidean => {
+        NPrimeMethod::ExtendedEuclidean | NPrimeMethod::Newton => {
             compute_n_prime_extended_euclidean_constrained(modulus, &r)?
         }
         NPrimeMethod::HenselsLifting => {

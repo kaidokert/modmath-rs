@@ -2,17 +2,26 @@
 // These require Copy trait but have minimal constraints
 
 use crate::inv::basic_mod_inv;
+use crate::parity::Parity;
+use crate::wide_mul::WideMul;
 
 /// Methods for computing N' in Montgomery parameter computation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum NPrimeMethod {
-    /// Trial search - O(R) complexity, simple but slow for large R
+    /// Trial search - O(R) complexity, simple but slow for large R.
+    /// Only works when R fits in the type (R > N, smallest power of 2).
     TrialSearch,
-    /// Extended Euclidean Algorithm - O(log R) complexity
-    #[default]
+    /// Extended Euclidean Algorithm - O(log R) complexity.
+    /// Only works when R fits in the type (R > N, smallest power of 2).
     ExtendedEuclidean,
-    /// Hensel's lifting - O(log R) complexity, optimized for R = 2^k
+    /// Hensel's lifting - O(log R) complexity, optimized for R = 2^k.
+    /// Only works when R fits in the type (R > N, smallest power of 2).
     HenselsLifting,
+    /// Newton's method - O(log W) complexity, works with R = 2^W (full type width).
+    /// Uses wrapping arithmetic so R never needs to be represented explicitly.
+    /// This is the only method compatible with the wide-REDC path.
+    #[default]
+    Newton,
 }
 
 /// Compute N' using trial search method - O(R) complexity
@@ -188,6 +197,12 @@ where
         NPrimeMethod::TrialSearch => compute_n_prime_trial_search(modulus, r)?,
         NPrimeMethod::ExtendedEuclidean => compute_n_prime_extended_euclidean(modulus, r)?,
         NPrimeMethod::HenselsLifting => compute_n_prime_hensels_lifting(modulus, r, r_bits)?,
+        NPrimeMethod::Newton => {
+            // In this legacy param path (R > N, smallest power of 2),
+            // delegate to ExtendedEuclidean which computes -N^{-1} mod R
+            // using the same mathematical identity.
+            compute_n_prime_extended_euclidean(modulus, r)?
+        }
     };
 
     Some((r, r_inv, n_prime, r_bits))
@@ -268,7 +283,7 @@ where
 
     // Step 2: t = (a_mont + m * N) >> r_bits
     // TODO(Phase 1): m * N can overflow for large moduli (m < R, N < R, so
-    // m*N can reach R²). Needs WideningMul for correctness at key sizes.
+    // m*N can reach R^2). Needs WideningMul for correctness at key sizes.
     let t = (a_mont + m * modulus) >> r_bits;
 
     // Step 3: Final reduction
@@ -306,8 +321,198 @@ where
     basic_from_montgomery(product, modulus, n_prime, r_bits)
 }
 
+// ---------------------------------------------------------------------------
+// Wide-REDC private helpers (R = 2^W, full type width)
+// ---------------------------------------------------------------------------
+
+/// Bit width of type T (e.g. 32 for u32, 128 for FixedUInt<u32,4>).
+const fn type_bit_width<T>() -> usize {
+    core::mem::size_of::<T>() * 8
+}
+
+/// Modular doubling: (val + val) mod modulus, handling overflow.
+fn mod_double<T>(val: T, modulus: T) -> T
+where
+    T: Copy + PartialOrd + num_traits::ops::overflowing::OverflowingAdd + num_traits::WrappingSub,
+{
+    let (doubled, overflow) = val.overflowing_add(&val);
+    if overflow || doubled >= modulus {
+        doubled.wrapping_sub(&modulus)
+    } else {
+        doubled
+    }
+}
+
+/// Newton's method for N' = -N^{-1} mod 2^W.
+///
+/// Invariant: after each iteration, `modulus * x ≡ 1 (mod 2^precision)`.
+/// We return `0 - x` so that `modulus * N' ≡ -1 (mod 2^W)`.
+fn compute_n_prime_newton<T>(modulus: T, w: usize) -> T
+where
+    T: Copy
+        + num_traits::One
+        + num_traits::Zero
+        + num_traits::WrappingMul
+        + num_traits::WrappingSub
+        + num_traits::WrappingAdd,
+{
+    let two = T::one().wrapping_add(&T::one());
+    let mut x = T::one(); // modulus * 1 ≡ 1 (mod 2) for odd modulus
+    let mut precision = 1usize;
+    while precision < w {
+        // x = x * (2 - modulus * x)   mod 2^(2*precision)
+        x = x.wrapping_mul(&two.wrapping_sub(&modulus.wrapping_mul(&x)));
+        precision *= 2;
+    }
+    // N' = -x mod 2^W  (wrapping_sub from 0 gives two's complement negation)
+    T::zero().wrapping_sub(&x)
+}
+
+/// Compute R mod N = 2^W mod N via W modular doublings starting from 1.
+fn compute_r_mod_n<T>(modulus: T, w: usize) -> T
+where
+    T: Copy
+        + num_traits::One
+        + PartialOrd
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingSub,
+{
+    let mut val = T::one();
+    for _ in 0..w {
+        val = mod_double(val, modulus);
+    }
+    val
+}
+
+/// Compute R^2 mod N via W more modular doublings from (R mod N).
+fn compute_r2_mod_n<T>(r_mod_n: T, modulus: T, w: usize) -> T
+where
+    T: Copy + PartialOrd + num_traits::ops::overflowing::OverflowingAdd + num_traits::WrappingSub,
+{
+    let mut val = r_mod_n;
+    for _ in 0..w {
+        val = mod_double(val, modulus);
+    }
+    val
+}
+
+/// REDC on a double-width input (t_lo, t_hi).
+///
+/// Computes  (t_lo + t_hi * 2^W) * R^{-1}  mod N.
+fn wide_redc<T>(t_lo: T, t_hi: T, modulus: T, n_prime: T) -> T
+where
+    T: Copy
+        + num_traits::Zero
+        + num_traits::One
+        + PartialOrd
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingMul
+        + num_traits::WrappingSub,
+{
+    // m = t_lo * N'  (mod 2^W -- wrapping mul gives that for free)
+    let m = t_lo.wrapping_mul(&n_prime);
+
+    // (m_lo, m_hi) = m * modulus  (full double-width product)
+    let (m_lo, m_hi) = m.wide_mul(&modulus);
+
+    // low half:  t_lo + m_lo  -- the low W bits cancel by construction,
+    // we only need the carry.
+    let (_discard_lo, carry1) = t_lo.overflowing_add(&m_lo);
+
+    // high half:  t_hi + m_hi + carry1
+    let (mut result, carry2) = t_hi.overflowing_add(&m_hi);
+
+    let mut carry3 = false;
+    if carry1 {
+        let (r2, c3) = result.overflowing_add(&T::one());
+        result = r2;
+        carry3 = c3;
+    }
+
+    let extra_bit = carry2 || carry3;
+
+    if extra_bit || result >= modulus {
+        result.wrapping_sub(&modulus)
+    } else {
+        result
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Wide-REDC Montgomery multiply helper
+// ---------------------------------------------------------------------------
+
+/// Montgomery multiplication using wide REDC: REDC(a_mont * b_mont).
+fn wide_montgomery_mul<T>(a_mont: T, b_mont: T, modulus: T, n_prime: T) -> T
+where
+    T: Copy
+        + num_traits::Zero
+        + num_traits::One
+        + PartialOrd
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingMul
+        + num_traits::WrappingSub,
+{
+    let (lo, hi) = a_mont.wide_mul(&b_mont);
+    wide_redc(lo, hi, modulus, n_prime)
+}
+
+// ---------------------------------------------------------------------------
+// Public API: mod_mul / mod_exp using wide REDC
+// ---------------------------------------------------------------------------
+
+/// Compute N' for the wide-REDC path (R = 2^W) using the specified method.
+///
+/// `Newton` uses wrapping arithmetic and works directly with R = 2^W.
+/// The other methods (`TrialSearch`, `ExtendedEuclidean`, `HenselsLifting`) use
+/// `basic_compute_montgomery_params_with_method` (where R is the smallest power
+/// of 2 exceeding the modulus), then re-derive N' for full-width R via Newton.
+fn wide_n_prime<T>(modulus: T, method: NPrimeMethod) -> Option<T>
+where
+    T: Copy
+        + num_traits::Zero
+        + num_traits::One
+        + PartialEq
+        + PartialOrd
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingMul
+        + num_traits::WrappingAdd
+        + num_traits::WrappingSub
+        + Parity
+        // Legacy methods need these for basic_compute_montgomery_params_with_method
+        + core::ops::Shl<usize, Output = T>
+        + core::ops::Div<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
+        + core::ops::Rem<Output = T>
+        + core::ops::Add<Output = T>
+        + core::ops::BitAnd<Output = T>,
+{
+    if modulus == T::zero() || modulus.is_even() {
+        return None;
+    }
+    let w = type_bit_width::<T>();
+    match method {
+        NPrimeMethod::Newton => Some(compute_n_prime_newton(modulus, w)),
+        // The legacy methods validate the modulus through the old param path,
+        // then we compute N' for R = 2^W via Newton anyway (the old R doesn't
+        // apply to wide REDC).  This preserves the "returns None on bad input"
+        // behaviour of each legacy method.
+        other => {
+            // Will return None for even modulus, zero, etc.
+            basic_compute_montgomery_params_with_method(modulus, other)?;
+            Some(compute_n_prime_newton(modulus, w))
+        }
+    }
+}
+
 /// Complete Montgomery modular multiplication with method selection (Basic): A * B mod N
-/// Returns None if Montgomery parameter computation fails
+///
+/// Uses wide REDC (R = 2^W) for correct overflow-free Montgomery reduction.
+/// `method` selects how N' is validated/computed — see [`NPrimeMethod`].
+/// Returns None if modulus is even or zero.
 pub fn basic_montgomery_mod_mul_with_method<T>(
     a: T,
     b: T,
@@ -320,27 +525,43 @@ where
         + num_traits::One
         + PartialEq
         + PartialOrd
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingMul
+        + num_traits::WrappingAdd
+        + num_traits::WrappingSub
+        + Parity
+        // Legacy methods need these for basic_compute_montgomery_params_with_method
         + core::ops::Shl<usize, Output = T>
         + core::ops::Div<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
         + core::ops::Rem<Output = T>
-        + core::ops::BitAnd<Output = T>
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
-        + core::ops::Shr<usize, Output = T>
-        + crate::parity::Parity,
+        + core::ops::Add<Output = T>
+        + core::ops::BitAnd<Output = T>,
 {
-    let (r, _r_inv, n_prime, r_bits) =
-        basic_compute_montgomery_params_with_method(modulus, method)?;
-    let a_mont = basic_to_montgomery(a, modulus, r);
-    let b_mont = basic_to_montgomery(b, modulus, r);
-    let result_mont = basic_montgomery_mul(a_mont, b_mont, modulus, n_prime, r_bits);
-    Some(basic_from_montgomery(result_mont, modulus, n_prime, r_bits))
+    let n_prime = wide_n_prime(modulus, method)?;
+    let w = type_bit_width::<T>();
+    let r_mod_n = compute_r_mod_n(modulus, w);
+    let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
+
+    // Convert to Montgomery form via REDC(a * R^2)
+    let (lo, hi) = a.wide_mul(&r2_mod_n);
+    let a_m = wide_redc(lo, hi, modulus, n_prime);
+    let (lo, hi) = b.wide_mul(&r2_mod_n);
+    let b_m = wide_redc(lo, hi, modulus, n_prime);
+
+    // Multiply in Montgomery domain
+    let r_m = wide_montgomery_mul(a_m, b_m, modulus, n_prime);
+
+    // Convert back: REDC(r_m, 0)
+    Some(wide_redc(r_m, T::zero(), modulus, n_prime))
 }
 
 /// Complete Montgomery modular multiplication (Basic): A * B mod N
-/// Returns None if Montgomery parameter computation fails
+///
+/// Uses wide REDC (R = 2^W) with Newton's method for N'.
+/// Returns None if modulus is even or zero.
 pub fn basic_montgomery_mod_mul<T>(a: T, b: T, modulus: T) -> Option<T>
 where
     T: Copy
@@ -348,25 +569,41 @@ where
         + num_traits::One
         + PartialEq
         + PartialOrd
-        + core::ops::Shl<usize, Output = T>
-        + core::ops::Div<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
-        + core::ops::Rem<Output = T>
-        + core::ops::BitAnd<Output = T>
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
-        + core::ops::Shr<usize, Output = T>
-        + crate::parity::Parity,
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingMul
+        + num_traits::WrappingAdd
+        + num_traits::WrappingSub
+        + Parity,
 {
-    basic_montgomery_mod_mul_with_method(a, b, modulus, NPrimeMethod::default())
+    if modulus == T::zero() || modulus.is_even() {
+        return None;
+    }
+    let w = type_bit_width::<T>();
+    let n_prime = compute_n_prime_newton(modulus, w);
+    let r_mod_n = compute_r_mod_n(modulus, w);
+    let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
+
+    // Convert to Montgomery form via REDC(a * R^2)
+    let (lo, hi) = a.wide_mul(&r2_mod_n);
+    let a_m = wide_redc(lo, hi, modulus, n_prime);
+    let (lo, hi) = b.wide_mul(&r2_mod_n);
+    let b_m = wide_redc(lo, hi, modulus, n_prime);
+
+    // Multiply in Montgomery domain
+    let r_m = wide_montgomery_mul(a_m, b_m, modulus, n_prime);
+
+    // Convert back: REDC(r_m, 0)
+    Some(wide_redc(r_m, T::zero(), modulus, n_prime))
 }
 
 /// Montgomery-based modular exponentiation with method selection (Basic): base^exponent mod modulus
-/// Uses Montgomery arithmetic for efficient repeated multiplication
-/// Returns None if Montgomery parameter computation fails
+///
+/// Uses wide REDC (R = 2^W) for correct overflow-free Montgomery reduction.
+/// `method` selects how N' is validated/computed — see [`NPrimeMethod`].
+/// Returns None if modulus is even or zero.
 pub fn basic_montgomery_mod_exp_with_method<T>(
-    mut base: T,
+    base: T,
     exponent: T,
     modulus: T,
     method: NPrimeMethod,
@@ -375,79 +612,107 @@ where
     T: Copy
         + num_traits::Zero
         + num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingMul
+        + num_traits::WrappingAdd
+        + num_traits::WrappingSub
+        + Parity
+        + core::ops::Shr<usize, Output = T>
+        + core::ops::ShrAssign<usize>
+        // Legacy methods need these for basic_compute_montgomery_params_with_method
         + core::ops::Shl<usize, Output = T>
         + core::ops::Div<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
         + core::ops::Rem<Output = T>
-        + core::ops::BitAnd<Output = T>
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
-        + core::ops::Shr<usize, Output = T>
-        + core::ops::ShrAssign<usize>,
+        + core::ops::Add<Output = T>
+        + core::ops::BitAnd<Output = T>,
 {
-    // Compute Montgomery parameters using specified method
-    let (r, _r_inv, n_prime, r_bits) =
-        basic_compute_montgomery_params_with_method(modulus, method)?;
+    let n_prime = wide_n_prime(modulus, method)?;
+    let w = type_bit_width::<T>();
+    let r_mod_n = compute_r_mod_n(modulus, w);
+    let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
 
-    // Convert base to Montgomery form
-    base = basic_to_montgomery(base % modulus, modulus, r); // Reduce base first
+    // 1 in Montgomery form = REDC(1 * R^2)
+    let (lo, hi) = T::one().wide_mul(&r2_mod_n);
+    let one_mont = wide_redc(lo, hi, modulus, n_prime);
 
-    // Montgomery form of 1 (the initial result)
-    let mut result = basic_to_montgomery(T::one(), modulus, r);
-
-    // Copy exponent for manipulation
+    let (lo, hi) = base.wide_mul(&r2_mod_n);
+    let mut base_mont = wide_redc(lo, hi, modulus, n_prime);
+    let mut result = one_mont;
     let mut exp = exponent;
 
-    // Binary exponentiation using Montgomery multiplication
     while exp > T::zero() {
-        // If exponent is odd, multiply result by current base power
         if exp.is_odd() {
-            result = basic_montgomery_mul(result, base, modulus, n_prime, r_bits);
+            result = wide_montgomery_mul(result, base_mont, modulus, n_prime);
         }
-
-        // Square the base for next iteration
         exp >>= 1;
         if exp > T::zero() {
-            base = basic_montgomery_mul(base, base, modulus, n_prime, r_bits);
+            base_mont = wide_montgomery_mul(base_mont, base_mont, modulus, n_prime);
         }
     }
 
-    // Convert result back from Montgomery form
-    Some(basic_from_montgomery(result, modulus, n_prime, r_bits))
+    Some(wide_redc(result, T::zero(), modulus, n_prime))
 }
 
 /// Montgomery-based modular exponentiation (Basic): base^exponent mod modulus
-/// Uses Montgomery arithmetic for efficient repeated multiplication
-/// Returns None if Montgomery parameter computation fails
+///
+/// Uses wide REDC (R = 2^W) with Newton's method for N'.
+/// Returns None if modulus is even or zero.
 pub fn basic_montgomery_mod_exp<T>(base: T, exponent: T, modulus: T) -> Option<T>
 where
     T: Copy
         + num_traits::Zero
         + num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
-        + core::ops::Shl<usize, Output = T>
-        + core::ops::Div<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
-        + core::ops::Rem<Output = T>
-        + core::ops::BitAnd<Output = T>
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingMul
+        + num_traits::WrappingAdd
+        + num_traits::WrappingSub
+        + Parity
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>,
 {
-    basic_montgomery_mod_exp_with_method(base, exponent, modulus, NPrimeMethod::default())
+    if modulus == T::zero() || modulus.is_even() {
+        return None;
+    }
+    let w = type_bit_width::<T>();
+    let n_prime = compute_n_prime_newton(modulus, w);
+    let r_mod_n = compute_r_mod_n(modulus, w);
+    let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
+
+    // 1 in Montgomery form = REDC(1 * R^2)
+    let (lo, hi) = T::one().wide_mul(&r2_mod_n);
+    let one_mont = wide_redc(lo, hi, modulus, n_prime);
+
+    let (lo, hi) = base.wide_mul(&r2_mod_n);
+    let mut base_mont = wide_redc(lo, hi, modulus, n_prime);
+    let mut result = one_mont;
+    let mut exp = exponent;
+
+    while exp > T::zero() {
+        if exp.is_odd() {
+            result = wide_montgomery_mul(result, base_mont, modulus, n_prime);
+        }
+        exp >>= 1;
+        if exp > T::zero() {
+            base_mont = wide_montgomery_mul(base_mont, base_mont, modulus, n_prime);
+        }
+    }
+
+    Some(wide_redc(result, T::zero(), modulus, n_prime))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -- Old basic_mont tests (param computation, N' methods, etc.) ----------
 
     #[test]
     fn test_basic_compute_n_prime_trial_search_failure() {
@@ -693,5 +958,242 @@ mod tests {
                 r
             );
         }
+    }
+
+    // -- Wide REDC helper tests (moved from wide_mont.rs) --------------------
+
+    #[test]
+    fn test_type_bit_width() {
+        assert_eq!(type_bit_width::<u8>(), 8);
+        assert_eq!(type_bit_width::<u16>(), 16);
+        assert_eq!(type_bit_width::<u32>(), 32);
+        assert_eq!(type_bit_width::<u64>(), 64);
+    }
+
+    #[test]
+    fn test_mod_double() {
+        // Normal case: 5+5=10, 10 < 13 -> 10
+        assert_eq!(mod_double(5u8, 13), 10);
+        // Needs reduction: 8+8=16 >= 13 -> 3
+        assert_eq!(mod_double(8u8, 13), 3);
+        // Overflow case: 200+200 wraps in u8, result should still be correct
+        // 400 mod 201 = 400 - 201 = 199
+        // In u8: 200+200 = 144 (wrap), overflow=true -> 144 - 201 wraps to 199
+        assert_eq!(mod_double(200u8, 201), 199);
+        // Edge: 0 doubled is 0
+        assert_eq!(mod_double(0u8, 13), 0);
+    }
+
+    #[test]
+    fn test_compute_n_prime_newton() {
+        // For several small odd moduli, verify N * N' == -1 (mod 2^W)
+        let test_moduli: &[u8] = &[3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 255];
+        for &n in test_moduli {
+            let np = compute_n_prime_newton(n, 8);
+            // N * N' should wrap to 0xFF (which is -1 mod 256)
+            let product = n.wrapping_mul(np);
+            assert_eq!(
+                product, 0xFF,
+                "n={n}: n*n_prime={product:#04x}, expected 0xFF"
+            );
+        }
+
+        // Also check u32
+        let np32 = compute_n_prime_newton(13u32, 32);
+        assert_eq!(13u32.wrapping_mul(np32), u32::MAX);
+    }
+
+    #[test]
+    fn test_compute_r_mod_n() {
+        // R = 2^8 = 256 for u8
+        // 256 mod 13 = 256 - 19*13 = 256-247 = 9
+        assert_eq!(compute_r_mod_n(13u8, 8), 9);
+        // 256 mod 255 = 1
+        assert_eq!(compute_r_mod_n(255u8, 8), 1);
+        // 256 mod 3 = 1
+        assert_eq!(compute_r_mod_n(3u8, 8), 1);
+
+        // R = 2^32 for u32: 2^32 mod 13 = 4294967296 mod 13 = 9
+        assert_eq!(compute_r_mod_n(13u32, 32), 9);
+    }
+
+    #[test]
+    fn test_wide_redc() {
+        // With u8, R=256, N=13
+        // REDC(35, 0) should give 35 * R^{-1} mod 13
+        // R^{-1} mod 13: R=256, 256 mod 13 = 9, inv(9,13)=3 (9*3=27==1 mod 13)
+        // So REDC(35,0) = 35*3 mod 13 = 105 mod 13 = 1
+        let n: u8 = 13;
+        let n_prime = compute_n_prime_newton(n, 8);
+        let result = wide_redc(35u8, 0u8, n, n_prime);
+        assert_eq!(result, 1);
+    }
+
+    // -- Round-trip tests ----------------------------------------------------
+
+    #[test]
+    fn test_wide_montgomery_roundtrip() {
+        let modulus = 13u8;
+        let w = type_bit_width::<u8>();
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r_mod_n = compute_r_mod_n(modulus, w);
+        let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
+        for a in 0u8..13 {
+            let (lo, hi) = a.wide_mul(&r2_mod_n);
+            let a_m = wide_redc(lo, hi, modulus, n_prime);
+            let back = wide_redc(a_m, 0u8, modulus, n_prime);
+            assert_eq!(back, a, "roundtrip failed for a={a}");
+        }
+    }
+
+    #[test]
+    fn test_wide_montgomery_roundtrip_u32() {
+        let modulus = 0xFFFF_FFF1u32; // large odd u32
+        let w = type_bit_width::<u32>();
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r_mod_n = compute_r_mod_n(modulus, w);
+        let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
+        let test_vals = [0u32, 1, 2, 100, modulus - 1, modulus - 2, 0x7FFF_FFFF];
+        for &a in &test_vals {
+            let (lo, hi) = a.wide_mul(&r2_mod_n);
+            let a_m = wide_redc(lo, hi, modulus, n_prime);
+            let back = wide_redc(a_m, 0u32, modulus, n_prime);
+            assert_eq!(back, a, "roundtrip failed for a={a:#x}");
+        }
+    }
+
+    // -- Mod mul tests -------------------------------------------------------
+
+    #[test]
+    fn test_wide_mod_mul_u8_exhaustive() {
+        let modulus = 13u8;
+        for a in 0u8..13 {
+            for b in 0u8..13 {
+                let expected = ((a as u16 * b as u16) % 13) as u8;
+                let got = basic_montgomery_mod_mul(a, b, modulus).unwrap();
+                assert_eq!(
+                    got, expected,
+                    "{a}*{b} mod 13: got {got}, expected {expected}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_wide_mod_mul_u32() {
+        // Compare against basic_mod_mul for a range of values with a large modulus
+        let modulus = 0xFFFF_FFF1u32;
+        let vals = [0u32, 1, 2, 7, 1000, 0x7FFF_FFFF, modulus - 1, modulus - 2];
+        for &a in &vals {
+            for &b in &vals {
+                let expected = crate::mul::basic_mod_mul(a, b, modulus);
+                let got = basic_montgomery_mod_mul(a, b, modulus).unwrap();
+                assert_eq!(
+                    got, expected,
+                    "{a:#x}*{b:#x} mod {modulus:#x}: got {got:#x}, expected {expected:#x}"
+                );
+            }
+        }
+    }
+
+    // -- Mod exp tests -------------------------------------------------------
+
+    #[test]
+    fn test_wide_mod_exp_small() {
+        let modulus = 13u8;
+        for base in 0u8..13 {
+            for exp in 0u8..20 {
+                let expected = crate::exp::basic_mod_exp(base, exp, modulus);
+                let got = basic_montgomery_mod_exp(base, exp, modulus).unwrap();
+                assert_eq!(
+                    got, expected,
+                    "{base}^{exp} mod 13: got {got}, expected {expected}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_wide_mod_exp_u32() {
+        let modulus = 0xFFFF_FFF1u32;
+        // 2^100 mod modulus
+        let expected = crate::exp::basic_mod_exp(2u32, 100, modulus);
+        let got = basic_montgomery_mod_exp(2, 100, modulus).unwrap();
+        assert_eq!(got, expected);
+
+        // 3^1000 mod modulus
+        let expected = crate::exp::basic_mod_exp(3u32, 1000, modulus);
+        let got = basic_montgomery_mod_exp(3, 1000, modulus).unwrap();
+        assert_eq!(got, expected);
+
+        // (modulus-1)^(modulus-2) mod modulus  (Fermat inverse if prime-ish)
+        let expected = crate::exp::basic_mod_exp(modulus - 1, modulus - 2, modulus);
+        let got = basic_montgomery_mod_exp(modulus - 1, modulus - 2, modulus).unwrap();
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn test_wide_mod_exp_large_u64() {
+        // Values that would overflow with the old mod_mul-based approach
+        let modulus = 0xFFFF_FFFF_FFFF_FFC5u64; // large odd u64
+        let base = 0xDEAD_BEEF_CAFE_BABEu64;
+        let exp = 0x1234_5678u64;
+        let expected = crate::exp::basic_mod_exp(base, exp, modulus);
+        let got = basic_montgomery_mod_exp(base, exp, modulus).unwrap();
+        assert_eq!(got, expected);
+    }
+
+    // -- Error paths ---------------------------------------------------------
+
+    #[test]
+    fn test_wide_params_even_modulus() {
+        assert!(basic_montgomery_mod_mul(2u32, 3u32, 4u32).is_none());
+        assert!(basic_montgomery_mod_mul(2u32, 3u32, 0u32).is_none());
+    }
+
+    #[test]
+    fn test_wide_mod_mul_even_modulus() {
+        assert!(basic_montgomery_mod_mul(2u32, 3u32, 4u32).is_none());
+    }
+
+    #[test]
+    fn test_wide_mod_exp_even_modulus() {
+        assert!(basic_montgomery_mod_exp(2u32, 3u32, 4u32).is_none());
+    }
+
+    // -- FixedUInt test ------------------------------------------------------
+
+    #[test]
+    fn test_wide_fixed_bigint() {
+        use fixed_bigint::FixedUInt;
+        type U128 = FixedUInt<u32, 4>;
+
+        // Pick a 128-bit-ish odd modulus close to type max
+        let modulus = !U128::from(0u64) - U128::from(58u64); // 2^128 - 59 (odd)
+
+        // Round-trip test via wide helpers directly
+        let w = type_bit_width::<U128>();
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r_mod_n = compute_r_mod_n(modulus, w);
+        let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
+
+        let a = U128::from(0xDEAD_BEEF_u64);
+        let (lo, hi) = a.wide_mul(&r2_mod_n);
+        let a_m = wide_redc(lo, hi, modulus, n_prime);
+        let back = wide_redc(a_m, U128::from(0u64), modulus, n_prime);
+        assert_eq!(back, a);
+
+        // Multiplication test: compare with basic_mod_mul
+        let b = U128::from(0xCAFE_BABE_u64);
+        let expected = crate::mul::basic_mod_mul(a, b, modulus);
+        let got = basic_montgomery_mod_mul(a, b, modulus).unwrap();
+        assert_eq!(got, expected);
+
+        // Exponentiation test
+        let base = U128::from(42u64);
+        let exp = U128::from(1000u64);
+        let expected = crate::exp::basic_mod_exp(base, exp, modulus);
+        let got = basic_montgomery_mod_exp(base, exp, modulus).unwrap();
+        assert_eq!(got, expected);
     }
 }

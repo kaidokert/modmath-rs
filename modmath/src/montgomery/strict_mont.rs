@@ -241,7 +241,8 @@ where
         crate::montgomery::NPrimeMethod::TrialSearch => {
             strict_compute_n_prime_trial_search(modulus, &r)?
         }
-        crate::montgomery::NPrimeMethod::ExtendedEuclidean => {
+        crate::montgomery::NPrimeMethod::ExtendedEuclidean
+        | crate::montgomery::NPrimeMethod::Newton => {
             strict_compute_n_prime_extended_euclidean(modulus, &r)?
         }
         crate::montgomery::NPrimeMethod::HenselsLifting => {

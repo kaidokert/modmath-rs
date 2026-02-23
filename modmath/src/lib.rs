@@ -28,11 +28,13 @@ mod exp;
 mod mul;
 mod parity;
 mod sub;
+mod wide_mul;
 
 mod inv;
 mod montgomery;
 
 pub use parity::Parity;
+pub use wide_mul::WideMul;
 
 #[cfg(feature = "nightly")]
 pub use add::const_mod_add;
