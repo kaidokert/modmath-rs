@@ -28,11 +28,13 @@ mod exp;
 mod mul;
 mod parity;
 mod sub;
+mod wide_mul;
 
 mod inv;
 mod montgomery;
 
 pub use parity::Parity;
+pub use wide_mul::WideMul;
 
 #[cfg(feature = "nightly")]
 pub use add::const_mod_add;
@@ -53,6 +55,7 @@ pub use montgomery::{
     basic_montgomery_mod_mul_with_method,
     basic_montgomery_mul,
     basic_to_montgomery,
+    wide_from_montgomery,
     constrained_compute_montgomery_params,
     constrained_compute_montgomery_params_with_method,
     constrained_from_montgomery,

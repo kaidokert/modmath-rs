@@ -20,6 +20,7 @@ pub use basic_mont::{
     basic_montgomery_mod_mul_with_method,
     basic_montgomery_mul,
     basic_to_montgomery,
+    wide_from_montgomery,
 };
 
 // Re-export constrained functions
@@ -83,7 +84,8 @@ mod tests {
         let explicit_trial_result =
             basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::TrialSearch).unwrap();
 
-        // Both should produce identical results since TrialSearch is the default
+        // Both should produce identical results (Newton delegates to ExtendedEuclidean
+        // in the legacy param path, which agrees with TrialSearch)
         assert_eq!(default_result, explicit_trial_result);
 
         // Verify the explicit method call produces correct values
@@ -96,8 +98,8 @@ mod tests {
 
     #[test]
     fn test_n_prime_method_enum() {
-        // Test that the enum default is ExtendedEuclidean
-        assert_eq!(NPrimeMethod::default(), NPrimeMethod::ExtendedEuclidean);
+        // Test that the enum default is Newton
+        assert_eq!(NPrimeMethod::default(), NPrimeMethod::Newton);
     }
 
     #[test]
@@ -782,7 +784,7 @@ mod bnum_montgomery_tests {
         bnum::types::U256,
         strict: off, // OverflowingAdd + OverflowingSub is not implemented
         constrained: on,
-        basic: on,
+        basic: off, // basic_montgomery_mod_mul/exp now requires WideMul + OverflowingAdd
     );
 
     montgomery_test_module!(
@@ -806,7 +808,7 @@ mod bnum_montgomery_tests {
         crypto_bigint_patched::U256,
         strict: off, // &T + &T and &T - &T operations missing for Montgomery needs
         constrained: on, // Fixed trait bounds - now works with patched libraries
-        basic: on,
+        basic: on, // patched crate adds OverflowingAdd
     );
 
     montgomery_test_module!(

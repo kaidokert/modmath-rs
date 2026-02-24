@@ -241,7 +241,13 @@ where
         crate::montgomery::NPrimeMethod::TrialSearch => {
             strict_compute_n_prime_trial_search(modulus, &r)?
         }
-        crate::montgomery::NPrimeMethod::ExtendedEuclidean => {
+        // Newton is mapped to ExtendedEuclidean in the strict path.
+        // This is because strict/constrained paths use legacy R > N semantics
+        // (R = smallest power of 2 exceeding N), not the wide-REDC R = 2^W approach.
+        // Newton's method is designed for R = 2^W with wrapping arithmetic, so we
+        // fall back to ExtendedEuclidean which computes the same N' = -N^{-1} mod R.
+        crate::montgomery::NPrimeMethod::ExtendedEuclidean
+        | crate::montgomery::NPrimeMethod::Newton => {
             strict_compute_n_prime_extended_euclidean(modulus, &r)?
         }
         crate::montgomery::NPrimeMethod::HenselsLifting => {
@@ -414,7 +420,9 @@ where
 /// Complete Montgomery modular multiplication (Strict): A * B mod N
 /// Uses reference-based operations throughout to minimize copying of large integers
 ///
-/// This function uses the default NPrimeMethod (ExtendedEuclidean) for N' computation.
+/// This function uses the default NPrimeMethod (Newton) for N' computation.
+/// Note: In the strict path, Newton is mapped to ExtendedEuclidean since these
+/// paths use legacy R > N semantics rather than wide-REDC's R = 2^W.
 /// For performance-critical applications, consider using `strict_montgomery_mod_mul_with_method`
 /// to select the optimal N' computation method for your specific use case.
 ///
@@ -524,10 +532,13 @@ where
 /// Uses Montgomery arithmetic for efficient repeated multiplication with reference-based operations
 /// to minimize copying of large integers
 ///
-/// This function uses the default NPrimeMethod (ExtendedEuclidean) for N' computation.
+/// This function uses the default NPrimeMethod (Newton) for N' computation.
+/// Note: In the strict path, Newton is mapped to ExtendedEuclidean since these
+/// paths use legacy R > N semantics rather than wide-REDC's R = 2^W.
 /// For performance-critical applications or specific hardware optimization, consider using
 /// `strict_montgomery_mod_exp_with_method` to select the optimal N' computation method:
-/// - `ExtendedEuclidean`: Balanced performance, good for most use cases (default)
+/// - `Newton`: Default, mapped to ExtendedEuclidean in strict path
+/// - `ExtendedEuclidean`: Balanced performance, good for most use cases
 /// - `TrialSearch`: Simple but O(R) complexity, suitable for small moduli
 /// - `HenselsLifting`: Optimal for R = 2^k, best performance for power-of-2 radix
 ///
