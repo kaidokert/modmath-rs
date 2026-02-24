@@ -315,6 +315,11 @@ where
 }
 
 /// Montgomery multiplication (Basic): (a * R) * (b * R) -> (a * b * R) mod N
+///
+/// **Warning**: This building-block function uses the legacy reduction path which
+/// can overflow for large moduli (see `basic_from_montgomery` warning). For
+/// overflow-free multiplication, use [`basic_montgomery_mod_mul`] which uses
+/// wide-REDC internally.
 pub fn basic_montgomery_mul<T>(a_mont: T, b_mont: T, modulus: T, n_prime: T, r_bits: usize) -> T
 where
     T: Copy
@@ -557,6 +562,10 @@ where
 }
 
 /// Reduce value modulo modulus.
+///
+/// **Note**: This function assumes unsigned types. For signed types, the `%`
+/// operator may return negative values, which would violate the `[0, modulus)`
+/// range required by Montgomery arithmetic.
 fn reduce_mod<T>(val: T, modulus: T) -> T
 where
     T: Copy + core::ops::Rem<Output = T>,
