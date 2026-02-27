@@ -35,7 +35,11 @@ where
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Rem<Output = T>,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::BASIC_SUB_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let a = a % m;
+    #[cfg(feature = "instrument")]
+    crate::instrument::BASIC_SUB_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let diff = a.wrapping_sub(&(b % m));
     if diff > a {
         // If we wrapped around (underflow)
@@ -55,7 +59,11 @@ where
         + num_traits::ops::wrapping::WrappingSub,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::CONSTRAINED_SUB_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let a_mod = &a % m;
+    #[cfg(feature = "instrument")]
+    crate::instrument::CONSTRAINED_SUB_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let diff = a_mod.wrapping_sub(&(b % m));
     if diff > a_mod {
         // If we wrapped around (underflow)
@@ -76,7 +84,11 @@ where
     for<'b> T: core::ops::RemAssign<&'b T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::STRICT_SUB_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     a.rem_assign(m);
+    #[cfg(feature = "instrument")]
+    crate::instrument::STRICT_SUB_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let (diff, overflow) = a.overflowing_sub(&(b % m));
 
     if overflow {

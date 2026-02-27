@@ -48,6 +48,8 @@ where
     // Current implementation is fine for small numbers but inefficient for large moduli
     let mut n_prime = T::one();
     loop {
+        #[cfg(feature = "instrument")]
+        crate::instrument::MONT_NPRIME_TRIAL.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         if (modulus * n_prime) % r == target {
             return Some(n_prime);
         }
@@ -83,6 +85,8 @@ where
     // Or: N' ≡ -modulus^(-1) (mod R)
 
     // Use basic_mod_inv to find modulus^(-1) mod R
+    #[cfg(feature = "instrument")]
+    crate::instrument::MONT_NPRIME_EUCLID.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     if let Some(modulus_inv) = basic_mod_inv(modulus, r) {
         // N' = -modulus^(-1) mod R = R - modulus^(-1) mod R
         if modulus_inv == T::zero() {
@@ -134,6 +138,8 @@ where
         //     x_new = x - x - 1/modulus  (but we work mod powers of 2)
 
         let target_mod = T::one() << k; // 2^k
+        #[cfg(feature = "instrument")]
+        crate::instrument::MONT_NPRIME_HENSEL_LOOP.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         let check_val = (modulus * n_prime + T::one()) % target_mod;
 
         if check_val != T::zero() {
@@ -148,6 +154,8 @@ where
     }
 
     // Final check and adjustment to ensure modulus * N' ≡ -1 (mod R)
+    #[cfg(feature = "instrument")]
+    crate::instrument::MONT_NPRIME_HENSEL_FINAL.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let final_check = (modulus * n_prime) % r;
     let target = r - T::one(); // -1 mod R
 
@@ -355,7 +363,7 @@ where
 // ---------------------------------------------------------------------------
 
 /// Bit width of type T (e.g. 32 for u32, 128 for FixedUInt<u32,4>).
-const fn type_bit_width<T>() -> usize {
+pub const fn type_bit_width<T>() -> usize {
     core::mem::size_of::<T>() * 8
 }
 
@@ -376,7 +384,7 @@ where
 ///
 /// Invariant: after each iteration, `modulus * x ≡ 1 (mod 2^precision)`.
 /// We return `0 - x` so that `modulus * N' ≡ -1 (mod 2^W)`.
-fn compute_n_prime_newton<T>(modulus: T, w: usize) -> T
+pub fn compute_n_prime_newton<T>(modulus: T, w: usize) -> T
 where
     T: Copy
         + num_traits::One
@@ -420,7 +428,7 @@ where
 }
 
 /// Compute R mod N = 2^W mod N via W modular doublings starting from 1.
-fn compute_r_mod_n<T>(modulus: T, w: usize) -> T
+pub fn compute_r_mod_n<T>(modulus: T, w: usize) -> T
 where
     T: Copy
         + PartialEq
@@ -434,7 +442,7 @@ where
 }
 
 /// Compute R^2 mod N via W more modular doublings from (R mod N).
-fn compute_r2_mod_n<T>(r_mod_n: T, modulus: T, w: usize) -> T
+pub fn compute_r2_mod_n<T>(r_mod_n: T, modulus: T, w: usize) -> T
 where
     T: Copy
         + PartialEq
@@ -475,7 +483,7 @@ where
 /// - Inputs t_lo, t_hi represent a value T < N * R (product of two values < N)
 /// - modulus is odd and non-zero
 /// - n_prime = -N^{-1} mod 2^W
-fn wide_redc<T>(t_lo: T, t_hi: T, modulus: T, n_prime: T) -> T
+pub fn wide_redc<T>(t_lo: T, t_hi: T, modulus: T, n_prime: T) -> T
 where
     T: Copy
         + num_traits::Zero
@@ -512,7 +520,7 @@ where
 // ---------------------------------------------------------------------------
 
 /// Montgomery multiplication using wide REDC: REDC(a_mont * b_mont).
-fn wide_montgomery_mul<T>(a_mont: T, b_mont: T, modulus: T, n_prime: T) -> T
+pub fn wide_montgomery_mul<T>(a_mont: T, b_mont: T, modulus: T, n_prime: T) -> T
 where
     T: Copy
         + num_traits::Zero
@@ -570,6 +578,8 @@ fn reduce_mod<T>(val: T, modulus: T) -> T
 where
     T: Copy + core::ops::Rem<Output = T>,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::MONT_REDUCE_MOD.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     val % modulus
 }
 

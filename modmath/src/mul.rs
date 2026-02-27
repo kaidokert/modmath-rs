@@ -66,7 +66,11 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::Rem<Output = T>,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::BASIC_MUL_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let mut a = a % m;
+    #[cfg(feature = "instrument")]
+    crate::instrument::BASIC_MUL_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let mut b = b % m;
     let m1 = m;
     let mut result = T::zero();
@@ -112,7 +116,11 @@ where
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::CONSTRAINED_MUL_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     a.rem_assign(m);
+    #[cfg(feature = "instrument")]
+    crate::instrument::CONSTRAINED_MUL_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let mut b = b % m;
 
     let mut result = T::zero();
@@ -158,7 +166,11 @@ where
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::STRICT_MUL_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     a.rem_assign(m);
+    #[cfg(feature = "instrument")]
+    crate::instrument::STRICT_MUL_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let mut b = b % m;
 
     let mut result = T::zero();

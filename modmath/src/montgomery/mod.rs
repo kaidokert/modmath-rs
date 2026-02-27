@@ -7,6 +7,9 @@ pub mod constrained_mont;
 
 pub mod strict_mont;
 
+#[cfg(feature = "wide-mul")]
+pub mod cios;
+
 // Re-export basic functions for backwards compatibility
 #[rustfmt::skip]
 pub use basic_mont::{
@@ -21,6 +24,13 @@ pub use basic_mont::{
     basic_montgomery_mul,
     basic_to_montgomery,
     wide_from_montgomery,
+    // Wide-REDC primitives for precomputed Montgomery contexts
+    type_bit_width,
+    compute_n_prime_newton,
+    compute_r_mod_n,
+    compute_r2_mod_n,
+    wide_redc,
+    wide_montgomery_mul,
 };
 
 // Re-export constrained functions
@@ -49,6 +59,10 @@ pub use strict_mont::{
     strict_montgomery_mod_mul_with_method,
     strict_to_montgomery,
 };
+
+// Re-export CIOS Montgomery multiplication
+#[cfg(feature = "wide-mul")]
+pub use cios::{cios_montgomery_mul, CiosMontMul};
 
 #[cfg(test)]
 mod tests {

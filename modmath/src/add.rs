@@ -35,7 +35,11 @@ where
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Rem<Output = T>,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::BASIC_ADD_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let a = a % m;
+    #[cfg(feature = "instrument")]
+    crate::instrument::BASIC_ADD_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let sum = a.wrapping_add(&(b % m));
     if sum >= m || sum < a {
         sum.wrapping_sub(&m)
@@ -55,7 +59,11 @@ where
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     // maybe a should be `mut a`
+    #[cfg(feature = "instrument")]
+    crate::instrument::CONSTRAINED_ADD_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let a_mod = &a % m;
+    #[cfg(feature = "instrument")]
+    crate::instrument::CONSTRAINED_ADD_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let sum = a_mod.wrapping_add(&(b % m));
     if &sum >= m || sum < a_mod {
         sum.wrapping_sub(m)
@@ -75,7 +83,11 @@ where
     for<'b> T: core::ops::RemAssign<&'b T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::STRICT_ADD_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     a.rem_assign(m);
+    #[cfg(feature = "instrument")]
+    crate::instrument::STRICT_ADD_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let (sum, overflow) = a.overflowing_add(&(b % m));
 
     if &sum >= m || overflow {

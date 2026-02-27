@@ -61,9 +61,13 @@ where
         + core::ops::ShrAssign<usize>
         + Copy,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::BASIC_EXP_ONE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let mut result = T::one() % modulus;
     let mut exp = exponent;
 
+    #[cfg(feature = "instrument")]
+    crate::instrument::BASIC_EXP_BASE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     base = base % modulus;
 
     while exp > T::zero() {
@@ -97,7 +101,11 @@ where
         + core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::CONSTRAINED_EXP_BASE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     base.rem_assign(modulus);
+    #[cfg(feature = "instrument")]
+    crate::instrument::CONSTRAINED_EXP_ONE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let mut result = T::one() % modulus;
     let mut exp = T::zero().wrapping_add(exponent);
     while exp > T::zero() {
@@ -132,7 +140,11 @@ where
         + core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
+    #[cfg(feature = "instrument")]
+    crate::instrument::STRICT_EXP_ONE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let mut result = T::one() % modulus;
+    #[cfg(feature = "instrument")]
+    crate::instrument::STRICT_EXP_BASE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     base.rem_assign(modulus);
     let mut exp = T::zero().overflowing_add(exponent).0;
 

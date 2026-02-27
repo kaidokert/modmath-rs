@@ -2,3 +2,6 @@
 resolver="2"
 
 members = ["modmath"]
+
+[patch.crates-io]
+#fixed-bigint = { path = "../fixed-bigint" }

@@ -46,6 +46,8 @@ where
     let mut new_r = a;
 
     while new_r != T::zero() {
+        #[cfg(feature = "instrument")]
+        crate::instrument::STRICT_INV_DIV.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         let quotient = &r / &new_r;
 
         // clone
@@ -93,6 +95,8 @@ where
     let mut new_r = a;
 
     while new_r != T::zero() {
+        #[cfg(feature = "instrument")]
+        crate::instrument::CONSTRAINED_INV_DIV.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         let quotient = &r / &new_r;
 
         let tmp_t = new_t.clone();
@@ -133,6 +137,8 @@ where
     let mut new_r = Signed::new(a, false);
 
     while new_r != Signed::new(T::zero(), false) {
+        #[cfg(feature = "instrument")]
+        crate::instrument::BASIC_INV_DIV.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         let quotient = r / new_r;
 
         let tmp_t = new_t;
