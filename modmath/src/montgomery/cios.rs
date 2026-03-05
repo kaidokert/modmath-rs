@@ -36,18 +36,18 @@ where
 
     let n = T::word_count();
     let mut acc = T::default();
-    let mut acc_hi = <T::Word as Zero>::zero();
-    let mut acc_hi2 = <T::Word as Zero>::zero();
+    let mut acc_hi = Zero::zero();
+    let mut acc_hi2 = Zero::zero();
 
     for i in 0..n {
         let ai = a.get_word(i)?;
 
         // Phase 1: acc += a[i] * b
-        let carry = T::mul_acc_row(ai, b, &mut acc, <T::Word as Zero>::zero());
+        let carry = T::mul_acc_row(ai, b, &mut acc, Zero::zero());
         let (sum, overflow) = acc_hi.overflowing_add(&carry);
         acc_hi = sum;
         if overflow {
-            acc_hi2 = acc_hi2 + <T::Word as One>::one();
+            acc_hi2 = acc_hi2 + One::one();
         }
 
         // Compute reduction factor: m = acc[0] * n_prime_0 (mod word)
@@ -58,15 +58,15 @@ where
         // Safety: acc_hi2 ∈ {0,1} (reset each iteration, incremented at most once)
         // and new_overflow ∈ {0,1} (bool→word from mul_acc_shift_row), so max sum = 2.
         debug_assert!(
-            new_overflow == <T::Word as Zero>::zero() || new_overflow == <T::Word as One>::one(),
+            new_overflow == Zero::zero() || new_overflow == One::one(),
             "mul_acc_shift_row must return 0 or 1"
         );
         acc_hi = acc_hi2 + new_overflow;
-        acc_hi2 = <T::Word as Zero>::zero();
+        acc_hi2 = Zero::zero();
     }
 
     // Final conditional subtraction
-    if acc_hi > <T::Word as Zero>::zero() || acc >= *modulus {
+    if acc_hi > Zero::zero() || acc >= *modulus {
         let (result, _) = <T as ConstBorrowingSub>::borrowing_sub(acc, *modulus, false);
         acc = result;
     }
