@@ -36,6 +36,9 @@ where
         + num_traits::ops::overflowing::OverflowingAdd
         + core::ops::Add<Output = T::Word>,
 {
+    debug_assert!(a < modulus, "CIOS input a must be in [0, modulus)");
+    debug_assert!(b < modulus, "CIOS input b must be in [0, modulus)");
+
     let n = T::word_count();
     let mut acc = T::default();
     let mut acc_hi = <T::Word as Zero>::zero();
@@ -57,6 +60,8 @@ where
 
         // Phase 2: [acc, acc_hi] = ([acc, acc_hi] + m * modulus) >> word_bits
         let new_overflow = T::mul_acc_shift_row(m, modulus, &mut acc, acc_hi);
+        // Safety: acc_hi2 ∈ {0,1} (reset each iteration, incremented at most once)
+        // and new_overflow ∈ {0,1} (bool→word from mul_acc_shift_row), so max sum = 2.
         acc_hi = acc_hi2 + new_overflow;
         acc_hi2 = <T::Word as Zero>::zero();
     }
@@ -76,7 +81,7 @@ where
 /// knowledge of `MulAccOps::Word` or the CIOS call signature.
 #[cfg(feature = "wide-mul")]
 pub trait CiosMontMul: MulAccOps {
-    fn cios_mont_mul(a: Self, b: Self, modulus: Self, n_prime: Self) -> Option<Self>;
+    fn cios_mont_mul(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Option<Self>;
 }
 
 #[cfg(feature = "wide-mul")]
@@ -89,8 +94,8 @@ where
         + core::ops::Add<Output = T::Word>,
 {
     #[inline]
-    fn cios_mont_mul(a: Self, b: Self, modulus: Self, n_prime: Self) -> Option<Self> {
-        cios_montgomery_mul(&a, &b, &modulus, n_prime.get_word(0)?)
+    fn cios_mont_mul(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Option<Self> {
+        cios_montgomery_mul(a, b, modulus, n_prime.get_word(0)?)
     }
 }
 
@@ -226,7 +231,7 @@ mod tests {
         let b_m = wide_redc(lo, hi, modulus, n_prime);
 
         // Use the trait method
-        let result = CiosMontMul::cios_mont_mul(a_m, b_m, modulus, n_prime).unwrap();
+        let result = CiosMontMul::cios_mont_mul(&a_m, &b_m, &modulus, &n_prime).unwrap();
         let expected = wide_montgomery_mul(a_m, b_m, modulus, n_prime);
         assert_eq!(result, expected);
     }

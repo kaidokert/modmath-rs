@@ -21,8 +21,6 @@
 //! wont work with `num-bigint` and `ibig` as both require heap
 //! allocation.
 
-#![cfg_attr(not(test), no_std)]
-
 mod add;
 mod exp;
 mod mul;
@@ -89,8 +87,6 @@ pub use mul::{basic_mod_mul, constrained_mod_mul, strict_mod_mul};
 #[cfg(feature = "nightly")]
 pub use sub::const_mod_sub;
 pub use sub::{basic_mod_sub, constrained_mod_sub, strict_mod_sub};
-
-mod strictest;
 
 #[cfg(test)]
 #[macro_export]
