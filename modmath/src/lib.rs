@@ -82,7 +82,7 @@ pub use montgomery::{
     strict_to_montgomery,
 };
 #[cfg(feature = "wide-mul")]
-pub use montgomery::{cios_montgomery_mul, CiosMontMul};
+pub use montgomery::{CiosMontMul, cios_montgomery_mul};
 #[cfg(feature = "nightly")]
 pub use mul::const_mod_mul;
 pub use mul::{basic_mod_mul, constrained_mod_mul, strict_mod_mul};

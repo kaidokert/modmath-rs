@@ -99,7 +99,8 @@ where
 mod tests {
     use super::*;
     use crate::montgomery::basic_mont::{
-        compute_n_prime_newton, compute_r2_mod_n, compute_r_mod_n, type_bit_width, wide_montgomery_mul, wide_redc,
+        compute_n_prime_newton, compute_r_mod_n, compute_r2_mod_n, type_bit_width,
+        wide_montgomery_mul, wide_redc,
     };
 
     /// Verify CIOS matches wide_montgomery_mul for u8 FixedUInt.
@@ -130,7 +131,8 @@ mod tests {
                 let expected = wide_montgomery_mul(a_m, b_m, modulus, n_prime);
 
                 // Multiply via CIOS
-                let got = cios_montgomery_mul(&a_m, &b_m, &modulus, n_prime.get_word(0).unwrap()).unwrap();
+                let got = cios_montgomery_mul(&a_m, &b_m, &modulus, n_prime.get_word(0).unwrap())
+                    .unwrap();
 
                 assert_eq!(
                     got, expected,
@@ -164,12 +166,10 @@ mod tests {
                 let b_m = wide_redc(lo, hi, modulus, n_prime);
 
                 let expected = wide_montgomery_mul(a_m, b_m, modulus, n_prime);
-                let got = cios_montgomery_mul(&a_m, &b_m, &modulus, n_prime.get_word(0).unwrap()).unwrap();
+                let got = cios_montgomery_mul(&a_m, &b_m, &modulus, n_prime.get_word(0).unwrap())
+                    .unwrap();
 
-                assert_eq!(
-                    got, expected,
-                    "CIOS mismatch for {a_val:#x}*{b_val:#x}"
-                );
+                assert_eq!(got, expected, "CIOS mismatch for {a_val:#x}*{b_val:#x}");
             }
         }
     }
@@ -196,7 +196,8 @@ mod tests {
         let b_m = wide_redc(lo, hi, modulus, n_prime);
 
         // CIOS multiply in Montgomery domain
-        let result_m = cios_montgomery_mul(&a_m, &b_m, &modulus, n_prime.get_word(0).unwrap()).unwrap();
+        let result_m =
+            cios_montgomery_mul(&a_m, &b_m, &modulus, n_prime.get_word(0).unwrap()).unwrap();
 
         // Convert back
         let result = wide_redc(result_m, U128::from(0u64), modulus, n_prime);

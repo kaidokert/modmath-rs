@@ -62,7 +62,7 @@ pub use strict_mont::{
 
 // Re-export CIOS Montgomery multiplication
 #[cfg(feature = "wide-mul")]
-pub use cios::{cios_montgomery_mul, CiosMontMul};
+pub use cios::{CiosMontMul, cios_montgomery_mul};
 
 #[cfg(test)]
 mod tests {
