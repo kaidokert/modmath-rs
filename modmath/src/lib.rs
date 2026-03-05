@@ -21,7 +21,7 @@
 //! wont work with `num-bigint` and `ibig` as both require heap
 //! allocation.
 
-#![cfg_attr(not(any(test, feature = "instrument")), no_std)]
+#![cfg_attr(not(test), no_std)]
 
 mod add;
 mod exp;
@@ -91,9 +91,6 @@ pub use sub::const_mod_sub;
 pub use sub::{basic_mod_sub, constrained_mod_sub, strict_mod_sub};
 
 mod strictest;
-
-#[cfg(feature = "instrument")]
-pub mod instrument;
 
 #[cfg(test)]
 #[macro_export]

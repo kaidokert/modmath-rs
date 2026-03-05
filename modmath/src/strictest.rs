@@ -26,11 +26,7 @@ where
     for<'b> &'b T: core::ops::Rem<&'b T, Output = T>,
 {
     // Reduce operands first to prevent overflow
-    #[cfg(feature = "instrument")]
-    crate::instrument::STRICTEST_ADD_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let a_reduced = a % m;
-    #[cfg(feature = "instrument")]
-    crate::instrument::STRICTEST_ADD_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let b_reduced = b % m;
     strictest_mod_add_no_reduce(&a_reduced, &b_reduced, m)
 }
@@ -67,11 +63,7 @@ where
     for<'b> &'b T: core::ops::Rem<&'b T, Output = T>,
 {
     // Reduce operands first
-    #[cfg(feature = "instrument")]
-    crate::instrument::STRICTEST_SUB_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let a_reduced = a % m;
-    #[cfg(feature = "instrument")]
-    crate::instrument::STRICTEST_SUB_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let b_reduced = b % m;
     strictest_mod_sub_no_reduce(&a_reduced, &b_reduced, m)
 }
@@ -88,11 +80,7 @@ where
     for<'b> &'b T: core::ops::Rem<&'b T, Output = T> + core::ops::BitAnd<Output = T>,
 {
     // Reduce operands first to prevent overflow
-    #[cfg(feature = "instrument")]
-    crate::instrument::STRICTEST_MUL_A.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let mut a_cur = a % m;
-    #[cfg(feature = "instrument")]
-    crate::instrument::STRICTEST_MUL_B.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let mut b_cur = b % m;
     let mut result = T::zero();
     let one = T::one();
