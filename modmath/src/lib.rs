@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(feature = "nightly", feature(const_trait_impl, const_ops, const_cmp))]
 #![cfg_attr(feature = "nightly", allow(incomplete_features))]
+// Ensure no_std on embedded targets even when `std` feature is default-enabled
+#![cfg_attr(not(test), no_std)]
 
 //! Modular math implemented with traits.
 //!

@@ -6,13 +6,9 @@
 //! The algorithm operates entirely through the [`MulAccOps`] trait,
 //! never touching raw limb arrays.
 
-#[cfg(feature = "wide-mul")]
 use fixed_bigint::MulAccOps;
-#[cfg(feature = "wide-mul")]
 use fixed_bigint::const_numtraits::ConstBorrowingSub;
-#[cfg(feature = "wide-mul")]
 use num_traits::ops::overflowing::OverflowingAdd;
-#[cfg(feature = "wide-mul")]
 use num_traits::{One, WrappingMul, Zero};
 
 /// CIOS Montgomery multiplication: `a * b * R⁻¹ mod modulus`.
@@ -22,7 +18,6 @@ use num_traits::{One, WrappingMul, Zero};
 ///
 /// The algorithm fuses multiplication and REDC into a single double-loop,
 /// saving ~25 % of limb multiplies compared to separate wide-mul + REDC.
-#[cfg(feature = "wide-mul")]
 pub fn cios_montgomery_mul<T: MulAccOps + PartialOrd + ConstBorrowingSub>(
     a: &T,
     b: &T,
@@ -76,15 +71,21 @@ where
 
 /// Convenience trait: types that support CIOS Montgomery multiplication.
 ///
-/// Implemented automatically for any `T: MulAccOps`.  Higher-level code
-/// (e.g. `MontgomeryCtx`) can bound on this trait instead of requiring
-/// knowledge of `MulAccOps::Word` or the CIOS call signature.
-#[cfg(feature = "wide-mul")]
-pub trait CiosMontMul: MulAccOps {
+/// Implemented automatically for any `T: MulAccOps + PartialOrd + ConstBorrowingSub`
+/// with the required `Word` bounds.  Higher-level code (e.g. `MontgomeryCtx`)
+/// can bound on this trait instead of requiring knowledge of `MulAccOps::Word`
+/// or the CIOS call signature.
+pub trait CiosMontMul: MulAccOps + PartialOrd + ConstBorrowingSub
+where
+    Self::Word: num_traits::Zero
+        + num_traits::One
+        + num_traits::WrappingMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + core::ops::Add<Output = Self::Word>,
+{
     fn cios_mont_mul(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Option<Self>;
 }
 
-#[cfg(feature = "wide-mul")]
 impl<T: MulAccOps + PartialOrd + ConstBorrowingSub> CiosMontMul for T
 where
     T::Word: num_traits::Zero
@@ -100,7 +101,6 @@ where
 }
 
 #[cfg(test)]
-#[cfg(feature = "wide-mul")]
 mod tests {
     use super::*;
     use crate::montgomery::basic_mont::{
@@ -225,9 +225,10 @@ mod tests {
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
 
         let a = U128::from(42u64);
+        let b = U128::from(69u64);
         let (lo, hi) = crate::WideMul::wide_mul(&a, &r2_mod_n);
         let a_m = wide_redc(lo, hi, modulus, n_prime);
-        let (lo, hi) = crate::WideMul::wide_mul(&a, &r2_mod_n);
+        let (lo, hi) = crate::WideMul::wide_mul(&b, &r2_mod_n);
         let b_m = wide_redc(lo, hi, modulus, n_prime);
 
         // Use the trait method
