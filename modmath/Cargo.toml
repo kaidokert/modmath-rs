@@ -37,8 +37,7 @@ ibig_patched = { package = "ibig", git = "https://github.com/kaidokert/ibig-rs.g
 paste = "1"
 
 [features]
-default = ["std"]
-std = []
+default = []
 constrained = []
 basic = []
 strict = []

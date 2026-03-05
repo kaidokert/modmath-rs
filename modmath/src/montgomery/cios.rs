@@ -57,6 +57,10 @@ where
         let new_overflow = T::mul_acc_shift_row(m, modulus, &mut acc, acc_hi);
         // Safety: acc_hi2 ∈ {0,1} (reset each iteration, incremented at most once)
         // and new_overflow ∈ {0,1} (bool→word from mul_acc_shift_row), so max sum = 2.
+        debug_assert!(
+            new_overflow == <T::Word as Zero>::zero() || new_overflow == <T::Word as One>::one(),
+            "mul_acc_shift_row must return 0 or 1"
+        );
         acc_hi = acc_hi2 + new_overflow;
         acc_hi2 = <T::Word as Zero>::zero();
     }
