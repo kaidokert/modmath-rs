@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(test), no_std)]
 #![cfg_attr(feature = "nightly", feature(const_trait_impl, const_ops, const_cmp))]
 #![cfg_attr(feature = "nightly", allow(incomplete_features))]
 
@@ -20,8 +20,6 @@
 //! and [`fixed-bigint`](https://crates.io/crates/fixed-bigint) crates. `basic` versions of functions
 //! wont work with `num-bigint` and `ibig` as both require heap
 //! allocation.
-
-#![cfg_attr(not(test), no_std)]
 
 mod add;
 mod exp;
@@ -56,6 +54,13 @@ pub use montgomery::{
     basic_montgomery_mul,
     basic_to_montgomery,
     wide_from_montgomery,
+    // Wide-REDC primitives for precomputed Montgomery contexts
+    type_bit_width,
+    compute_n_prime_newton,
+    compute_r_mod_n,
+    compute_r2_mod_n,
+    wide_redc,
+    wide_montgomery_mul,
     constrained_compute_montgomery_params,
     constrained_compute_montgomery_params_with_method,
     constrained_from_montgomery,
@@ -74,6 +79,8 @@ pub use montgomery::{
     strict_montgomery_mod_mul_with_method,
     strict_to_montgomery,
 };
+#[cfg(feature = "wide-mul")]
+pub use montgomery::{CiosMontMul, cios_montgomery_mul};
 #[cfg(feature = "nightly")]
 pub use mul::const_mod_mul;
 pub use mul::{basic_mod_mul, constrained_mod_mul, strict_mod_mul};

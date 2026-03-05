@@ -1,6 +1,6 @@
 [package]
 name = "modmath"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 description = """
 Modular math implemented with traits.
@@ -16,10 +16,10 @@ keywords = ["numerics", "bignum"]
 num-traits = { version = "0.2", default-features = false }
 num-integer = { version = "0.1", default-features = false, optional = true }
 c0nst = { version = "0.2", optional = true }
-fixed-bigint = { version = "0.2.2", optional = true, default-features = false }
+fixed-bigint = { version = "0.2.5", optional = true, default-features = false }
 
 [dev-dependencies]
-fixed-bigint = { version = "0.2.2" }
+fixed-bigint = { version = "0.2.5" }
 num-bigint = { package = "num-bigint", version = "0.4"}
 # num-bigint_patched = { package = "num-bigint" , path = "../bn/num-bigint" }
 num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git" , tag = "v0.4.6_patch" }
@@ -37,8 +37,7 @@ ibig_patched = { package = "ibig", git = "https://github.com/kaidokert/ibig-rs.g
 paste = "1"
 
 [features]
-default = ["std"]
-std = []
+default = []
 constrained = []
 basic = []
 strict = []
