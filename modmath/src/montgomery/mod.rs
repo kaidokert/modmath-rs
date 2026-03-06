@@ -801,12 +801,21 @@ mod bnum_montgomery_tests {
         basic: off, // basic_montgomery_mod_mul/exp now requires WideMul + OverflowingAdd
     );
 
+    #[cfg(not(feature = "wide-mul"))]
     montgomery_test_module!(
         bnum_patched,
         bnum_patched::types::U256,
         strict: off, // Complex trait bounds for Montgomery operations not fully compatible
         constrained: on,
         basic: on,
+    );
+    #[cfg(feature = "wide-mul")]
+    montgomery_test_module!(
+        bnum_patched,
+        bnum_patched::types::U256,
+        strict: off,
+        constrained: on,
+        basic: off, // WideMul requires WideningMul, not implemented for bnum
     );
 
     montgomery_test_module!(
@@ -817,12 +826,21 @@ mod bnum_montgomery_tests {
         basic: off, // RemAssign and other traits missing
     );
 
+    #[cfg(not(feature = "wide-mul"))]
     montgomery_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
         strict: off, // &T + &T and &T - &T operations missing for Montgomery needs
         constrained: on, // Fixed trait bounds - now works with patched libraries
         basic: on, // patched crate adds OverflowingAdd
+    );
+    #[cfg(feature = "wide-mul")]
+    montgomery_test_module!(
+        crypto_bigint_patched,
+        crypto_bigint_patched::U256,
+        strict: off,
+        constrained: on,
+        basic: off, // WideMul requires WideningMul, not implemented for crypto-bigint
     );
 
     montgomery_test_module!(
