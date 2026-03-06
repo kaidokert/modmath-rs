@@ -33,7 +33,7 @@ jobs:
       - name: Generate coverage data
         working-directory: modmath
         run: |
-          cargo llvm-cov --lcov --output-path lcov.info
+          cargo llvm-cov --features wide-mul --lcov --output-path lcov.info
 
       - name: Coveralls GitHub Action
         uses: coverallsapp/github-action@v2

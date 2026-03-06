@@ -35,19 +35,21 @@ where
     debug_assert!(b < modulus, "CIOS input b must be in [0, modulus)");
 
     let n = T::word_count();
+    let zero = <T::Word as Zero>::zero();
+    let one = <T::Word as One>::one();
     let mut acc = T::default();
-    let mut acc_hi = Zero::zero();
-    let mut acc_hi2 = Zero::zero();
+    let mut acc_hi = zero;
+    let mut acc_hi2 = zero;
 
     for i in 0..n {
         let ai = a.get_word(i)?;
 
         // Phase 1: acc += a[i] * b
-        let carry = T::mul_acc_row(ai, b, &mut acc, Zero::zero());
+        let carry = T::mul_acc_row(ai, b, &mut acc, zero);
         let (sum, overflow) = acc_hi.overflowing_add(&carry);
         acc_hi = sum;
         if overflow {
-            acc_hi2 = acc_hi2 + One::one();
+            acc_hi2 = acc_hi2 + one;
         }
 
         // Compute reduction factor: m = acc[0] * n_prime_0 (mod word)
@@ -58,15 +60,15 @@ where
         // Safety: acc_hi2 ∈ {0,1} (reset each iteration, incremented at most once)
         // and new_overflow ∈ {0,1} (bool→word from mul_acc_shift_row), so max sum = 2.
         debug_assert!(
-            new_overflow == Zero::zero() || new_overflow == One::one(),
+            new_overflow == zero || new_overflow == one,
             "mul_acc_shift_row must return 0 or 1"
         );
         acc_hi = acc_hi2 + new_overflow;
-        acc_hi2 = Zero::zero();
+        acc_hi2 = zero;
     }
 
     // Final conditional subtraction
-    if acc_hi > Zero::zero() || acc >= *modulus {
+    if acc_hi > zero || acc >= *modulus {
         let (result, _) = <T as ConstBorrowingSub>::borrowing_sub(acc, *modulus, false);
         acc = result;
     }
@@ -79,14 +81,7 @@ where
 /// with the required `Word` bounds.  Higher-level code (e.g. `MontgomeryCtx`)
 /// can bound on this trait instead of requiring knowledge of `MulAccOps::Word`
 /// or the CIOS call signature.
-pub trait CiosMontMul: MulAccOps + PartialOrd + ConstBorrowingSub
-where
-    Self::Word: num_traits::Zero
-        + num_traits::One
-        + num_traits::WrappingMul
-        + num_traits::ops::overflowing::OverflowingAdd
-        + core::ops::Add<Output = Self::Word>,
-{
+pub trait CiosMontMul: MulAccOps + PartialOrd + ConstBorrowingSub {
     fn cios_mont_mul(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Option<Self>;
 }
 
@@ -111,6 +106,10 @@ mod tests {
         compute_n_prime_newton, compute_r_mod_n, compute_r2_mod_n, type_bit_width,
         wide_montgomery_mul, wide_redc,
     };
+
+    /// Compile-time check: CiosMontMul must be usable as a generic bound
+    /// without requiring the consumer to constrain `T::Word`.
+    fn _assert_generic_bound<T: CiosMontMul>() {}
 
     /// Verify CIOS matches wide_montgomery_mul for u8 FixedUInt.
     #[test]
