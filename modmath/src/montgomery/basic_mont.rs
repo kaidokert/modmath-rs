@@ -528,6 +528,82 @@ where
 }
 
 // ---------------------------------------------------------------------------
+// By-reference variants — avoid per-call copies of large `T` (e.g., wide
+// `FixedUInt`s for RSA). The math is identical; only the public signatures
+// differ. The trait bounds drop `Copy` and rely entirely on the existing
+// `&self`-style methods from `num_traits` and `WideMul`.
+// ---------------------------------------------------------------------------
+
+/// Reference-taking variant of [`wide_redc`].
+///
+/// Caller retains ownership of all inputs. Useful when `T` is a large
+/// fixed-width integer and per-call by-value copies dominate the stack
+/// footprint.
+pub fn wide_redc_ref<T>(t_lo: &T, t_hi: &T, modulus: &T, n_prime: &T) -> T
+where
+    T: Copy
+        + num_traits::Zero
+        + num_traits::One
+        + PartialOrd
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingMul
+        + num_traits::WrappingSub,
+{
+    // m = t_lo * N'  (mod 2^W -- wrapping mul gives that for free)
+    let m = t_lo.wrapping_mul(n_prime);
+
+    // (m_lo, m_hi) = m * modulus  (full double-width product)
+    let (m_lo, m_hi) = m.wide_mul(modulus);
+
+    // low half:  t_lo + m_lo  -- the low W bits cancel by construction,
+    // we only need the carry.
+    let (_discard_lo, carry1) = t_lo.overflowing_add(&m_lo);
+
+    // high half:  t_hi + m_hi + carry1
+    let (result, carry2) = t_hi.overflowing_add(&m_hi);
+    let (result, extra_bit) = accumulate_high_half_carry(result, carry1, carry2);
+
+    if extra_bit || result >= *modulus {
+        result.wrapping_sub(modulus)
+    } else {
+        result
+    }
+}
+
+/// Reference-taking variant of [`wide_montgomery_mul`].
+pub fn wide_montgomery_mul_ref<T>(a_mont: &T, b_mont: &T, modulus: &T, n_prime: &T) -> T
+where
+    T: Copy
+        + num_traits::Zero
+        + num_traits::One
+        + PartialOrd
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingMul
+        + num_traits::WrappingSub,
+{
+    let (lo, hi) = a_mont.wide_mul(b_mont);
+    wide_redc_ref(&lo, &hi, modulus, n_prime)
+}
+
+/// Reference-taking variant of [`wide_from_montgomery`].
+pub fn wide_from_montgomery_ref<T>(a_mont: &T, modulus: &T, n_prime: &T) -> T
+where
+    T: Copy
+        + num_traits::Zero
+        + num_traits::One
+        + PartialOrd
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::WrappingMul
+        + num_traits::WrappingSub,
+{
+    let zero = T::zero();
+    wide_redc_ref(a_mont, &zero, modulus, n_prime)
+}
+
+// ---------------------------------------------------------------------------
 // Public API: mod_mul / mod_exp using wide REDC
 // ---------------------------------------------------------------------------
 

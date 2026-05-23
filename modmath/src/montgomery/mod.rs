@@ -31,6 +31,10 @@ pub use basic_mont::{
     compute_r2_mod_n,
     wide_redc,
     wide_montgomery_mul,
+    // Reference-taking variants for stack-constrained callers.
+    wide_redc_ref,
+    wide_montgomery_mul_ref,
+    wide_from_montgomery_ref,
 };
 
 // Re-export constrained functions

@@ -61,6 +61,10 @@ pub use montgomery::{
     compute_r2_mod_n,
     wide_redc,
     wide_montgomery_mul,
+    // Reference-taking variants for stack-constrained callers.
+    wide_redc_ref,
+    wide_montgomery_mul_ref,
+    wide_from_montgomery_ref,
     constrained_compute_montgomery_params,
     constrained_compute_montgomery_params_with_method,
     constrained_from_montgomery,
