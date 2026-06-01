@@ -102,9 +102,10 @@ where
         + num_traits::WrappingMul
         + num_traits::ops::overflowing::OverflowingAdd
         + core::ops::Add<Output = T::Word>
-        + subtle::ConstantTimeEq,
+        + subtle::ConstantTimeEq
+        + subtle::ConditionallySelectable,
 {
-    use subtle::{Choice, ConstantTimeEq};
+    use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 
     let n = T::word_count();
     let zero = <T::Word as Zero>::zero();
@@ -119,9 +120,8 @@ where
         let carry = T::mul_acc_row(ai, b, &mut acc, zero);
         let (sum, overflow) = acc_hi.overflowing_add(&carry);
         acc_hi = sum;
-        if overflow {
-            acc_hi2 = acc_hi2 + one;
-        }
+        let overflow_word = T::Word::conditional_select(&zero, &one, Choice::from(overflow as u8));
+        acc_hi2 = acc_hi2 + overflow_word;
 
         let m = acc.get_word(0).into_option()?.wrapping_mul(&n_prime_0);
 
@@ -194,7 +194,8 @@ where
         + num_traits::WrappingMul
         + num_traits::ops::overflowing::OverflowingAdd
         + core::ops::Add<Output = T::Word>
-        + subtle::ConstantTimeEq,
+        + subtle::ConstantTimeEq
+        + subtle::ConditionallySelectable,
 {
     #[inline]
     fn cios_mont_mul_ct(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Option<Self> {
