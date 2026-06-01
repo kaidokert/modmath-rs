@@ -35,8 +35,19 @@ where
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Rem<Output = T>,
 {
-    let a = a % m;
-    let diff = a.wrapping_sub(&(b % m));
+    basic_mod_sub_pr(a % m, b % m, m)
+}
+
+/// # Modular Subtraction (Basic, pre-reduced)
+/// Precondition: `a < m` and `b < m`. No `Rem` bound.
+pub fn basic_mod_sub_pr<T>(a: T, b: T, m: T) -> T
+where
+    T: core::cmp::PartialOrd
+        + Copy
+        + num_traits::ops::wrapping::WrappingAdd
+        + num_traits::ops::wrapping::WrappingSub,
+{
+    let diff = a.wrapping_sub(&b);
     if diff > a {
         // If we wrapped around (underflow)
         diff.wrapping_add(&m)
@@ -56,8 +67,20 @@ where
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     let a_mod = &a % m;
-    let diff = a_mod.wrapping_sub(&(b % m));
-    if diff > a_mod {
+    let b_mod = b % m;
+    constrained_mod_sub_pr(a_mod, &b_mod, m)
+}
+
+/// # Modular Subtraction (Constrained, pre-reduced)
+/// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
+pub fn constrained_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
+where
+    T: core::cmp::PartialOrd
+        + num_traits::ops::wrapping::WrappingAdd
+        + num_traits::ops::wrapping::WrappingSub,
+{
+    let diff = a.wrapping_sub(b);
+    if diff > a {
         // If we wrapped around (underflow)
         diff.wrapping_add(m)
     } else {
@@ -77,8 +100,19 @@ where
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     a.rem_assign(m);
-    let (diff, overflow) = a.overflowing_sub(&(b % m));
+    let b_mod = b % m;
+    strict_mod_sub_pr(a, &b_mod, m)
+}
 
+/// # Modular Subtraction (Strict, pre-reduced)
+/// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
+pub fn strict_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
+where
+    T: core::cmp::PartialOrd
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::ops::overflowing::OverflowingSub,
+{
+    let (diff, overflow) = a.overflowing_sub(b);
     if overflow {
         m.overflowing_add(&diff).0
     } else {
@@ -318,12 +352,50 @@ mod bnum_sub_tests {
         basic: off, // Copy cannot be implemented, heap allocation
     );
 
+    // Default (Nct-personality) FixedUInt provides Rem; the wrapper
+    // functions are usable here. The Ct personality intentionally omits
+    // Rem (variable-time on operand magnitudes).
     sub_test_module!(
         fixed_bigint,
         fixed_bigint::FixedUInt,
-        type U256 = FixedUInt<u32, 4>;
+        type U256 = fixed_bigint::FixedUInt<u32, 4>;
         strict: on,
         constrained: on,
         basic: on,
     );
+}
+
+#[cfg(test)]
+mod fixed_bigint_pr_tests {
+    use super::{basic_mod_sub_pr, constrained_mod_sub_pr, strict_mod_sub_pr};
+    type U256 = fixed_bigint::FixedUInt<u32, 4>;
+
+    #[test]
+    fn test_mod_sub_basic_pr() {
+        let m = U256::from(20u8);
+        let a = U256::from(10u8);
+        let b = U256::from(5u8);
+        let expected = U256::from(5u8);
+
+        assert_eq!(strict_mod_sub_pr(a, &b, &m), expected);
+        let a = U256::from(10u8);
+        assert_eq!(constrained_mod_sub_pr(a, &b, &m), expected);
+        let a = U256::from(10u8);
+        assert_eq!(basic_mod_sub_pr(a, b, m), expected);
+    }
+
+    #[test]
+    fn test_mod_sub_underflow_pr() {
+        // a < b: wraps via + m
+        let m = U256::from(20u8);
+        let a = U256::from(3u8);
+        let b = U256::from(7u8);
+        let expected = U256::from(16u8); // 3 - 7 = -4 ≡ 16 (mod 20)
+
+        assert_eq!(strict_mod_sub_pr(a, &b, &m), expected);
+        let a = U256::from(3u8);
+        assert_eq!(constrained_mod_sub_pr(a, &b, &m), expected);
+        let a = U256::from(3u8);
+        assert_eq!(basic_mod_sub_pr(a, b, m), expected);
+    }
 }

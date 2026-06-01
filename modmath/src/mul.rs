@@ -66,8 +66,26 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::Rem<Output = T>,
 {
-    let mut a = a % m;
-    let mut b = b % m;
+    basic_mod_mul_pr(a % m, b % m, m)
+}
+
+/// # Modular Multiplication (Basic, pre-reduced)
+/// Precondition: `a < m` and `b < m`. No `Rem` bound.
+///
+/// Note: this only removes the division side-channel from the signature.
+/// The double-and-add loop still leaks `bit_length(b)`; for constant-time
+/// multiplication, use the Montgomery wide-REDC path.
+pub fn basic_mod_mul_pr<T>(mut a: T, mut b: T, m: T) -> T
+where
+    T: core::cmp::PartialOrd
+        + Copy
+        + num_traits::Zero
+        + num_traits::One
+        + crate::parity::Parity
+        + num_traits::ops::wrapping::WrappingAdd
+        + num_traits::ops::wrapping::WrappingSub
+        + core::ops::Shr<usize, Output = T>,
+{
     let m1 = m;
     let mut result = T::zero();
 
@@ -113,8 +131,26 @@ where
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     a.rem_assign(m);
-    let mut b = b % m;
+    let b = b % m;
+    constrained_mod_mul_pr(a, &b, m)
+}
 
+/// # Modular Multiplication (Constrained, pre-reduced)
+/// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound. See
+/// [`basic_mod_mul_pr`] for the CT caveat.
+pub fn constrained_mod_mul_pr<T>(mut a: T, b: &T, m: &T) -> T
+where
+    T: num_traits::Zero
+        + num_traits::One
+        + crate::parity::Parity
+        + PartialOrd
+        + num_traits::ops::wrapping::WrappingAdd
+        + num_traits::ops::wrapping::WrappingSub
+        + core::ops::Shr<usize, Output = T>,
+{
+    // Need an owned mutable T for the double-and-add loop's right-shift;
+    // mirror the `exp_pr` convention of cloning via wrapping_add(zero).
+    let mut b = T::zero().wrapping_add(b);
     let mut result = T::zero();
 
     while b > T::zero() {
@@ -159,8 +195,26 @@ where
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     a.rem_assign(m);
-    let mut b = b % m;
+    let b = b % m;
+    strict_mod_mul_pr(a, &b, m)
+}
 
+/// # Modular Multiplication (Strict, pre-reduced)
+/// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound. See
+/// [`basic_mod_mul_pr`] for the CT caveat.
+pub fn strict_mod_mul_pr<T>(mut a: T, b: &T, m: &T) -> T
+where
+    T: num_traits::Zero
+        + num_traits::One
+        + crate::parity::Parity
+        + PartialOrd
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Shr<usize, Output = T>,
+{
+    // Need an owned mutable T for the double-and-add loop's right-shift;
+    // mirror the `exp_pr` convention of cloning via overflowing_add(zero).
+    let mut b = T::zero().overflowing_add(b).0;
     let mut result = T::zero();
 
     while b > T::zero() {
@@ -562,12 +616,46 @@ mod bnum_mul_tests {
         basic: off, // Copy cannot be implemented, heap allocation
     );
 
+    // Default (Nct-personality) FixedUInt provides Rem; the wrapper
+    // functions are usable here. The Ct personality intentionally omits
+    // Rem (variable-time on operand magnitudes).
     mul_test_module!(
         fixed_bigint,
         fixed_bigint::FixedUInt,
-        type U256 = FixedUInt<u32, 4>;
+        type U256 = fixed_bigint::FixedUInt<u32, 4>;
         strict: on,
         constrained: on,
         basic: on,
     );
+}
+
+#[cfg(test)]
+mod fixed_bigint_pr_tests {
+    use super::{basic_mod_mul_pr, constrained_mod_mul_pr, strict_mod_mul_pr};
+    type U256 = fixed_bigint::FixedUInt<u32, 4>;
+
+    #[test]
+    fn test_mod_mul_basic_pr() {
+        let m = U256::from(19u8);
+        let a = U256::from(7u8);
+        let b = U256::from(13u8);
+        let expected = U256::from(15u8); // (7 * 13) mod 19 = 91 mod 19 = 15
+
+        assert_eq!(strict_mod_mul_pr(a, &b, &m), expected);
+        let a = U256::from(7u8);
+        assert_eq!(constrained_mod_mul_pr(a, &b, &m), expected);
+        let a = U256::from(7u8);
+        assert_eq!(basic_mod_mul_pr(a, b, m), expected);
+    }
+
+    #[test]
+    fn test_mod_mul_zero_pr() {
+        let m = U256::from(19u8);
+        let zero = U256::from(0u8);
+        let b = U256::from(13u8);
+
+        assert_eq!(strict_mod_mul_pr(zero, &b, &m), zero);
+        assert_eq!(constrained_mod_mul_pr(zero, &b, &m), zero);
+        assert_eq!(basic_mod_mul_pr(zero, b, m), zero);
+    }
 }

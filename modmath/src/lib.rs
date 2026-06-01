@@ -4,22 +4,40 @@
 
 //! Modular math implemented with traits.
 //!
-//! This crate provides modular arithmetic implemented not for
-//! any particular type, but for any type that implements minimal
-//! set of `core::ops::` and `num_traits::` traits.
+//! Provides modular arithmetic against any type implementing a minimal
+//! set of `core::ops::` and `num_traits::` traits — primitive integers
+//! or any bigint backend.
 //!
-//! All provided functions are simply free functions.
+//! Schoolbook surface lives in three bound-flavor modules:
 //!
-//! There are three verions of each: `basic` that has least amount
-//! of constraints, but requires `Copy` to be implemented for the type.
-//! `constrained` requires `Clone`.
-//! `strict` requires neither, but has most other constaints to be able to
-//! operate with references and [`Overflowing`](https://docs.rs/num-traits/latest/num_traits/ops/overflowing) arithmetic.
-
-//! Tested with builtin integers and [`num-bigint`](https://crates.io/crates/num-bigint), [`crypto-bigint`](https://crates.io/crates/crypto-bigint), [`bnum`](https://crates.io/crates/bnum), [`ibig`](https://crates.io/crates/ibig)
-//! and [`fixed-bigint`](https://crates.io/crates/fixed-bigint) crates. `basic` versions of functions
-//! wont work with `num-bigint` and `ibig` as both require heap
-//! allocation.
+//! - [`basic`] — requires `Copy`. Operands by value.
+//! - [`constrained`] — requires `Clone` instead. Mixed value / reference operands.
+//! - [`strict`] — reference-based throughout. [`Overflowing`] instead of
+//!   `Wrapping` arithmetic.
+//!
+//! Montgomery surface: [`Field`] / [`FieldCt`] / [`FieldNct`] are the
+//! high-level type with precomputed parameters and lifetime-branded
+//! [`Residue`] values. Each flavor's `montgomery` submodule has the
+//! free-function building blocks (`compute_params`, `to_mont`, `mul`,
+//! `mod_mul`, …); `<flavor>::montgomery::wide::*` exposes the wide-REDC
+//! primitives (`redc`, `mul`, plus `ct::*` siblings).
+//!
+//! Constant-time variants — branchless finalize via [`subtle`] — sit
+//! alongside their non-CT siblings ([`FieldCt`], `Field<T, Ct>`, `_ct`
+//! function suffixes, `<flavor>::montgomery::wide::ct::*`).
+//!
+//! Tested against built-in integers, [`num-bigint`], [`crypto-bigint`],
+//! [`bnum`], [`ibig`], and [`fixed-bigint`]. The `basic` flavor's `Copy`
+//! bound rules out heap-allocated backends (`num-bigint`, `ibig`); those
+//! use `constrained` or `strict`.
+//!
+//! [`Overflowing`]: https://docs.rs/num-traits/latest/num_traits/ops/overflowing
+//! [`subtle`]: https://crates.io/crates/subtle
+//! [`num-bigint`]: https://crates.io/crates/num-bigint
+//! [`crypto-bigint`]: https://crates.io/crates/crypto-bigint
+//! [`bnum`]: https://crates.io/crates/bnum
+//! [`ibig`]: https://crates.io/crates/ibig
+//! [`fixed-bigint`]: https://crates.io/crates/fixed-bigint
 
 mod add;
 mod exp;
@@ -28,65 +46,50 @@ mod parity;
 mod sub;
 mod wide_mul;
 
+#[cfg(feature = "wide-mul")]
+mod field;
 mod inv;
-mod montgomery;
+pub mod montgomery;
 
+// Bound-flavor module hubs. Pure re-exports of the existing per-flavor
+// schoolbook functions, renamed to drop the now-redundant `*_mod_` prefix
+// (we're already inside `modmath::basic` / etc.). Old crate-root names
+// (`basic_mod_add`, …) continue to work in parallel during the migration
+// window.
+pub mod basic;
+pub mod constrained;
+pub mod strict;
+
+#[cfg(feature = "wide-mul")]
+pub use field::{Field, FieldCt, FieldNct, Residue, ResidueCt, ResidueNct};
 pub use parity::Parity;
 pub use wide_mul::WideMul;
 
 #[cfg(feature = "nightly")]
 pub use add::const_mod_add;
-pub use add::{basic_mod_add, constrained_mod_add, strict_mod_add};
 #[cfg(feature = "nightly")]
 pub use exp::const_mod_exp;
-pub use exp::{basic_mod_exp, constrained_mod_exp, strict_mod_exp};
-pub use inv::{basic_mod_inv, constrained_mod_inv, strict_mod_inv};
+// `NPrimeMethod` is the algorithm selector for R>N `*_with_method`
+// computations. Used through `modmath::{basic,constrained,strict}::montgomery::
+// compute_params_with_method` and the `mod_{mul,exp}_with_method` siblings.
+//
+// Wide-REDC primitives and convenience wrappers stay at the crate root for
+// now (algorithm-only, flavor-neutral); a future reorg may group them under
+// `modmath::montgomery::wide::*`.
 #[rustfmt::skip]
 pub use montgomery::{
     NPrimeMethod,
-    basic_compute_montgomery_params,
-    basic_compute_montgomery_params_with_method,
-    basic_from_montgomery,
-    basic_montgomery_mod_exp,
-    basic_montgomery_mod_exp_with_method,
-    basic_montgomery_mod_mul,
-    basic_montgomery_mod_mul_with_method,
-    basic_montgomery_mul,
-    basic_to_montgomery,
-    wide_from_montgomery,
-    // Wide-REDC primitives for precomputed Montgomery contexts
     type_bit_width,
     compute_n_prime_newton,
     compute_r_mod_n,
     compute_r2_mod_n,
-    wide_redc,
-    wide_montgomery_mul,
-    constrained_compute_montgomery_params,
-    constrained_compute_montgomery_params_with_method,
-    constrained_from_montgomery,
-    constrained_montgomery_mod_exp,
-    constrained_montgomery_mod_exp_with_method,
-    constrained_montgomery_mod_mul,
-    constrained_montgomery_mod_mul_with_method,
-    constrained_montgomery_mul,
-    constrained_to_montgomery,
-    strict_compute_montgomery_params,
-    strict_compute_montgomery_params_with_method,
-    strict_from_montgomery,
-    strict_montgomery_mod_exp,
-    strict_montgomery_mod_exp_with_method,
-    strict_montgomery_mod_mul,
-    strict_montgomery_mod_mul_with_method,
-    strict_to_montgomery,
 };
 #[cfg(feature = "wide-mul")]
-pub use montgomery::{CiosMontMul, cios_montgomery_mul};
+pub use montgomery::{CiosMontMul, CiosMontMulCt};
 #[cfg(feature = "nightly")]
 pub use mul::const_mod_mul;
-pub use mul::{basic_mod_mul, constrained_mod_mul, strict_mod_mul};
 #[cfg(feature = "nightly")]
 pub use sub::const_mod_sub;
-pub use sub::{basic_mod_sub, constrained_mod_sub, strict_mod_sub};
 
 #[cfg(test)]
 #[macro_export]

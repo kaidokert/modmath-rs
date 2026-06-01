@@ -1,0 +1,982 @@
+//! `Field<T, P>` — Montgomery-form modular arithmetic context, parameterized
+//! over the limb personality (`P: Personality`).
+//!
+//! This module owns the *generic* Montgomery surface (`mul`, `exp`, `add`,
+//! `sub`, `reduce`, `into_raw`, `zero`, `one`); curve- or RSA-specific
+//! specializations (`lazy_add`, Fermat `inv`, Solinas reduction, etc.) live
+//! in consumer crates that wrap these types.
+//!
+//! ## Personality parameter
+//!
+//! `Field<T, P>` selects the *algorithm* at the modmath level (variable-
+//! time CIOS with branching finalize vs. CT CIOS with conditional-select
+//! finalize); the personality of `T` itself (e.g. `FixedUInt<W, N, Nct>`
+//! vs `FixedUInt<W, N, Ct>`) selects the *limb-primitive* bodies. In
+//! practice the two personalities co-vary at the construction site —
+//! you build `Field<FixedUInt<W, N, Nct>, Nct>` for verify paths and
+//! `Field<FixedUInt<W, N, Ct>, Ct>` for signing paths. Type aliases
+//! [`FieldCt`] / [`FieldNct`] (and the matching [`ResidueCt`] /
+//! [`ResidueNct`]) are the canonical per-personality spellings — they
+//! read naturally at the call site and sidestep the type-inference
+//! ambiguity that bare `Field::new(modulus)` hits when two `impl`
+//! blocks (Nct/Ct) are both method-resolution candidates.
+//!
+//! Because the Nct and Ct algorithms have **different trait bounds on `T`**
+//! (`T: CiosMontMul` for Nct vs `T: CiosMontMulCt + ConditionallySelectable`
+//! for Ct), the per-personality method bodies live in separate `impl`
+//! blocks rather than dispatching via `match P::TAG`. Only the bounds
+//! shared by both algorithms (precompute, `new`, `zero`, `one`, the
+//! residue brand) live in the common `impl<T, P: Personality>` block.
+//!
+//! ## Branding
+//!
+//! Each `Field<T, P>` instance is implicitly tagged by its borrow lifetime
+//! `'f`, and the residues it produces carry that same brand plus the
+//! personality parameter:
+//!
+//! ```ignore
+//! let field = Field::new(modulus).unwrap();
+//! let r: Residue<'_, U256, Nct> = field.reduce(&seven);
+//! ```
+//!
+//! The borrow checker prevents a `Residue` from outliving its parent
+//! `Field`, and the `P` parameter prevents an Nct residue from being fed
+//! to a Ct method (and vice versa) at compile time. Covariance does not
+//! prevent mixing residues from two `Field` instances built in the same
+//! scope with the same `P` — a known limitation matched by ed25519's
+//! `field.rs`. A generative brand
+//! (`PhantomData<fn(&'f ()) -> &'f ()>` + closure) would close that gap
+//! when a future consumer needs it.
+
+use core::marker::PhantomData;
+
+use fixed_bigint::{Ct, Nct, Personality};
+
+use crate::montgomery::basic_mont::{
+    wide_montgomery_mul, wide_montgomery_mul_ct, wide_redc, wide_redc_ct,
+};
+use crate::montgomery::{
+    CiosMontMul, CiosMontMulCt, compute_n_prime_newton, compute_r_mod_n, compute_r2_mod_n,
+    type_bit_width,
+};
+use crate::parity::Parity;
+use crate::wide_mul::WideMul;
+
+// ---------------------------------------------------------------------------
+// Field<T, P>
+// ---------------------------------------------------------------------------
+
+/// Montgomery context over modulus `T`, with algorithm choice driven by
+/// the personality marker `P` (defaults to [`Nct`] = variable-time fast
+/// path).
+///
+/// Use `Field<T, Nct>` for operations on **public** data only — signature
+/// verification, RSA public-key encryption, anything whose inputs are not
+/// secret. Use `Field<T, Ct>` (also reachable via the [`FieldCt`] type
+/// alias) for secret-handling paths.
+///
+/// `Clone` is a trivial 4×`T` memcpy — it does NOT re-run the
+/// `compute_r_mod_n` / `compute_r2_mod_n` precompute that `new()` does.
+/// Callers building a `Field` once per key and then reusing it (e.g.
+/// RSA-CRT) should clone the prebuilt instance rather than calling
+/// `new()` again with the same modulus.
+#[derive(Clone, Debug)]
+pub struct Field<T, P: Personality = Nct> {
+    modulus: T,
+    n_prime: T,
+    r_mod_n: T,
+    r2_mod_n: T,
+    _p: PhantomData<fn() -> P>,
+}
+
+/// Alias for the Nct variant of [`Field`]. Equivalent to `Field<T, Nct>`
+/// (matches the default personality). Provided for symmetry with
+/// [`FieldCt`] and to side-step the construction-site type-ambiguity
+/// pitfall — `FieldNct::new(modulus)` resolves unambiguously without
+/// the type-annotation/turbofish friction of `Field::new(modulus)`.
+pub type FieldNct<T> = Field<T, Nct>;
+
+/// Alias for the Ct variant of [`Field`]. Equivalent to `Field<T, Ct>`.
+/// Reads naturally at construction sites and sidesteps the type-inference
+/// ambiguity that bare `Field::new(modulus)` hits — `FieldCt::new(modulus)`
+/// resolves unambiguously because the alias fixes `P = Ct` at the type
+/// level. Symmetric with [`FieldNct`].
+pub type FieldCt<T> = Field<T, Ct>;
+
+/// A value in `Field<T, P>`, stored implicitly in Montgomery form.
+///
+/// The `'f` lifetime brand ties this residue to its parent `Field`; the
+/// `P` parameter ties it to the parent's algorithm personality. The
+/// borrow checker rejects code that uses a residue after its `Field` is
+/// dropped, or that mixes residues across personalities. See module docs
+/// for the covariance caveat.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Residue<'f, T, P: Personality = Nct> {
+    mont: T,
+    _brand: PhantomData<&'f ()>,
+    _p: PhantomData<fn() -> P>,
+}
+
+/// Alias for the Nct variant of [`Residue`]. Equivalent to
+/// `Residue<'f, T, Nct>`. Symmetric with [`ResidueCt`].
+pub type ResidueNct<'f, T> = Residue<'f, T, Nct>;
+
+/// Alias for the Ct variant of [`Residue`]. Equivalent to
+/// `Residue<'f, T, Ct>`. Symmetric with [`ResidueNct`].
+pub type ResidueCt<'f, T> = Residue<'f, T, Ct>;
+
+// ---------------------------------------------------------------------------
+// Shared impls (any P)
+// ---------------------------------------------------------------------------
+
+impl<T: Copy, P: Personality> Residue<'_, T, P> {
+    /// Returns the underlying Montgomery-form value.
+    ///
+    /// **Escape hatch.** Intended for downstream specialization layers
+    /// (e.g. `Curve25519Field`) that implement fast paths reading the raw
+    /// limbs. General consumers should not call this — use the methods on
+    /// [`Field`] instead.
+    pub fn mont_value(self) -> T {
+        self.mont
+    }
+}
+
+impl<T, P: Personality> Field<T, P> {
+    /// Construct a `Field` directly from already-computed Montgomery
+    /// parameters. **`const fn` — usable in const initializers.**
+    ///
+    /// Intended for callers whose modulus is statically known at compile
+    /// time (curve constants, PQC parameters, RSA group constants for a
+    /// fixed key, etc.) and who want to expose the Field as a `const`
+    /// associated item or static, rather than paying the runtime
+    /// [`new`](Self::new) precompute on each instantiation.
+    ///
+    /// **The caller is responsible for the correctness of `n_prime`,
+    /// `r_mod_n`, and `r2_mod_n`** — see [`compute_n_prime_newton`],
+    /// [`compute_r_mod_n`], and [`compute_r2_mod_n`] for the algorithms.
+    /// Those helpers are not `const fn` today (their bodies use trait
+    /// method calls on `T`), so const-initializer callers must either
+    /// hand-compute the values, use a build script, or — for primitive
+    /// integers — compute them in a non-const context once at startup
+    /// and cache.
+    ///
+    /// No invariant checking is performed here. Passing inconsistent
+    /// parameters produces a `Field` whose arithmetic methods return
+    /// silently incorrect results.
+    ///
+    /// [`compute_n_prime_newton`]: crate::compute_n_prime_newton
+    /// [`compute_r_mod_n`]: crate::compute_r_mod_n
+    /// [`compute_r2_mod_n`]: crate::compute_r2_mod_n
+    pub const fn from_precomputed(modulus: T, n_prime: T, r_mod_n: T, r2_mod_n: T) -> Self {
+        Self {
+            modulus,
+            n_prime,
+            r_mod_n,
+            r2_mod_n,
+            _p: PhantomData,
+        }
+    }
+}
+
+impl<T, P: Personality> Field<T, P>
+where
+    T: Copy
+        + PartialEq
+        + PartialOrd
+        + num_traits::Zero
+        + num_traits::One
+        + num_traits::WrappingMul
+        + num_traits::WrappingAdd
+        + num_traits::WrappingSub
+        + num_traits::ops::overflowing::OverflowingAdd
+        + Parity,
+{
+    /// Construct a new `Field` over the given (odd, nonzero) `modulus`.
+    ///
+    /// Returns `None` if `modulus` is zero or even (Montgomery requires odd N).
+    /// The precompute (`compute_r_mod_n` / `compute_r2_mod_n`) is
+    /// personality-agnostic — only depends on common modular arithmetic.
+    pub fn new(modulus: T) -> Option<Self> {
+        if modulus == T::zero() || modulus.is_even() {
+            return None;
+        }
+        let w = type_bit_width::<T>();
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r_mod_n = compute_r_mod_n(modulus, w);
+        let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
+        Some(Self {
+            modulus,
+            n_prime,
+            r_mod_n,
+            r2_mod_n,
+            _p: PhantomData,
+        })
+    }
+
+    /// Returns the modulus by reference.
+    ///
+    /// Returning `&T` rather than `T` avoids a memcpy of the full modulus
+    /// (~256 bytes for 2048-bit FixedUInt) at the call site. Consumers that
+    /// need a `T` by value can copy at the use point.
+    pub fn modulus(&self) -> &T {
+        &self.modulus
+    }
+
+    /// The additive identity (0 in Montgomery form is 0).
+    pub fn zero(&self) -> Residue<'_, T, P> {
+        Residue {
+            mont: T::zero(),
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// The multiplicative identity (1 in Montgomery form is `R mod N`).
+    pub fn one(&self) -> Residue<'_, T, P> {
+        Residue {
+            mont: self.r_mod_n,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Reconstruct a [`Residue`] from a raw value already in Montgomery form.
+    ///
+    /// **Escape hatch.** Intended for downstream specialization layers that
+    /// persist or compute Montgomery-form values outside this module and
+    /// need to re-attach the brand. The caller must guarantee `mont` is in
+    /// `[0, modulus)` and represents some value `x` such that
+    /// `mont == x * R mod modulus`.
+    pub fn residue_from_mont(&self, mont: T) -> Residue<'_, T, P> {
+        Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Nct-only impls — variable-time CIOS with branching finalize
+// ---------------------------------------------------------------------------
+
+impl<T> Field<T, Nct>
+where
+    T: Copy
+        + PartialEq
+        + PartialOrd
+        + num_traits::Zero
+        + num_traits::One
+        + num_traits::WrappingMul
+        + num_traits::WrappingAdd
+        + num_traits::WrappingSub
+        + num_traits::ops::overflowing::OverflowingAdd
+        + Parity,
+{
+    /// Convert a raw value `< modulus` (or arbitrary value, which is then
+    /// reduced) to Montgomery form. Returns a brand-tagged [`Residue`].
+    pub fn reduce(&self, raw: &T) -> Residue<'_, T, Nct>
+    where
+        T: WideMul,
+    {
+        let mont = wide_montgomery_mul(*raw, self.r2_mod_n, self.modulus, self.n_prime);
+        Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Convert a [`Residue`] back to its raw `T` representative in `[0, modulus)`.
+    #[allow(clippy::wrong_self_convention)]
+    pub fn into_raw(&self, r: &Residue<'_, T, Nct>) -> T
+    where
+        T: WideMul,
+    {
+        wide_redc(r.mont, T::zero(), self.modulus, self.n_prime)
+    }
+
+    /// Modular addition: `(a + b) mod modulus`.
+    ///
+    /// **The conditional-subtract here is non-negotiable.** Future consumers
+    /// with a modulus narrower than `T::BITS` may be tempted to skip the
+    /// `wrapping_add` + cond-sub path (since `2 * modulus < 2^T::BITS` for
+    /// them, the wraparound never fires). That's a correct optimization, but
+    /// it belongs in a specialization layer (e.g. `Curve25519Field` in the
+    /// ed25519 crate), not in `modmath::Field`. Patches removing the
+    /// wrapping path will break RSA-CRT (full-width modulus, no slack) and
+    /// any other consumer at full type width; ed25519 has slack and uses its
+    /// own lazy variant in `Curve25519Field`.
+    pub fn add(&self, a: &Residue<'_, T, Nct>, b: &Residue<'_, T, Nct>) -> Residue<'_, T, Nct> {
+        let mont = crate::add::basic_mod_add_pr(a.mont, b.mont, self.modulus);
+        Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Modular subtraction: `(a - b) mod modulus`.
+    ///
+    /// Same load-bearing contract as [`add`](Self::add) — the borrow-detect
+    /// branch is required at full type width.
+    pub fn sub(&self, a: &Residue<'_, T, Nct>, b: &Residue<'_, T, Nct>) -> Residue<'_, T, Nct> {
+        let mont = crate::sub::basic_mod_sub_pr(a.mont, b.mont, self.modulus);
+        Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Modular multiplication via CIOS Montgomery multiplication.
+    ///
+    /// CIOS interleaves multiplication and reduction in one pass (~2N² + N
+    /// limb mults vs ~3N² for separate wide-mul + REDC), which dominates the
+    /// inner-loop cost on constrained cores. The functional output is
+    /// identical to `wide_montgomery_mul`.
+    ///
+    /// Marked `#[inline]` deliberately: this is the documented inner-loop
+    /// wrapper for Montgomery exponentiation, the body is a single trait
+    /// method call, and skipping it across crate boundaries costs ~250
+    /// cycles per call under `opt-level="z"` on Cortex-M. Not blanket cargo
+    /// culting — surgical on the actual hot path.
+    #[inline]
+    pub fn mul(&self, a: &Residue<'_, T, Nct>, b: &Residue<'_, T, Nct>) -> Residue<'_, T, Nct>
+    where
+        T: CiosMontMul,
+    {
+        let mont = CiosMontMul::cios_mont_mul(&a.mont, &b.mont, &self.modulus, &self.n_prime)
+            .expect("CIOS mul cannot fail with valid Montgomery parameters");
+        Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Modular exponentiation via square-and-multiply.
+    ///
+    /// `base` is taken as a [`Residue`] (already in Montgomery form); `exp`
+    /// is a raw `T`. The result is a [`Residue`] in Montgomery form.
+    ///
+    /// **Variable-time in `exp`.** The loop iterates `bit_length(exp)` times
+    /// and branches on each bit. Do not call with a secret `exp` — use the
+    /// Ct-variant `Field<T, Ct>::exp` instead.
+    pub fn exp(&self, base: &Residue<'_, T, Nct>, exp: &T) -> Residue<'_, T, Nct>
+    where
+        T: CiosMontMul + core::ops::ShrAssign<usize>,
+    {
+        let mut result = self.r_mod_n;
+        let mut base_var = base.mont;
+        let mut exp_val = *exp;
+        while exp_val > T::zero() {
+            if exp_val.is_odd() {
+                result =
+                    CiosMontMul::cios_mont_mul(&result, &base_var, &self.modulus, &self.n_prime)
+                        .expect("CIOS mul cannot fail with valid Montgomery parameters");
+            }
+            exp_val >>= 1;
+            if exp_val > T::zero() {
+                base_var =
+                    CiosMontMul::cios_mont_mul(&base_var, &base_var, &self.modulus, &self.n_prime)
+                        .expect("CIOS mul cannot fail with valid Montgomery parameters");
+            }
+        }
+        Residue {
+            mont: result,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Ct-only impls — CT CIOS with conditional-select finalize
+// ---------------------------------------------------------------------------
+
+impl<'f, T> Residue<'f, T, Ct>
+where
+    T: subtle::ConditionallySelectable,
+{
+    /// Conditionally swap two residues in constant time.
+    ///
+    /// If `choice` is set, `a` and `b` exchange Montgomery-form values;
+    /// otherwise both are left unchanged. The operation is branchless.
+    ///
+    /// This is the primitive used by Montgomery ladders (x25519 scalar
+    /// multiplication, RSA blinded exponentiation). It is the **only**
+    /// residue swap that should appear in such a ladder; `std::mem::swap`
+    /// is not guaranteed to be branchless.
+    pub fn cswap(choice: subtle::Choice, a: &mut Self, b: &mut Self) {
+        T::conditional_swap(&mut a.mont, &mut b.mont, choice);
+    }
+}
+
+impl<T> Field<T, Ct>
+where
+    T: Copy
+        + PartialEq
+        + PartialOrd
+        + num_traits::Zero
+        + num_traits::One
+        + num_traits::WrappingMul
+        + num_traits::WrappingAdd
+        + num_traits::WrappingSub
+        + num_traits::ops::overflowing::OverflowingAdd
+        + Parity,
+{
+    /// Convert a raw value to Montgomery form. Constant-time finalize.
+    pub fn reduce(&self, raw: &T) -> Residue<'_, T, Ct>
+    where
+        T: WideMul + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+    {
+        let mont = wide_montgomery_mul_ct(*raw, self.r2_mod_n, self.modulus, self.n_prime);
+        Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Convert a [`Residue`] back to raw form. Constant-time finalize.
+    #[allow(clippy::wrong_self_convention)]
+    pub fn into_raw(&self, r: &Residue<'_, T, Ct>) -> T
+    where
+        T: WideMul + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+    {
+        wide_redc_ct(r.mont, T::zero(), self.modulus, self.n_prime)
+    }
+
+    /// Modular addition — constant-time finalize.
+    ///
+    /// See `Field<T, Nct>::add` for the load-bearing comment about why the
+    /// wrapping cond-sub path is non-negotiable.
+    pub fn add(&self, a: &Residue<'_, T, Ct>, b: &Residue<'_, T, Ct>) -> Residue<'_, T, Ct>
+    where
+        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+    {
+        let sum = a.mont.wrapping_add(&b.mont);
+        let sub = sum.wrapping_sub(&self.modulus);
+        // Carry from wrapping: sum < a means wraparound occurred.
+        let carry = sum.ct_lt(&a.mont);
+        // Result >= modulus when !(sum < modulus).
+        let ge_m = !sum.ct_lt(&self.modulus);
+        let needs_sub = carry | ge_m;
+        let mont = T::conditional_select(&sum, &sub, needs_sub);
+        Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Modular subtraction — constant-time finalize.
+    ///
+    /// Same contract as `Field<T, Nct>::sub`.
+    pub fn sub(&self, a: &Residue<'_, T, Ct>, b: &Residue<'_, T, Ct>) -> Residue<'_, T, Ct>
+    where
+        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+    {
+        let diff = a.mont.wrapping_sub(&b.mont);
+        let corrected = diff.wrapping_add(&self.modulus);
+        // borrow == (a < b)
+        let borrow = a.mont.ct_lt(&b.mont);
+        let mont = T::conditional_select(&diff, &corrected, borrow);
+        Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Modular multiplication via CIOS — constant-time finalize.
+    ///
+    /// See `Field<T, Nct>::mul` for the rationale on CIOS vs. wide-REDC and
+    /// the `#[inline]` justification.
+    #[inline]
+    pub fn mul(&self, a: &Residue<'_, T, Ct>, b: &Residue<'_, T, Ct>) -> Residue<'_, T, Ct>
+    where
+        T: CiosMontMulCt,
+    {
+        let mont = CiosMontMulCt::cios_mont_mul_ct(&a.mont, &b.mont, &self.modulus, &self.n_prime)
+            .expect("CIOS-CT mul cannot fail with valid Montgomery parameters");
+        Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Modular exponentiation — constant-time over `exp`.
+    ///
+    /// Implements a fixed-iteration Montgomery ladder over all
+    /// `bit_length(T)` bits of the exponent. Both square and multiply are
+    /// performed every iteration; the result is selected branchlessly. Loop
+    /// count does not depend on `exp`; per-iteration timing does not depend
+    /// on the bit pattern.
+    pub fn exp(&self, base: &Residue<'_, T, Ct>, exp: &T) -> Residue<'_, T, Ct>
+    where
+        T: CiosMontMulCt
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeEq
+            + core::ops::Shr<usize, Output = T>
+            + core::ops::BitAnd<Output = T>,
+    {
+        let w = type_bit_width::<T>();
+        let one = T::one();
+        let mut result = self.r_mod_n;
+
+        for i in (0..w).rev() {
+            // Always square.
+            result =
+                CiosMontMulCt::cios_mont_mul_ct(&result, &result, &self.modulus, &self.n_prime)
+                    .expect("CIOS-CT mul cannot fail with valid Montgomery parameters");
+            // Always compute the conditional product.
+            let multiplied =
+                CiosMontMulCt::cios_mont_mul_ct(&result, &base.mont, &self.modulus, &self.n_prime)
+                    .expect("CIOS-CT mul cannot fail with valid Montgomery parameters");
+            // Select based on bit i of exp.
+            let bit_t = (*exp >> i) & one;
+            let choice = bit_t.ct_eq(&one);
+            result = T::conditional_select(&result, &multiplied, choice);
+        }
+        Residue {
+            mont: result,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Modular exponentiation — constant-time over the base, **variable-time
+    /// over the exponent**. Use when the exponent is public.
+    ///
+    /// This is the right primitive for several common cryptographic shapes:
+    ///
+    /// - **RSA encrypt / verify** — `m^e mod n` with the secret message `m`
+    ///   and the public exponent `e` (typically 65537). Saves `bit_length(T)
+    ///   - bit_length(e)` squarings vs. the fixed-iteration ladder, which is
+    ///   ~2031 squarings at 2048-bit modulus when `e = 65537`.
+    /// - **Curve25519 Fermat inverse** — `a^(p-2) mod p` where `p - 2` is the
+    ///   curve constant `2^255 - 21`. The exponent is public; the base is
+    ///   the secret intermediate `Z`. Skip-on-zero square-and-multiply
+    ///   matches the ~252-of-255 bits set without spending the per-bit
+    ///   `conditional_select` cost of the fixed-iteration ladder.
+    /// - **Curve25519 square root** — `a^((p+3)/8) mod p`, same shape.
+    ///
+    /// The squarings and multiplications themselves go through CT primitives
+    /// ([`cios_montgomery_mul_ct`](crate::montgomery::cios::cios_montgomery_mul_ct)),
+    /// so the
+    /// base and intermediate Montgomery values do not leak through timing.
+    /// What DOES leak is the bit pattern of `exp` — which is fine by
+    /// construction: the caller asserts the exponent is public.
+    ///
+    /// **Do not call with a secret exponent.** Use [`exp`](Self::exp)
+    /// instead, which is a fixed-iteration Montgomery ladder.
+    pub fn exp_public_exp(&self, base: &Residue<'_, T, Ct>, exp: &T) -> Residue<'_, T, Ct>
+    where
+        T: CiosMontMulCt + core::ops::Shr<usize, Output = T> + core::ops::BitAnd<Output = T>,
+    {
+        let w = type_bit_width::<T>();
+        let one = T::one();
+        let zero = T::zero();
+
+        // Find the position of the highest set bit (1-indexed: hi == top + 1).
+        // This loop and the rest of the function leak `bit_length(exp)`,
+        // which is the documented contract — `exp` is public.
+        let mut hi = w;
+        while hi > 0 {
+            if (*exp >> (hi - 1)) & one != zero {
+                break;
+            }
+            hi -= 1;
+        }
+
+        if hi == 0 {
+            // exp == 0: return 1 in Montgomery form.
+            return Residue {
+                mont: self.r_mod_n,
+                _brand: PhantomData,
+                _p: PhantomData,
+            };
+        }
+
+        // The top bit is set, so result starts at `base` (base^1 contribution
+        // for the 2^(hi-1) term). Then iterate over the remaining bits.
+        let mut result = base.mont;
+        for i in (0..hi - 1).rev() {
+            // Square.
+            result =
+                CiosMontMulCt::cios_mont_mul_ct(&result, &result, &self.modulus, &self.n_prime)
+                    .expect("CIOS-CT mul cannot fail with valid Montgomery parameters");
+            // Multiply only when the bit is set — branch on a public value.
+            if (*exp >> i) & one != zero {
+                result = CiosMontMulCt::cios_mont_mul_ct(
+                    &result,
+                    &base.mont,
+                    &self.modulus,
+                    &self.n_prime,
+                )
+                .expect("CIOS-CT mul cannot fail with valid Montgomery parameters");
+            }
+        }
+
+        Residue {
+            mont: result,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NCT -> CT bridge (no generic `From` impl)
+// ---------------------------------------------------------------------------
+//
+// Under fixed-bigint's personality typestate, the bridge from a
+// `Field<T, Nct>` to a `Field<T, Ct>` over the same modulus value is not
+// a single type-level conversion — `T` itself has to cross personalities.
+// A `Field<TNct, Nct>` is only useful when `TNct` resolves to an Nct-typed
+// FixedUInt (so `MulAccOps::GetWordOutput = Option<...>` and
+// `CiosMontMul` resolves); a `Field<TCt, Ct>` is only useful when `TCt`
+// resolves to a Ct-typed FixedUInt (so `ConditionallySelectable` resolves).
+// Nct and Ct are distinct types, so a generic `From<Field<T, Nct>> for
+// Field<T, Ct>` over a single `T` lands you in a methodless variant on one
+// side or the other (the bounds in the per-P impl blocks don't resolve).
+//
+// The actual bridge pattern is:
+//
+// ```ignore
+// let f = Field::new(modulus_nct).unwrap();             // Field<TNct, Nct>
+// let modulus_ct: U256Ct = (*f.modulus()).into();       // free Nct -> Ct
+// let fc = Field::<_, Ct>::new(modulus_ct).unwrap();    // recompute params
+// // (or use the FieldCt alias: FieldCt::new(modulus_ct))
+// ```
+//
+// The recompute cost is the ~2·bit_length(T) modular doublings of
+// `compute_r_mod_n` + `compute_r2_mod_n` — ~10–15µs at 2048-bit on M3.
+// For long-lived keys (RSA-CRT) this is amortized; for ed25519 verify
+// it's noise. Consumers wanting a zero-cost personality bridge can
+// implement a type-specific bridge in their wrapper (see ed25519's
+// `Curve25519Field`).
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fixed_bigint::FixedUInt;
+
+    // Field<T, P> requires the right combination of T-bounds for the chosen
+    // P (CiosMontMul for Nct, CiosMontMulCt for Ct), which in practice means
+    // T must be a FixedUInt of the matching personality. Small tests use
+    // FixedUInt<u8, 2> aliases for tight ranges; larger tests use the U128
+    // family. Cross-personality tests bridge values via `.into()` (Nct → Ct)
+    // and `.forget_ct()` (explicit Ct → Nct).
+    type U16 = FixedUInt<u8, 2>;
+    type U16Ct = FixedUInt<u8, 2, Ct>;
+    type U128Ct = FixedUInt<u32, 4, Ct>;
+
+    fn u16(n: u16) -> U16 {
+        U16::from(n)
+    }
+
+    fn u16ct(n: u16) -> U16Ct {
+        U16Ct::from(n)
+    }
+
+    #[test]
+    fn round_trip_small() {
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        for raw in 0u16..13 {
+            let r = f.reduce(&u16(raw));
+            assert_eq!(f.into_raw(&r), u16(raw), "round trip failed for {raw}");
+        }
+    }
+
+    #[test]
+    fn add_sub_mul_small() {
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        for a_raw in 0u16..13 {
+            for b_raw in 0u16..13 {
+                let a = f.reduce(&u16(a_raw));
+                let b = f.reduce(&u16(b_raw));
+                assert_eq!(f.into_raw(&f.add(&a, &b)), u16((a_raw + b_raw) % 13));
+                assert_eq!(
+                    f.into_raw(&f.sub(&a, &b)),
+                    u16((a_raw + 13 - b_raw) % 13),
+                    "sub failed for {a_raw}, {b_raw}"
+                );
+                assert_eq!(f.into_raw(&f.mul(&a, &b)), u16((a_raw * b_raw) % 13));
+            }
+        }
+    }
+
+    #[test]
+    fn zero_one_identity_small() {
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        let z = f.zero();
+        let o = f.one();
+        assert_eq!(f.into_raw(&z), u16(0));
+        assert_eq!(f.into_raw(&o), u16(1));
+        // a + 0 = a, a * 1 = a
+        for raw in 0u16..13 {
+            let a = f.reduce(&u16(raw));
+            assert_eq!(f.into_raw(&f.add(&a, &z)), u16(raw));
+            assert_eq!(f.into_raw(&f.mul(&a, &o)), u16(raw));
+        }
+    }
+
+    #[test]
+    fn exp_small() {
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        // 7^5 mod 13 = 11
+        let base = f.reduce(&u16(7));
+        let result = f.exp(&base, &u16(5));
+        assert_eq!(f.into_raw(&result), u16(11));
+        // x^0 = 1
+        let r0 = f.exp(&base, &u16(0));
+        assert_eq!(f.into_raw(&r0), u16(1));
+    }
+
+    #[test]
+    fn ct_round_trip_small() {
+        let f = FieldCt::new(u16ct(13)).unwrap();
+        for raw in 0u16..13 {
+            let r = f.reduce(&u16ct(raw));
+            assert_eq!(f.into_raw(&r), u16ct(raw));
+        }
+    }
+
+    #[test]
+    fn ct_matches_nct_small() {
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        let fc = FieldCt::new(u16ct(13)).unwrap();
+        for a_raw in 0u16..13 {
+            for b_raw in 0u16..13 {
+                let a = f.reduce(&u16(a_raw));
+                let b = f.reduce(&u16(b_raw));
+                let ac = fc.reduce(&u16ct(a_raw));
+                let bc = fc.reduce(&u16ct(b_raw));
+
+                assert_eq!(
+                    f.into_raw(&f.add(&a, &b)),
+                    fc.into_raw(&fc.add(&ac, &bc)).forget_ct()
+                );
+                assert_eq!(
+                    f.into_raw(&f.sub(&a, &b)),
+                    fc.into_raw(&fc.sub(&ac, &bc)).forget_ct()
+                );
+                assert_eq!(
+                    f.into_raw(&f.mul(&a, &b)),
+                    fc.into_raw(&fc.mul(&ac, &bc)).forget_ct()
+                );
+            }
+        }
+        // exp cross-check
+        let base = f.reduce(&u16(7));
+        let base_ct = fc.reduce(&u16ct(7));
+        for e in 0u16..20 {
+            assert_eq!(
+                f.into_raw(&f.exp(&base, &u16(e))),
+                fc.into_raw(&fc.exp(&base_ct, &u16ct(e))).forget_ct()
+            );
+        }
+    }
+
+    #[test]
+    fn ct_cswap_small() {
+        use subtle::Choice;
+        let f = FieldCt::new(u16ct(13)).unwrap();
+        let mut a = f.reduce(&u16ct(3));
+        let mut b = f.reduce(&u16ct(7));
+        // choice = 0: no swap
+        ResidueCt::cswap(Choice::from(0), &mut a, &mut b);
+        assert_eq!(f.into_raw(&a), u16ct(3));
+        assert_eq!(f.into_raw(&b), u16ct(7));
+        // choice = 1: swap
+        ResidueCt::cswap(Choice::from(1), &mut a, &mut b);
+        assert_eq!(f.into_raw(&a), u16ct(7));
+        assert_eq!(f.into_raw(&b), u16ct(3));
+    }
+
+    /// Under personality, the safe NCT → CT bridge requires converting the
+    /// underlying T's personality (free `.into()` from fixed-bigint), then
+    /// constructing a fresh `Field<_, Ct>` on the Ct-typed modulus. Same-T
+    /// `Field<T, Nct> -> Field<T, Ct>` conversion is degenerate (the per-P
+    /// impl blocks have disjoint trait bounds, so the result is a methodless
+    /// variant); this test documents the actual bridge pattern.
+    #[test]
+    fn nct_to_ct_upgrade_small() {
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        let modulus_ct: U16Ct = (*f.modulus()).into();
+        let fc = FieldCt::new(modulus_ct).unwrap();
+        let a = fc.reduce(&u16ct(7));
+        let b = fc.reduce(&u16ct(5));
+        assert_eq!(fc.into_raw(&fc.mul(&a, &b)), u16ct(9)); // 35 mod 13 = 9
+    }
+
+    #[test]
+    fn exp_public_exp_matches_ct_exp_small() {
+        // For every (base, exp) pair, exp_public_exp must produce the same
+        // result as the fixed-iteration ladder exp.
+        let f = FieldCt::new(u16ct(13)).unwrap();
+        let base = f.reduce(&u16ct(7));
+        for e in 0u16..32 {
+            let via_ladder = f.exp(&base, &u16ct(e));
+            let via_pub = f.exp_public_exp(&base, &u16ct(e));
+            assert_eq!(
+                f.into_raw(&via_ladder),
+                f.into_raw(&via_pub),
+                "exp_public_exp mismatch at e={e}"
+            );
+        }
+    }
+
+    #[test]
+    fn exp_public_exp_matches_ct_exp_u128() {
+        // Same cross-check at FixedUInt<u32, 4> sizes against a few
+        // characteristic exponents: 0, 1, small, a value with both low and
+        // high set bits.
+        let modulus = !U128Ct::from(0u64) - U128Ct::from(58u64);
+        let f = FieldCt::new(modulus).unwrap();
+        let base = f.reduce(&U128Ct::from(0xDEAD_BEEF_u64));
+        let exps = [
+            U128Ct::from(0u64),
+            U128Ct::from(1u64),
+            U128Ct::from(7u64),
+            U128Ct::from(65537u64), // RSA-style public exponent
+            U128Ct::from(0xCAFE_BABEu64),
+        ];
+        for e in &exps {
+            let via_ladder = f.exp(&base, e);
+            let via_pub = f.exp_public_exp(&base, e);
+            assert_eq!(
+                f.into_raw(&via_ladder),
+                f.into_raw(&via_pub),
+                "exp_public_exp mismatch at e={e:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn brand_round_trip_fixed_bigint_u128() {
+        // A larger odd modulus.
+        let modulus = !U128Ct::from(0u64) - U128Ct::from(58u64);
+        let f = FieldCt::new(modulus).unwrap();
+        let raw = U128Ct::from(0xDEAD_BEEF_u64);
+        let r = f.reduce(&raw);
+        assert_eq!(f.into_raw(&r), raw);
+    }
+
+    #[test]
+    fn residue_from_mont_escape_hatch_small() {
+        // Round-trip via the escape hatch: reduce -> mont_value -> residue_from_mont.
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        for raw in 0u16..13 {
+            let r = f.reduce(&u16(raw));
+            let mont = r.mont_value();
+            let r2 = f.residue_from_mont(mont);
+            assert_eq!(f.into_raw(&r2), u16(raw));
+        }
+    }
+
+    /// Documented limitation: covariance allows mixing residues across two
+    /// distinct Field instances built in the same scope. Asserts current
+    /// behavior (the compiler does NOT reject this) so a future generative
+    /// brand can be observed as a hardening change.
+    #[test]
+    fn covariance_mixes_residues_documented_limitation() {
+        let f1: Field<U16> = Field::new(u16(13)).unwrap();
+        let f2: Field<U16> = Field::new(u16(13)).unwrap();
+        let r1 = f1.reduce(&u16(5));
+        // f2 accepting r1 compiles today. This is a documented limitation; a
+        // generative brand would make this a type error.
+        let _ = f2.into_raw(&r1);
+    }
+
+    /// Personality demonstration: the same `Field` type signature
+    /// parameterized differently (`<_, Nct>` vs `<_, Ct>`) computes the
+    /// same modular arithmetic, with the personality choice driving which
+    /// algorithm (variable-time branch vs CT conditional-select finalize)
+    /// the compiler routes to via the per-P impl blocks.
+    ///
+    /// Also exercises the residue type discipline: a `Residue<_, _, Nct>`
+    /// passed to a `Field<_, Ct>` method would be a compile error
+    /// (different `P` parameter), and vice versa. Cross-personality
+    /// comparison goes through `.forget_ct()` rather than a same-type
+    /// `assert_eq!`.
+    #[test]
+    fn field_p_personality_cross_check_small() {
+        // Same modulus value, two personalities.
+        let m_nct = u16(13);
+        let m_ct: U16Ct = m_nct.into();
+
+        let f_nct: Field<U16, Nct> = Field::new(m_nct).unwrap();
+        let f_ct: Field<U16Ct, Ct> = Field::new(m_ct).unwrap();
+
+        // Pick a non-trivial product and exponentiation.
+        let a_nct = f_nct.reduce(&u16(7));
+        let b_nct = f_nct.reduce(&u16(5));
+        let a_ct = f_ct.reduce(&u16ct(7));
+        let b_ct = f_ct.reduce(&u16ct(5));
+
+        // Multiplication agrees across personalities.
+        let mul_nct = f_nct.into_raw(&f_nct.mul(&a_nct, &b_nct));
+        let mul_ct = f_ct.into_raw(&f_ct.mul(&a_ct, &b_ct));
+        assert_eq!(mul_nct, mul_ct.forget_ct());
+
+        // Exponentiation agrees (with different algorithms underneath:
+        // f_nct.exp is variable-time square-and-multiply, f_ct.exp is
+        // fixed-iteration ladder).
+        let exp_nct = f_nct.into_raw(&f_nct.exp(&a_nct, &u16(11)));
+        let exp_ct = f_ct.into_raw(&f_ct.exp(&a_ct, &u16ct(11)));
+        assert_eq!(exp_nct, exp_ct.forget_ct());
+    }
+
+    /// The `FieldNct<T>` alias side-steps the construction-site type-
+    /// ambiguity that bare `Field::new(modulus)` hits — no type annotation
+    /// or turbofish required, because the alias fixes `P = Nct` at the
+    /// type level (mirroring how `FieldCt::new` fixes `P = Ct`).
+    ///
+    /// Symmetric `ResidueNct` alias also exists for downstream consumers
+    /// who want symmetric naming. Used here just for the type spelling.
+    #[test]
+    fn field_nct_alias_resolves_without_annotation() {
+        let f = FieldNct::new(u16(13)).unwrap();
+        let r: ResidueNct<'_, U16> = f.reduce(&u16(7));
+        assert_eq!(f.into_raw(&r), u16(7));
+        let two = f.reduce(&u16(2));
+        assert_eq!(f.into_raw(&f.mul(&r, &two)), u16(14 % 13));
+    }
+
+    /// `from_precomputed` is `const fn` and usable in a const initializer.
+    /// This is the constructor static-modulus consumers (PQC, embedded RSA
+    /// with a baked key, etc.) reach for when they want to expose a `Field`
+    /// as a `const` associated item rather than paying the runtime
+    /// `Field::new` precompute.
+    ///
+    /// Demonstrated here over `u32` (primitive) — `Field<u32, Nct>` is
+    /// methodless because `u32` doesn't impl `CiosMontMul` (MulAccOps is
+    /// FixedUInt-only), but `from_precomputed` itself works for any
+    /// `T: Copy`. The intended consumer path is a downstream Mont-newtype
+    /// wrapper that calls modmath's standalone `wide_montgomery_mul[_ct]`
+    /// free functions, using `f.modulus()` to read the static modulus.
+    #[test]
+    fn from_precomputed_const_construction_u32() {
+        // Hand-computed Montgomery params for modulus 13 at word width 32:
+        //   n_prime  = -13^-1 mod 2^32 = 0x4EC4EC4F
+        //   r_mod_n  = 2^32 mod 13     = 9
+        //   r2_mod_n = (2^32)^2 mod 13 = 3
+        const F: Field<u32, Nct> = Field::from_precomputed(13u32, 0x4EC4EC4F, 9, 3);
+        assert_eq!(*F.modulus(), 13u32);
+        // The struct fields are accessible to anyone in the same crate
+        // through Field::modulus(); downstream consumers driving the Mont
+        // newtype pattern will pull modulus + n_prime + r/r2 via a Modulus
+        // trait extension on their own side and call modmath's standalone
+        // primitives. This test just proves the const-context construction
+        // path is real.
+    }
+}

@@ -1,71 +1,62 @@
-// Montgomery form arithmetic module
-// Contains basic and strict implementations organized in submodules
+//! Flavor-neutral Montgomery arithmetic primitives.
+//!
+//! Holds the [`NPrimeMethod`] enum (shared by every flavor's
+//! `*_with_method` siblings), the wide-REDC param helpers
+//! ([`compute_n_prime_newton`], [`compute_r_mod_n`], [`compute_r2_mod_n`],
+//! [`type_bit_width`]), and the [`cios`] submodule with the
+//! interleaved-multiply-and-reduce primitives and their CT siblings.
+//!
+//! The R>N path's per-flavor implementations live in private
+//! `basic_mont` / `constrained_mont` / `strict_mont` submodules that
+//! are surfaced through the
+//! [`modmath::basic::montgomery`](crate::basic::montgomery),
+//! [`modmath::constrained::montgomery`](crate::constrained::montgomery),
+//! and [`modmath::strict::montgomery`](crate::strict::montgomery)
+//! re-export hubs. The flavor-neutral [`cios`] submodule is
+//! exposed publicly because its primitives have no flavor variants —
+//! operands are already by-reference, no `Copy` bound to swap on.
 
-pub mod basic_mont;
+pub(crate) mod basic_mont;
 
-pub mod constrained_mont;
+pub(crate) mod constrained_mont;
 
-pub mod strict_mont;
+pub(crate) mod strict_mont;
 
 #[cfg(feature = "wide-mul")]
 pub mod cios;
 
-// Re-export basic functions for backwards compatibility
+// Flavor-neutral items live at this flat path: the NPrimeMethod enum
+// (shared by every flavor's `*_with_method` siblings), the wide-REDC
+// param helpers (`compute_n_prime_newton` etc., generic over any T:
+// WrappingMul + ...), and `type_bit_width`. Flavor-keyed R>N items are
+// surfaced through `modmath::{basic,constrained,strict}::montgomery::*`
+// and reach into `basic_mont` / `constrained_mont` / `strict_mont` via
+// the submodule paths instead of this flat re-export.
 #[rustfmt::skip]
 pub use basic_mont::{
     NPrimeMethod,
-    basic_compute_montgomery_params,
-    basic_compute_montgomery_params_with_method,
-    basic_from_montgomery,
-    basic_montgomery_mod_exp,
-    basic_montgomery_mod_exp_with_method,
-    basic_montgomery_mod_mul,
-    basic_montgomery_mod_mul_with_method,
-    basic_montgomery_mul,
-    basic_to_montgomery,
-    wide_from_montgomery,
-    // Wide-REDC primitives for precomputed Montgomery contexts
     type_bit_width,
     compute_n_prime_newton,
     compute_r_mod_n,
     compute_r2_mod_n,
-    wide_redc,
-    wide_montgomery_mul,
 };
 
-// Re-export constrained functions
-#[rustfmt::skip]
-pub use constrained_mont::{
-    constrained_compute_montgomery_params,
-    constrained_compute_montgomery_params_with_method,
-    constrained_from_montgomery,
-    constrained_montgomery_mod_exp,
-    constrained_montgomery_mod_exp_with_method,
-    constrained_montgomery_mod_mul,
-    constrained_montgomery_mod_mul_with_method,
-    constrained_montgomery_mul,
-    constrained_to_montgomery,
-};
-
-// Re-export strict functions
-#[rustfmt::skip]
-pub use strict_mont::{
-    strict_compute_montgomery_params,
-    strict_compute_montgomery_params_with_method,
-    strict_from_montgomery,
-    strict_montgomery_mod_exp,
-    strict_montgomery_mod_exp_with_method,
-    strict_montgomery_mod_mul,
-    strict_montgomery_mod_mul_with_method,
-    strict_to_montgomery,
-};
-
-// Re-export CIOS Montgomery multiplication
+// Re-export the CIOS traits as the canonical entry point for consumers.
+// The underlying `cios_montgomery_mul` / `cios_montgomery_mul_ct` free
+// functions remain publicly reachable via `modmath::montgomery::cios::*`
+// for callers who want the raw word-level primitive (the trait method
+// takes the whole `n_prime` and extracts the low word; the free function
+// takes the word directly).
 #[cfg(feature = "wide-mul")]
-pub use cios::{CiosMontMul, cios_montgomery_mul};
+pub use cios::{CiosMontMul, CiosMontMulCt};
 
+// Tests exercise the R > N path and constrained/strict APIs which require
+// `Rem`-able `T`; gated to NCT/non-FixedUInt builds via dev-deps without ct.
 #[cfg(test)]
 mod tests {
+    use super::basic_mont::*;
+    use super::constrained_mont::*;
+    use super::strict_mont::*;
     use super::*;
 
     #[test]
@@ -99,7 +90,7 @@ mod tests {
             basic_compute_montgomery_params_with_method(13u32, NPrimeMethod::TrialSearch).unwrap();
 
         // Both should produce identical results (Newton delegates to ExtendedEuclidean
-        // in the legacy param path, which agrees with TrialSearch)
+        // in the R > N param path, which agrees with TrialSearch)
         assert_eq!(default_result, explicit_trial_result);
 
         // Verify the explicit method call produces correct values
@@ -248,7 +239,6 @@ mod tests {
         // Test with our documented example: N = 13, R = 16
         let (r, _r_inv, _n_prime, _r_bits) = basic_compute_montgomery_params(13u32).unwrap();
 
-        // From EXAMPLE1_COMPUTE_PARAM.md:
         // 7 -> Montgomery: 7 * 16 mod 13 = 112 mod 13 = 8
         // 5 -> Montgomery: 5 * 16 mod 13 = 80 mod 13 = 2
         assert_eq!(basic_to_montgomery(7u32, 13u32, r), 8u32);
@@ -791,6 +781,9 @@ macro_rules! montgomery_test_module {
 
 #[cfg(test)]
 mod bnum_montgomery_tests {
+    use super::basic_mont::*;
+    use super::constrained_mont::*;
+    use super::strict_mont::*;
     use super::*;
 
     montgomery_test_module!(
@@ -879,6 +872,11 @@ mod bnum_montgomery_tests {
         basic: off, // Copy is not implemented, heap allocation
     );
 
+    // Default (Nct-personality) FixedUInt provides Rem; the strict/
+    // constrained/basic Montgomery wrappers are reachable here. The Ct
+    // personality intentionally omits Rem (reduce-then-multiply is
+    // variable-time on operand magnitudes), so a Ct-typed FixedUInt would
+    // be a compile error here, not silent execution.
     montgomery_test_module!(
         fixed_bigint,
         fixed_bigint::FixedUInt,

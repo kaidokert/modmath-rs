@@ -11,20 +11,30 @@ use fixed_bigint::const_numtraits::ConstBorrowingSub;
 use num_traits::ops::overflowing::OverflowingAdd;
 use num_traits::{One, WrappingMul, Zero};
 
-/// CIOS Montgomery multiplication: `a * b * R⁻¹ mod modulus`.
+// Under fixed-bigint's personality typestate, `MulAccOps::get_word` returns
+// an associated `GetWordOutput`: `Option<Word>` for the Nct impl (O(1) slice
+// index) and `subtle::CtOption<Word>` for the Ct impl (O(N) cond-select
+// scan). CIOS uses indices that are statically valid by construction, so
+// both paths immediately collapse to `Option` via `?` / `.into_option()?`;
+// the CT property of the CT path lives in the body of `get_word`, not in
+// the discriminant handling here.
+
+/// CIOS Montgomery multiplication — variable-time: `a * b * R⁻¹ mod modulus`.
 ///
 /// Both `a` and `b` must be in Montgomery form and in `[0, modulus)`.
 /// `n_prime_0` is the lowest word of `−N⁻¹ mod R`.
 ///
 /// The algorithm fuses multiplication and REDC into a single double-loop,
 /// saving ~25 % of limb multiplies compared to separate wide-mul + REDC.
-pub fn cios_montgomery_mul<T: MulAccOps + PartialOrd + ConstBorrowingSub>(
-    a: &T,
-    b: &T,
-    modulus: &T,
-    n_prime_0: T::Word,
-) -> Option<T>
+///
+/// Final reduction is a predicted branch. Timing leaks operand magnitude.
+/// Use [`cios_montgomery_mul_ct`] in CT-sensitive paths (private-key
+/// operations, secret scalar multiplication). For verify / public-key
+/// paths the branched version is significantly faster — see `wide_redc`
+/// docs for the cost breakdown.
+pub fn cios_montgomery_mul<T>(a: &T, b: &T, modulus: &T, n_prime_0: T::Word) -> Option<T>
 where
+    T: MulAccOps<GetWordOutput = Option<<T as MulAccOps>::Word>> + PartialOrd + ConstBorrowingSub,
     T::Word: num_traits::Zero
         + num_traits::One
         + num_traits::WrappingMul
@@ -57,8 +67,6 @@ where
 
         // Phase 2: [acc, acc_hi] = ([acc, acc_hi] + m * modulus) >> word_bits
         let new_overflow = T::mul_acc_shift_row(m, modulus, &mut acc, acc_hi);
-        // Safety: acc_hi2 ∈ {0,1} (reset each iteration, incremented at most once)
-        // and new_overflow ∈ {0,1} (bool→word from mul_acc_shift_row), so max sum = 2.
         debug_assert!(
             new_overflow == zero || new_overflow == one,
             "mul_acc_shift_row must return 0 or 1"
@@ -75,18 +83,81 @@ where
     Some(acc)
 }
 
-/// Convenience trait: types that support CIOS Montgomery multiplication.
+/// CIOS Montgomery multiplication — constant-time finalize.
+///
+/// Same algorithm as [`cios_montgomery_mul`] but performs the final
+/// conditional subtraction branchlessly via `subtle::ConditionallySelectable`
+/// and `subtle::ConstantTimeEq`, removing the operand-magnitude side-channel.
+///
+/// `acc_hi` is a `T::Word`; we use `ConstantTimeEq` on the word for the
+/// "high half nonzero" test. The "low half ≥ modulus" test is free — the
+/// borrow flag from `borrowing_sub` already encodes `acc < modulus`.
+pub fn cios_montgomery_mul_ct<T>(a: &T, b: &T, modulus: &T, n_prime_0: T::Word) -> Option<T>
+where
+    T: MulAccOps<GetWordOutput = subtle::CtOption<<T as MulAccOps>::Word>>
+        + ConstBorrowingSub
+        + subtle::ConditionallySelectable,
+    T::Word: num_traits::Zero
+        + num_traits::One
+        + num_traits::WrappingMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + core::ops::Add<Output = T::Word>
+        + subtle::ConstantTimeEq,
+{
+    use subtle::{Choice, ConstantTimeEq};
+
+    let n = T::word_count();
+    let zero = <T::Word as Zero>::zero();
+    let one = <T::Word as One>::one();
+    let mut acc = T::default();
+    let mut acc_hi = zero;
+    let mut acc_hi2 = zero;
+
+    for i in 0..n {
+        let ai = a.get_word(i).into_option()?;
+
+        let carry = T::mul_acc_row(ai, b, &mut acc, zero);
+        let (sum, overflow) = acc_hi.overflowing_add(&carry);
+        acc_hi = sum;
+        if overflow {
+            acc_hi2 = acc_hi2 + one;
+        }
+
+        let m = acc.get_word(0).into_option()?.wrapping_mul(&n_prime_0);
+
+        let new_overflow = T::mul_acc_shift_row(m, modulus, &mut acc, acc_hi);
+        debug_assert!(
+            new_overflow == zero || new_overflow == one,
+            "mul_acc_shift_row must return 0 or 1"
+        );
+        acc_hi = acc_hi2 + new_overflow;
+        acc_hi2 = zero;
+    }
+
+    // Branchless final reduction:
+    //   needs_sub = (acc_hi != 0) | (acc >= modulus)
+    //             = (acc_hi != 0) | !borrow      (since borrow = acc < modulus)
+    let (sub_result, borrow) = <T as ConstBorrowingSub>::borrowing_sub(acc, *modulus, false);
+    let acc_hi_nonzero = !acc_hi.ct_eq(&zero);
+    let needs_sub = acc_hi_nonzero | !Choice::from(borrow as u8);
+    Some(T::conditional_select(&acc, &sub_result, needs_sub))
+}
+
+/// Convenience trait: types that support variable-time CIOS Montgomery multiplication.
 ///
 /// Implemented automatically for any `T: MulAccOps + PartialOrd + ConstBorrowingSub`
-/// with the required `Word` bounds.  Higher-level code (e.g. `MontgomeryCtx`)
+/// with the required `Word` bounds. Higher-level code (e.g. `MontgomeryCtx`)
 /// can bound on this trait instead of requiring knowledge of `MulAccOps::Word`
-/// or the CIOS call signature.
-pub trait CiosMontMul: MulAccOps + PartialOrd + ConstBorrowingSub {
+/// or the CIOS call signature. For CT-sensitive paths, see [`CiosMontMulCt`].
+pub trait CiosMontMul:
+    MulAccOps<GetWordOutput = Option<<Self as MulAccOps>::Word>> + PartialOrd + ConstBorrowingSub
+{
     fn cios_mont_mul(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Option<Self>;
 }
 
-impl<T: MulAccOps + PartialOrd + ConstBorrowingSub> CiosMontMul for T
+impl<T> CiosMontMul for T
 where
+    T: MulAccOps<GetWordOutput = Option<<T as MulAccOps>::Word>> + PartialOrd + ConstBorrowingSub,
     T::Word: num_traits::Zero
         + num_traits::One
         + num_traits::WrappingMul
@@ -96,6 +167,38 @@ where
     #[inline]
     fn cios_mont_mul(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Option<Self> {
         cios_montgomery_mul(a, b, modulus, n_prime.get_word(0)?)
+    }
+}
+
+/// Constant-time analog of [`CiosMontMul`].
+///
+/// Implemented automatically for any
+/// `T: MulAccOps + ConstBorrowingSub + ConditionallySelectable` with the
+/// required `Word` bounds (including `ConstantTimeEq`). Calls
+/// [`cios_montgomery_mul_ct`] under the hood.
+pub trait CiosMontMulCt:
+    MulAccOps<GetWordOutput = subtle::CtOption<<Self as MulAccOps>::Word>>
+    + ConstBorrowingSub
+    + subtle::ConditionallySelectable
+{
+    fn cios_mont_mul_ct(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Option<Self>;
+}
+
+impl<T> CiosMontMulCt for T
+where
+    T: MulAccOps<GetWordOutput = subtle::CtOption<<T as MulAccOps>::Word>>
+        + ConstBorrowingSub
+        + subtle::ConditionallySelectable,
+    T::Word: num_traits::Zero
+        + num_traits::One
+        + num_traits::WrappingMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + core::ops::Add<Output = T::Word>
+        + subtle::ConstantTimeEq,
+{
+    #[inline]
+    fn cios_mont_mul_ct(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Option<Self> {
+        cios_montgomery_mul_ct(a, b, modulus, n_prime.get_word(0).into_option()?)
     }
 }
 
@@ -210,8 +313,8 @@ mod tests {
         // Convert back
         let result = wide_redc(result_m, U128::from(0u64), modulus, n_prime);
 
-        // Compare with basic_mod_mul
-        let expected = crate::mul::basic_mod_mul(a, b, modulus);
+        // Compare with basic_mod_mul_pr (inputs are tiny vs modulus, so naturally pre-reduced).
+        let expected = crate::mul::basic_mod_mul_pr(a, b, modulus);
         assert_eq!(result, expected);
     }
 
@@ -239,4 +342,88 @@ mod tests {
         let expected = wide_montgomery_mul(a_m, b_m, modulus, n_prime);
         assert_eq!(result, expected);
     }
+
+    /// CT variant must produce the same output as the NCT path for all inputs.
+    ///
+    /// The precompute (Newton's iteration, r/r² mod N) runs on the Nct side
+    /// for speed; the to-Montgomery REDC also runs in Nct. Only the CT CIOS
+    /// call itself requires Ct-typed inputs (its `ConditionallySelectable`
+    /// bound resolves only there). Convert via `.into()` for the CT call and
+    /// `.forget_ct()` to bring the result back for equality.
+    #[test]
+    fn test_cios_ct_matches_nct_u8() {
+        use fixed_bigint::{Ct, FixedUInt};
+        type U16 = FixedUInt<u8, 2>;
+        type U16Ct = FixedUInt<u8, 2, Ct>;
+
+        let modulus = U16::from(13u16);
+        let w = type_bit_width::<U16>();
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r_mod_n = compute_r_mod_n(modulus, w);
+        let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
+        let modulus_ct: U16Ct = modulus.into();
+
+        for a_val in 0u16..13 {
+            for b_val in 0u16..13 {
+                let a = U16::from(a_val);
+                let b = U16::from(b_val);
+                let (lo, hi) = crate::WideMul::wide_mul(&a, &r2_mod_n);
+                let a_m = wide_redc(lo, hi, modulus, n_prime);
+                let (lo, hi) = crate::WideMul::wide_mul(&b, &r2_mod_n);
+                let b_m = wide_redc(lo, hi, modulus, n_prime);
+
+                let n_prime_0 = n_prime.get_word(0).unwrap();
+                let nct = cios_montgomery_mul(&a_m, &b_m, &modulus, n_prime_0).unwrap();
+                let a_m_ct: U16Ct = a_m.into();
+                let b_m_ct: U16Ct = b_m.into();
+                let ct = cios_montgomery_mul_ct(&a_m_ct, &b_m_ct, &modulus_ct, n_prime_0).unwrap();
+                assert_eq!(
+                    nct,
+                    ct.forget_ct(),
+                    "CIOS CT mismatch for {a_val}*{b_val} mod 13"
+                );
+            }
+        }
+    }
+
+    /// CT variant matches NCT at a larger type (128-bit modulus).
+    #[test]
+    fn test_cios_ct_matches_nct_u32x4() {
+        use fixed_bigint::{Ct, FixedUInt};
+        type U128 = FixedUInt<u32, 4>;
+        type U128Ct = FixedUInt<u32, 4, Ct>;
+
+        let modulus = !U128::from(0u64) - U128::from(58u64);
+        let w = type_bit_width::<U128>();
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r_mod_n = compute_r_mod_n(modulus, w);
+        let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
+        let modulus_ct: U128Ct = modulus.into();
+
+        let test_vals = [0u64, 1, 2, 42, 0xDEAD_BEEF, 0xCAFE_BABE];
+        for &a_val in &test_vals {
+            for &b_val in &test_vals {
+                let a = U128::from(a_val);
+                let b = U128::from(b_val);
+                let (lo, hi) = crate::WideMul::wide_mul(&a, &r2_mod_n);
+                let a_m = wide_redc(lo, hi, modulus, n_prime);
+                let (lo, hi) = crate::WideMul::wide_mul(&b, &r2_mod_n);
+                let b_m = wide_redc(lo, hi, modulus, n_prime);
+
+                let n_prime_0 = n_prime.get_word(0).unwrap();
+                let nct = cios_montgomery_mul(&a_m, &b_m, &modulus, n_prime_0).unwrap();
+                let a_m_ct: U128Ct = a_m.into();
+                let b_m_ct: U128Ct = b_m.into();
+                let ct = cios_montgomery_mul_ct(&a_m_ct, &b_m_ct, &modulus_ct, n_prime_0).unwrap();
+                assert_eq!(
+                    nct,
+                    ct.forget_ct(),
+                    "CIOS CT mismatch for {a_val:#x}*{b_val:#x}"
+                );
+            }
+        }
+    }
+
+    /// Trait CiosMontMulCt is usable as a bound without constraining T::Word.
+    fn _assert_ct_trait_bound<T: CiosMontMulCt>() {}
 }

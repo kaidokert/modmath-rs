@@ -1,6 +1,6 @@
 #[cfg(feature = "nightly")]
 use super::mul::const_mod_mul;
-use super::mul::{basic_mod_mul, constrained_mod_mul, strict_mod_mul};
+use super::mul::{basic_mod_mul_pr, constrained_mod_mul_pr, strict_mod_mul_pr};
 
 #[cfg(feature = "nightly")]
 use fixed_bigint::const_numtraits::{
@@ -48,7 +48,7 @@ c0nst::c0nst! {
 /// # Modular Exponentiation (Basic)
 /// Simple version that operates on values and copies them. Requires
 /// `WrappingAdd` and `WrappingSub` traits to be implemented.
-pub fn basic_mod_exp<T>(mut base: T, exponent: T, modulus: T) -> T
+pub fn basic_mod_exp<T>(base: T, exponent: T, modulus: T) -> T
 where
     T: PartialOrd
         + num_traits::One
@@ -61,19 +61,41 @@ where
         + core::ops::ShrAssign<usize>
         + Copy,
 {
-    let mut result = T::one() % modulus;
-    let mut exp = exponent;
+    if modulus == T::one() {
+        return T::zero();
+    }
+    basic_mod_exp_pr(base % modulus, exponent, modulus)
+}
 
-    base = base % modulus;
+/// # Modular Exponentiation (Basic, pre-reduced)
+/// Precondition: `base < modulus` and `modulus > 1`. No `Rem` bound.
+///
+/// Note: this only removes the division side-channel from the signature.
+/// The square-and-multiply loop still branches on `exp.is_odd()`; for a
+/// constant-time ladder, use the Montgomery wide-REDC path.
+pub fn basic_mod_exp_pr<T>(mut base: T, exponent: T, modulus: T) -> T
+where
+    T: PartialOrd
+        + num_traits::One
+        + num_traits::Zero
+        + crate::parity::Parity
+        + core::ops::Shr<usize, Output = T>
+        + num_traits::ops::wrapping::WrappingAdd
+        + num_traits::ops::wrapping::WrappingSub
+        + core::ops::ShrAssign<usize>
+        + Copy,
+{
+    let mut result = T::one();
+    let mut exp = exponent;
 
     while exp > T::zero() {
         if exp.is_odd() {
-            result = basic_mod_mul(result, base, modulus);
+            result = basic_mod_mul_pr(result, base, modulus);
         }
         exp >>= 1;
 
         if exp > T::zero() {
-            base = basic_mod_mul(base, base, modulus);
+            base = basic_mod_mul_pr(base, base, modulus);
         }
     }
     result
@@ -97,17 +119,39 @@ where
         + core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
+    if modulus == &T::one() {
+        return T::zero();
+    }
     base.rem_assign(modulus);
-    let mut result = T::one() % modulus;
+    constrained_mod_exp_pr(base, exponent, modulus)
+}
+
+/// # Modular Exponentiation (Constrained, pre-reduced)
+/// Precondition: `base < *modulus` and `*modulus > 1`. No `Rem` family bound.
+pub fn constrained_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
+where
+    T: PartialOrd
+        + num_traits::One
+        + num_traits::Zero
+        + crate::parity::Parity
+        + num_traits::ops::wrapping::WrappingAdd
+        + num_traits::ops::wrapping::WrappingSub
+        + core::ops::ShrAssign<usize>
+        + core::ops::Shr<usize, Output = T>,
+{
+    let mut result = T::one();
     let mut exp = T::zero().wrapping_add(exponent);
     while exp > T::zero() {
         if exp.is_odd() {
-            result = constrained_mod_mul(result, &base, modulus);
+            result = constrained_mod_mul_pr(result, &base, modulus);
         }
         exp >>= 1;
         if exp > T::zero() {
+            // Squaring step: `mul_pr` consumes `a` (first arg) and borrows
+            // `b` (second arg); when both come from the same `base`, we
+            // still need one clone so the borrow doesn't alias the move.
             let tmp_base = T::zero().wrapping_add(&base);
-            base = constrained_mod_mul(base, &tmp_base, modulus);
+            base = constrained_mod_mul_pr(base, &tmp_base, modulus);
         }
     }
     result
@@ -132,19 +176,41 @@ where
         + core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
-    let mut result = T::one() % modulus;
+    if modulus == &T::one() {
+        return T::zero();
+    }
     base.rem_assign(modulus);
+    strict_mod_exp_pr(base, exponent, modulus)
+}
+
+/// # Modular Exponentiation (Strict, pre-reduced)
+/// Precondition: `base < *modulus` and `*modulus > 1`. No `Rem` family bound.
+pub fn strict_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
+where
+    T: PartialOrd
+        + num_traits::One
+        + num_traits::Zero
+        + crate::parity::Parity
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Shr<usize, Output = T>,
+    for<'a> T: core::ops::ShrAssign<usize>,
+{
+    let mut result = T::one();
     let mut exp = T::zero().overflowing_add(exponent).0;
 
     while exp > T::zero() {
         if exp.is_odd() {
-            result = strict_mod_mul(result, &base, modulus);
+            result = strict_mod_mul_pr(result, &base, modulus);
         }
         exp >>= 1;
 
         if exp > T::zero() {
+            // Squaring step: `mul_pr` consumes `a` (first arg) and borrows
+            // `b` (second arg); when both come from the same `base`, we
+            // still need one clone so the borrow doesn't alias the move.
             let tmp_base = T::zero().overflowing_add(&base).0;
-            base = strict_mod_mul(base, &tmp_base, modulus);
+            base = strict_mod_mul_pr(base, &tmp_base, modulus);
         }
     }
     result
@@ -512,6 +578,9 @@ mod bnum_exp_tests {
         basic: off, // Copy cannot be implemented, heap allocation
     );
 
+    // Default (Nct-personality) FixedUInt provides Rem; the wrapper
+    // functions are usable here. The Ct personality intentionally omits
+    // Rem (variable-time on operand magnitudes).
     exp_test_module!(
         fixed_bigint,
         fixed_bigint::FixedUInt,
@@ -520,4 +589,40 @@ mod bnum_exp_tests {
         constrained: on,
         basic: on,
     );
+}
+
+#[cfg(test)]
+mod fixed_bigint_pr_tests {
+    use super::{basic_mod_exp_pr, constrained_mod_exp_pr, strict_mod_exp_pr};
+    type U256 = fixed_bigint::FixedUInt<u8, 4>;
+
+    #[test]
+    fn test_mod_exp_basic_pr() {
+        // 5^3 mod 13 = 125 mod 13 = 8
+        let base = U256::from(5u8);
+        let exp = U256::from(3u8);
+        let m = U256::from(13u8);
+        let expected = U256::from(8u8);
+
+        assert_eq!(strict_mod_exp_pr(base, &exp, &m), expected);
+        let base = U256::from(5u8);
+        assert_eq!(constrained_mod_exp_pr(base, &exp, &m), expected);
+        let base = U256::from(5u8);
+        assert_eq!(basic_mod_exp_pr(base, exp, m), expected);
+    }
+
+    #[test]
+    fn test_mod_exp_zero_exponent_pr() {
+        // x^0 mod m = 1 (for m > 1)
+        let base = U256::from(7u8);
+        let exp = U256::from(0u8);
+        let m = U256::from(13u8);
+        let expected = U256::from(1u8);
+
+        assert_eq!(strict_mod_exp_pr(base, &exp, &m), expected);
+        let base = U256::from(7u8);
+        assert_eq!(constrained_mod_exp_pr(base, &exp, &m), expected);
+        let base = U256::from(7u8);
+        assert_eq!(basic_mod_exp_pr(base, exp, m), expected);
+    }
 }

@@ -35,8 +35,19 @@ where
         + num_traits::ops::wrapping::WrappingSub
         + core::ops::Rem<Output = T>,
 {
-    let a = a % m;
-    let sum = a.wrapping_add(&(b % m));
+    basic_mod_add_pr(a % m, b % m, m)
+}
+
+/// # Modular Addition (Basic, pre-reduced)
+/// Precondition: `a < m` and `b < m`. No `Rem` bound.
+pub fn basic_mod_add_pr<T>(a: T, b: T, m: T) -> T
+where
+    T: core::cmp::PartialOrd
+        + Copy
+        + num_traits::ops::wrapping::WrappingAdd
+        + num_traits::ops::wrapping::WrappingSub,
+{
+    let sum = a.wrapping_add(&b);
     if sum >= m || sum < a {
         sum.wrapping_sub(&m)
     } else {
@@ -54,10 +65,21 @@ where
         + num_traits::ops::wrapping::WrappingSub,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
-    // maybe a should be `mut a`
     let a_mod = &a % m;
-    let sum = a_mod.wrapping_add(&(b % m));
-    if &sum >= m || sum < a_mod {
+    let b_mod = b % m;
+    constrained_mod_add_pr(a_mod, &b_mod, m)
+}
+
+/// # Modular Addition (Constrained, pre-reduced)
+/// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
+pub fn constrained_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
+where
+    T: core::cmp::PartialOrd
+        + num_traits::ops::wrapping::WrappingAdd
+        + num_traits::ops::wrapping::WrappingSub,
+{
+    let sum = a.wrapping_add(b);
+    if &sum >= m || sum < a {
         sum.wrapping_sub(m)
     } else {
         sum
@@ -76,8 +98,19 @@ where
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     a.rem_assign(m);
-    let (sum, overflow) = a.overflowing_add(&(b % m));
+    let b_mod = b % m;
+    strict_mod_add_pr(a, &b_mod, m)
+}
 
+/// # Modular Addition (Strict, pre-reduced)
+/// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
+pub fn strict_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
+where
+    T: core::cmp::PartialOrd
+        + num_traits::ops::overflowing::OverflowingAdd
+        + num_traits::ops::overflowing::OverflowingSub,
+{
+    let (sum, overflow) = a.overflowing_add(b);
     if &sum >= m || overflow {
         sum.overflowing_sub(m).0
     } else {
@@ -335,12 +368,52 @@ mod bnum_add_tests {
         basic: off, // Copy cannot be implemented, heap allocation
     );
 
+    // Default (Nct-personality) FixedUInt provides Rem; the wrapper
+    // functions are usable here. See fixed_bigint_pr_tests below for
+    // additional _pr API coverage. (Ct-typed FixedUInt intentionally
+    // omits Rem — the schoolbook reduce-then-add is variable-time, so a
+    // Ct value passed to these wrappers would be a compile error.)
     add_test_module!(
         fixed_bigint,
         fixed_bigint::FixedUInt,
-        type U256 = FixedUInt<u32, 4>;
+        type U256 = fixed_bigint::FixedUInt<u32, 4>;
         strict: on,
         constrained: on,
         basic: on,
     );
+}
+
+#[cfg(test)]
+mod fixed_bigint_pr_tests {
+    use super::{basic_mod_add_pr, constrained_mod_add_pr, strict_mod_add_pr};
+    type U256 = fixed_bigint::FixedUInt<u32, 4>;
+
+    #[test]
+    fn test_mod_add_basic_pr() {
+        let m = U256::from(20u8);
+        let a = U256::from(7u8);
+        let b = U256::from(8u8);
+        let expected = U256::from(15u8); // 7 + 8 = 15, < 20
+
+        assert_eq!(strict_mod_add_pr(a, &b, &m), expected);
+        let a = U256::from(7u8);
+        assert_eq!(constrained_mod_add_pr(a, &b, &m), expected);
+        let a = U256::from(7u8);
+        assert_eq!(basic_mod_add_pr(a, b, m), expected);
+    }
+
+    #[test]
+    fn test_mod_add_wraps_pr() {
+        // a + b >= m: subtract m
+        let m = U256::from(20u8);
+        let a = U256::from(15u8);
+        let b = U256::from(13u8);
+        let expected = U256::from(8u8); // 15 + 13 = 28 ≡ 8 (mod 20)
+
+        assert_eq!(strict_mod_add_pr(a, &b, &m), expected);
+        let a = U256::from(15u8);
+        assert_eq!(constrained_mod_add_pr(a, &b, &m), expected);
+        let a = U256::from(15u8);
+        assert_eq!(basic_mod_add_pr(a, b, m), expected);
+    }
 }
