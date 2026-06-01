@@ -51,11 +51,10 @@ mod field;
 mod inv;
 pub mod montgomery;
 
-// Bound-flavor module hubs. Pure re-exports of the existing per-flavor
-// schoolbook functions, renamed to drop the now-redundant `*_mod_` prefix
-// (we're already inside `modmath::basic` / etc.). Old crate-root names
-// (`basic_mod_add`, …) continue to work in parallel during the migration
-// window.
+// Bound-flavor module hubs. Re-export the per-flavor schoolbook functions
+// under short names (`modmath::basic::add` for `basic_mod_add`, etc.) —
+// the `*_mod_` prefix becomes redundant once you're inside `modmath::basic`
+// or sibling.
 pub mod basic;
 pub mod constrained;
 pub mod strict;
@@ -69,13 +68,12 @@ pub use wide_mul::WideMul;
 pub use add::const_mod_add;
 #[cfg(feature = "nightly")]
 pub use exp::const_mod_exp;
-// `NPrimeMethod` is the algorithm selector for R>N `*_with_method`
-// computations. Used through `modmath::{basic,constrained,strict}::montgomery::
-// compute_params_with_method` and the `mod_{mul,exp}_with_method` siblings.
-//
-// Wide-REDC primitives and convenience wrappers stay at the crate root for
-// now (algorithm-only, flavor-neutral); a future reorg may group them under
-// `modmath::montgomery::wide::*`.
+// Flavor-neutral Montgomery primitives at the crate root: `NPrimeMethod`
+// (algorithm selector for R>N `*_with_method` computations, used through
+// `modmath::{basic,constrained,strict}::montgomery::compute_params_with_method`)
+// plus the precompute helpers (`compute_n_prime_newton`, `compute_r_mod_n`,
+// `compute_r2_mod_n`) and `type_bit_width`. The flavor-keyed wide-REDC
+// wrappers live under `modmath::{basic,constrained,strict}::montgomery::wide::*`.
 #[rustfmt::skip]
 pub use montgomery::{
     NPrimeMethod,

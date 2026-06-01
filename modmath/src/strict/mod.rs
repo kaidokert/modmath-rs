@@ -13,10 +13,13 @@
 //!
 //! ## Pre-reduced variants
 //!
-//! [`pre_reduced`] mirrors this module's surface but assumes inputs
-//! are already in `[0, m)`, skipping the `% m` reduction step. Works
-//! for backends without `core::ops::Rem` and is the right entry point
-//! inside loops where reduction is handled separately.
+//! [`pre_reduced`] re-exports `add` / `sub` / `mul` / `exp` siblings that
+//! assume inputs are already in `[0, m)` and skip the `% m` reduction
+//! step. Works for backends without `core::ops::Rem` and is the right
+//! entry point inside loops where reduction is handled separately.
+//! Note: `inv` has no pre-reduced sibling — modular inverse via the
+//! extended Euclidean algorithm inside `inv` performs its own
+//! magnitude-dependent loop, with no useful "pre-reduced" shortcut.
 
 #[doc(inline)]
 pub use crate::add::strict_mod_add as add;
