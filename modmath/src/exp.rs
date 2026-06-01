@@ -68,7 +68,8 @@ where
 }
 
 /// # Modular Exponentiation (Basic, pre-reduced)
-/// Precondition: `base < modulus` and `modulus > 1`. No `Rem` bound.
+/// Precondition: if `modulus > 1`, then `base < modulus`. No `Rem` bound.
+/// Returns `0` when `modulus == 1`.
 ///
 /// Note: this only removes the division side-channel from the signature.
 /// The square-and-multiply loop still branches on `exp.is_odd()`; for a
@@ -132,7 +133,8 @@ where
 }
 
 /// # Modular Exponentiation (Constrained, pre-reduced)
-/// Precondition: `base < *modulus` and `*modulus > 1`. No `Rem` family bound.
+/// Precondition: if `*modulus > 1`, then `base < *modulus`. No `Rem` family bound.
+/// Returns `0` when `*modulus == 1`.
 pub fn constrained_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
     T: PartialOrd
@@ -193,7 +195,8 @@ where
 }
 
 /// # Modular Exponentiation (Strict, pre-reduced)
-/// Precondition: `base < *modulus` and `*modulus > 1`. No `Rem` family bound.
+/// Precondition: if `*modulus > 1`, then `base < *modulus`. No `Rem` family bound.
+/// Returns `0` when `*modulus == 1`.
 pub fn strict_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
     T: PartialOrd
