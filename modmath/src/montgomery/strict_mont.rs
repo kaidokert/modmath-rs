@@ -18,9 +18,9 @@ where
     // We need to find N' where modulus * N' ≡ R - 1 (mod R)
     let target = r - &T::one(); // This is -1 mod R
 
-    // Simple trial search for N'
-    // TODO: Replace with Extended Euclidean Algorithm for O(log R) complexity instead of O(R)
-    // Current implementation is fine for small numbers but inefficient for large moduli
+    // Simple O(R) trial search for N'. Adequate for small moduli; the
+    // ExtendedEuclidean and HenselsLifting NPrimeMethod variants offer
+    // O(log R) alternatives for larger moduli.
     let mut n_prime = T::one();
     loop {
         // Check if (modulus * n_prime) % r == target
@@ -242,7 +242,7 @@ where
             strict_compute_n_prime_trial_search(modulus, &r)?
         }
         // Newton is mapped to ExtendedEuclidean in the strict path.
-        // This is because strict/constrained paths use legacy R > N semantics
+        // This is because strict/constrained paths use R > N semantics
         // (R = smallest power of 2 exceeding N), not the wide-REDC R = 2^W approach.
         // Newton's method is designed for R = 2^W with wrapping arithmetic, so we
         // fall back to ExtendedEuclidean which computes the same N' = -N^{-1} mod R.
@@ -279,10 +279,10 @@ where
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
 {
-    // TODO(Phase 1): Replace mod_mul + from_montgomery with proper Montgomery
-    // reduction using WideningMul. Current mod_mul is O(k) double-and-add which
-    // defeats the performance purpose of Montgomery, and from_montgomery's
-    // m * N intermediate can overflow at key sizes. See ROADMAP.md Phase 1.
+    // Note: this R>N path uses double-and-add mod_mul (O(k)), which
+    // defeats Montgomery's perf purpose; the m*N intermediate in
+    // from_montgomery can also overflow at key sizes. For overflow-free
+    // multiplication, route through wide-REDC / CIOS instead.
     let product = crate::mul::strict_mod_mul(a_mont, b_mont, modulus);
     strict_from_montgomery(product, modulus, n_prime, r_bits)
 }
@@ -330,8 +330,8 @@ where
     let m = &product & &mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
-    // TODO(Phase 1): m * N can overflow for large moduli (m < R, N < R, so
-    // m*N can reach R²). Needs WideningMul for correctness at key sizes.
+    // Warning: m * N can overflow for large moduli (m < R, N < R, so m*N
+    // can reach R²). For overflow-free reduction, use wide-REDC.
     let m_times_n = &m * modulus;
     let (sum, _overflow) = a_mont.overflowing_add(&m_times_n);
     let t = sum >> r_bits; // Divide by R = 2^r_bits using bit shift
@@ -422,7 +422,7 @@ where
 ///
 /// This function uses the default NPrimeMethod (Newton) for N' computation.
 /// Note: In the strict path, Newton is mapped to ExtendedEuclidean since these
-/// paths use legacy R > N semantics rather than wide-REDC's R = 2^W.
+/// paths use R > N semantics rather than wide-REDC's R = 2^W.
 /// For performance-critical applications, consider using `strict_montgomery_mod_mul_with_method`
 /// to select the optimal N' computation method for your specific use case.
 ///
@@ -534,7 +534,7 @@ where
 ///
 /// This function uses the default NPrimeMethod (Newton) for N' computation.
 /// Note: In the strict path, Newton is mapped to ExtendedEuclidean since these
-/// paths use legacy R > N semantics rather than wide-REDC's R = 2^W.
+/// paths use R > N semantics rather than wide-REDC's R = 2^W.
 /// For performance-critical applications or specific hardware optimization, consider using
 /// `strict_montgomery_mod_exp_with_method` to select the optimal N' computation method:
 /// - `Newton`: Default, mapped to ExtendedEuclidean in strict path
@@ -762,7 +762,6 @@ mod tests {
         let modulus = 13u32;
         let (r, _r_inv, _n_prime, _r_bits) = strict_compute_montgomery_params(&modulus).unwrap();
 
-        // From EXAMPLE1_COMPUTE_PARAM.md:
         // 7 -> Montgomery: 7 * 16 mod 13 = 112 mod 13 = 8
         // 5 -> Montgomery: 5 * 16 mod 13 = 80 mod 13 = 2
         assert_eq!(strict_to_montgomery(7u32, &modulus, &r), 8u32);

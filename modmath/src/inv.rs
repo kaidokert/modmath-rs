@@ -317,6 +317,14 @@ mod bnum_inv_tests {
         basic: off, // Copy is not implemented, heap
     );
 
+    // fixed_bigint inv tests run on the Nct personality (the type alias
+    // default). The Ct personality intentionally lacks `Div`/`Rem` because
+    // EEA's inner loop count depends on operand magnitudes — schoolbook
+    // modular inverse is fundamentally variable-time and so does not
+    // belong on a CT-typed FixedUInt. Calling `basic_mod_inv` etc. with a
+    // Ct-typed value is a compile error rather than silent NCT execution,
+    // which is the safety property the personality typestate exists to
+    // enforce.
     inv_test_module!(
         fixed_bigint,
         fixed_bigint::FixedUInt,

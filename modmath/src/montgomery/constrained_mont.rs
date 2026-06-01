@@ -158,7 +158,7 @@ where
     let n_prime = match method {
         NPrimeMethod::TrialSearch => compute_n_prime_trial_search_constrained(modulus, &r)?,
         // Newton is mapped to ExtendedEuclidean in the constrained path.
-        // This is because constrained/strict paths use legacy R > N semantics
+        // This is because constrained/strict paths use R > N semantics
         // (R = smallest power of 2 exceeding N), not the wide-REDC R = 2^W approach.
         // Newton's method is designed for R = 2^W with wrapping arithmetic, so we
         // fall back to ExtendedEuclidean which computes the same N' = -N^{-1} mod R.
@@ -253,8 +253,8 @@ where
     let m = &product & &mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
-    // TODO(Phase 1): m * N can overflow for large moduli (m < R, N < R, so
-    // m*N can reach R²). Needs WideningMul for correctness at key sizes.
+    // Warning: m * N can overflow for large moduli (m < R, N < R, so m*N
+    // can reach R²). For overflow-free reduction, use wide-REDC.
     let m_times_n = m * modulus;
     let temp_sum = a_mont.wrapping_add(&m_times_n);
     let t = temp_sum >> r_bits;
@@ -289,10 +289,10 @@ where
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
 {
-    // TODO(Phase 1): Replace mod_mul + from_montgomery with proper Montgomery
-    // reduction using WideningMul. Current mod_mul is O(k) double-and-add which
-    // defeats the performance purpose of Montgomery, and from_montgomery's
-    // m * N intermediate can overflow at key sizes. See ROADMAP.md Phase 1.
+    // Note: this R>N path uses double-and-add mod_mul (O(k)), which
+    // defeats Montgomery's perf purpose; the m*N intermediate in
+    // from_montgomery can also overflow at key sizes. For overflow-free
+    // multiplication, route through wide-REDC / CIOS instead.
     let product = crate::mul::constrained_mod_mul(a_mont.clone(), b_mont, modulus);
     constrained_from_montgomery(product, modulus, n_prime, r_bits)
 }
