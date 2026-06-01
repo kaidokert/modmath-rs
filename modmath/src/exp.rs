@@ -85,6 +85,11 @@ where
         + core::ops::ShrAssign<usize>
         + Copy,
 {
+    // x mod 1 == 0 for every x, including 1. The square-and-multiply loop
+    // below starts with `result = T::one()` and would return 1 in that case.
+    if modulus == T::one() {
+        return T::zero();
+    }
     let mut result = T::one();
     let mut exp = exponent;
 
@@ -139,6 +144,10 @@ where
         + core::ops::ShrAssign<usize>
         + core::ops::Shr<usize, Output = T>,
 {
+    // See `basic_mod_exp_pr` for the modulus==1 rationale.
+    if modulus == &T::one() {
+        return T::zero();
+    }
     let mut result = T::one();
     let mut exp = T::zero().wrapping_add(exponent);
     while exp > T::zero() {
@@ -196,6 +205,10 @@ where
         + core::ops::Shr<usize, Output = T>,
     for<'a> T: core::ops::ShrAssign<usize>,
 {
+    // See `basic_mod_exp_pr` for the modulus==1 rationale.
+    if modulus == &T::one() {
+        return T::zero();
+    }
     let mut result = T::one();
     let mut exp = T::zero().overflowing_add(exponent).0;
 
@@ -624,5 +637,27 @@ mod fixed_bigint_pr_tests {
         assert_eq!(constrained_mod_exp_pr(base, &exp, &m), expected);
         let base = U256::from(7u8);
         assert_eq!(basic_mod_exp_pr(base, exp, m), expected);
+    }
+
+    /// Regression: every value mod 1 is 0, including 1. The square-and-multiply
+    /// loop starts with `result = T::one()` and used to return 1 here.
+    #[test]
+    fn test_mod_exp_modulus_one_pr() {
+        let m = U256::from(1u8);
+        let zero = U256::from(0u8);
+        // Exercise a representative grid of (base, exponent) pairs.
+        let bases = [0u8, 1, 2, 7, 42, 255];
+        let exps = [0u8, 1, 2, 5, 100];
+        for &b in &bases {
+            for &e in &exps {
+                let base = U256::from(b);
+                let exp = U256::from(e);
+                assert_eq!(strict_mod_exp_pr(base, &exp, &m), zero);
+                let base = U256::from(b);
+                assert_eq!(constrained_mod_exp_pr(base, &exp, &m), zero);
+                let base = U256::from(b);
+                assert_eq!(basic_mod_exp_pr(base, exp, m), zero);
+            }
+        }
     }
 }
