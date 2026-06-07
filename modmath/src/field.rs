@@ -62,6 +62,18 @@ use crate::montgomery::{
 use crate::parity::Parity;
 use crate::wide_mul::WideMul;
 
+/// Bound on the value stored in a [`Residue`]. With the `zeroize`
+/// feature this requires `T: Zeroize`; otherwise it's vacuous.
+#[cfg(feature = "zeroize")]
+pub trait MontStorage: zeroize::Zeroize {}
+#[cfg(feature = "zeroize")]
+impl<T: zeroize::Zeroize> MontStorage for T {}
+
+#[cfg(not(feature = "zeroize"))]
+pub trait MontStorage {}
+#[cfg(not(feature = "zeroize"))]
+impl<T> MontStorage for T {}
+
 // ---------------------------------------------------------------------------
 // Field<T, P>
 // ---------------------------------------------------------------------------
@@ -110,12 +122,29 @@ pub type FieldCt<T> = Field<T, Ct>;
 /// borrow checker rejects code that uses a residue after its `Field` is
 /// dropped, or that mixes residues across personalities. See module docs
 /// for the covariance caveat.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Residue<'f, T, P: Personality = Nct> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Residue<'f, T: MontStorage, P: Personality = Nct> {
     mont: T,
     _brand: PhantomData<&'f ()>,
     _p: PhantomData<fn() -> P>,
 }
+
+#[cfg(feature = "zeroize")]
+impl<'f, T: MontStorage, P: Personality> zeroize::Zeroize for Residue<'f, T, P> {
+    fn zeroize(&mut self) {
+        self.mont.zeroize();
+    }
+}
+
+#[cfg(feature = "zeroize")]
+impl<'f, T: MontStorage, P: Personality> Drop for Residue<'f, T, P> {
+    fn drop(&mut self) {
+        self.mont.zeroize();
+    }
+}
+
+#[cfg(feature = "zeroize")]
+impl<'f, T: MontStorage, P: Personality> zeroize::ZeroizeOnDrop for Residue<'f, T, P> {}
 
 /// Alias for the Nct variant of [`Residue`]. Equivalent to
 /// `Residue<'f, T, Nct>`. Symmetric with [`ResidueCt`].
@@ -129,14 +158,14 @@ pub type ResidueCt<'f, T> = Residue<'f, T, Ct>;
 // Shared impls (any P)
 // ---------------------------------------------------------------------------
 
-impl<T: Copy, P: Personality> Residue<'_, T, P> {
-    /// Returns the underlying Montgomery-form value.
+impl<T: Copy + MontStorage, P: Personality> Residue<'_, T, P> {
+    /// Returns a copy of the underlying Montgomery-form value.
     ///
     /// **Escape hatch.** Intended for downstream specialization layers
     /// (e.g. `Curve25519Field`) that implement fast paths reading the raw
     /// limbs. General consumers should not call this — use the methods on
     /// [`Field`] instead.
-    pub fn mont_value(self) -> T {
+    pub fn mont_value(&self) -> T {
         self.mont
     }
 }
@@ -189,7 +218,8 @@ where
         + num_traits::WrappingAdd
         + num_traits::WrappingSub
         + num_traits::ops::overflowing::OverflowingAdd
-        + Parity,
+        + Parity
+        + MontStorage,
 {
     /// Construct a new `Field` over the given (odd, nonzero) `modulus`.
     ///
@@ -271,7 +301,8 @@ where
         + num_traits::WrappingAdd
         + num_traits::WrappingSub
         + num_traits::ops::overflowing::OverflowingAdd
-        + Parity,
+        + Parity
+        + MontStorage,
 {
     /// Convert a raw value `< modulus` (or arbitrary value, which is then
     /// reduced) to Montgomery form. Returns a brand-tagged [`Residue`].
@@ -397,7 +428,7 @@ where
 
 impl<'f, T> Residue<'f, T, Ct>
 where
-    T: subtle::ConditionallySelectable,
+    T: subtle::ConditionallySelectable + MontStorage,
 {
     /// Conditionally swap two residues in constant time.
     ///
@@ -424,7 +455,8 @@ where
         + num_traits::WrappingAdd
         + num_traits::WrappingSub
         + num_traits::ops::overflowing::OverflowingAdd
-        + Parity,
+        + Parity
+        + MontStorage,
 {
     /// Convert a raw value to Montgomery form. Constant-time finalize.
     pub fn reduce(&self, raw: &T) -> Residue<'_, T, Ct>
@@ -869,6 +901,17 @@ mod tests {
         let raw = U128Ct::from(0xDEAD_BEEF_u64);
         let r = f.reduce(&raw);
         assert_eq!(f.into_raw(&r), raw);
+    }
+
+    #[cfg(feature = "zeroize")]
+    #[test]
+    fn residue_zeroize_wipes_mont_small() {
+        use zeroize::Zeroize;
+        let f = FieldCt::new(u16ct(13)).unwrap();
+        let mut r = f.reduce(&u16ct(7));
+        assert_ne!(r.mont_value(), u16ct(0));
+        r.zeroize();
+        assert_eq!(r.mont_value(), u16ct(0));
     }
 
     #[test]
