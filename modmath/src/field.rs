@@ -158,15 +158,15 @@ pub type ResidueCt<'f, T> = Residue<'f, T, Ct>;
 // Shared impls (any P)
 // ---------------------------------------------------------------------------
 
-impl<T: Copy + MontStorage, P: Personality> Residue<'_, T, P> {
-    /// Returns a copy of the underlying Montgomery-form value.
+impl<T: MontStorage, P: Personality> Residue<'_, T, P> {
+    /// Returns a reference to the underlying Montgomery-form value.
     ///
     /// **Escape hatch.** Intended for downstream specialization layers
     /// (e.g. `Curve25519Field`) that implement fast paths reading the raw
     /// limbs. General consumers should not call this — use the methods on
     /// [`Field`] instead.
-    pub fn mont_value(&self) -> T {
-        self.mont
+    pub fn mont_value(&self) -> &T {
+        &self.mont
     }
 }
 
@@ -907,11 +907,13 @@ mod tests {
     #[test]
     fn residue_zeroize_wipes_mont_small() {
         use zeroize::Zeroize;
+        fn assert_zeroize_on_drop<T: zeroize::ZeroizeOnDrop>(_: &T) {}
         let f = FieldCt::new(u16ct(13)).unwrap();
         let mut r = f.reduce(&u16ct(7));
-        assert_ne!(r.mont_value(), u16ct(0));
+        assert_zeroize_on_drop(&r);
+        assert_ne!(*r.mont_value(), u16ct(0));
         r.zeroize();
-        assert_eq!(r.mont_value(), u16ct(0));
+        assert_eq!(*r.mont_value(), u16ct(0));
     }
 
     #[test]
@@ -920,7 +922,7 @@ mod tests {
         let f: Field<U16> = Field::new(u16(13)).unwrap();
         for raw in 0u16..13 {
             let r = f.reduce(&u16(raw));
-            let mont = r.mont_value();
+            let mont = *r.mont_value();
             let r2 = f.residue_from_mont(mont);
             assert_eq!(f.into_raw(&r2), u16(raw));
         }
