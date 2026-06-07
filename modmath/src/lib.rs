@@ -60,7 +60,7 @@ pub mod constrained;
 pub mod strict;
 
 #[cfg(feature = "wide-mul")]
-pub use field::{Field, FieldCt, FieldNct, Residue, ResidueCt, ResidueNct};
+pub use field::{Field, FieldCt, FieldNct, MontStorage, Residue, ResidueCt, ResidueNct};
 pub use parity::Parity;
 pub use wide_mul::WideMul;
 
