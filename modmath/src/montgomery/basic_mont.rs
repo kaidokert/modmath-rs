@@ -766,8 +766,14 @@ where
 {
     let (m_lo, m_hi) = a.wide_mul(&b);
     let (new_lo, carry1) = acc_lo.overflowing_add(&m_lo);
-    let (sum_hi, carry2) = acc_hi.overflowing_add(&m_hi);
-    let (new_hi, _extra) = accumulate_high_half_carry(sum_hi, carry1, carry2);
+    let (sum_hi, _) = acc_hi.overflowing_add(&m_hi);
+    // Carry-out is discarded under the documented `N ≤ R/q` bound.
+    let new_hi = if carry1 {
+        let (r, _) = sum_hi.overflowing_add(&T::one());
+        r
+    } else {
+        sum_hi
+    };
     (new_lo, new_hi)
 }
 
@@ -789,8 +795,9 @@ where
 {
     let (m_lo, m_hi) = a.wide_mul(&b);
     let (new_lo, carry1) = acc_lo.overflowing_add(&m_lo);
-    let (sum_hi, carry2) = acc_hi.overflowing_add(&m_hi);
-    let (new_hi, _extra) = accumulate_high_half_carry_ct(sum_hi, carry1, carry2);
+    let (sum_hi, _) = acc_hi.overflowing_add(&m_hi);
+    let (r, _) = sum_hi.overflowing_add(&T::one());
+    let new_hi = T::conditional_select(&sum_hi, &r, subtle::Choice::from(carry1 as u8));
     (new_lo, new_hi)
 }
 
@@ -805,8 +812,13 @@ where
 {
     let (m_lo, m_hi) = a.wide_mul(b);
     let (new_lo, carry1) = acc_lo.overflowing_add(&m_lo);
-    let (sum_hi, carry2) = acc_hi.overflowing_add(&m_hi);
-    let (new_hi, _extra) = accumulate_high_half_carry(sum_hi, carry1, carry2);
+    let (sum_hi, _) = acc_hi.overflowing_add(&m_hi);
+    let new_hi = if carry1 {
+        let (r, _) = sum_hi.overflowing_add(&T::one());
+        r
+    } else {
+        sum_hi
+    };
     (new_lo, new_hi)
 }
 
@@ -823,8 +835,9 @@ where
 {
     let (m_lo, m_hi) = a.wide_mul(b);
     let (new_lo, carry1) = acc_lo.overflowing_add(&m_lo);
-    let (sum_hi, carry2) = acc_hi.overflowing_add(&m_hi);
-    let (new_hi, _extra) = accumulate_high_half_carry_ct(sum_hi, carry1, carry2);
+    let (sum_hi, _) = acc_hi.overflowing_add(&m_hi);
+    let (r, _) = sum_hi.overflowing_add(&T::one());
+    let new_hi = T::conditional_select(&sum_hi, &r, subtle::Choice::from(carry1 as u8));
     (new_lo, new_hi)
 }
 
