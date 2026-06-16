@@ -749,6 +749,98 @@ where
     strict_wide_redc_ct(&lo, &hi, modulus, n_prime)
 }
 
+/// Wide multiply-accumulate: `(acc_lo, acc_hi) += a * b`.
+///
+/// Produces `a * b` as a double-width pair and folds it into the
+/// caller-held accumulator. Result is **not reduced** — call
+/// [`wide_redc`] once at the end of accumulation.
+///
+/// # Bound
+///
+/// Caller must keep the accumulator within `2·WIDTH(T)`. With Mont-form
+/// `a, b ∈ [0, q)`, summing `N` products requires `N ≤ R/q` where
+/// `R = 2^WIDTH(T)`. Out-of-bound use silently wraps the high word.
+pub fn wide_montgomery_mul_acc<T>(acc_lo: T, acc_hi: T, a: T, b: T) -> (T, T)
+where
+    T: Copy + num_traits::One + WideMul + num_traits::ops::overflowing::OverflowingAdd,
+{
+    let (m_lo, m_hi) = a.wide_mul(&b);
+    let (new_lo, carry1) = acc_lo.overflowing_add(&m_lo);
+    let (sum_hi, _) = acc_hi.overflowing_add(&m_hi);
+    // Carry-out is discarded under the documented `N ≤ R/q` bound.
+    let new_hi = if carry1 {
+        let (r, _) = sum_hi.overflowing_add(&T::one());
+        r
+    } else {
+        sum_hi
+    };
+    (new_lo, new_hi)
+}
+
+/// Wide multiply-accumulate — constant-time carry propagation.
+///
+/// Same shape as [`wide_montgomery_mul_acc`] but routes the carry
+/// combination through [`accumulate_high_half_carry_ct`] so the
+/// per-term cost has no value-dependent branches. Use in CT-sensitive
+/// paths; pair with [`wide_redc_ct`] for the final reduction.
+///
+/// Same bound as [`wide_montgomery_mul_acc`] — caller-verified `N ≤ R/q`.
+pub fn wide_montgomery_mul_acc_ct<T>(acc_lo: T, acc_hi: T, a: T, b: T) -> (T, T)
+where
+    T: Copy
+        + num_traits::One
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + subtle::ConditionallySelectable,
+{
+    let (m_lo, m_hi) = a.wide_mul(&b);
+    let (new_lo, carry1) = acc_lo.overflowing_add(&m_lo);
+    let (sum_hi, _) = acc_hi.overflowing_add(&m_hi);
+    let (r, _) = sum_hi.overflowing_add(&T::one());
+    let new_hi = T::conditional_select(&sum_hi, &r, subtle::Choice::from(carry1 as u8));
+    (new_lo, new_hi)
+}
+
+/// Wide multiply-accumulate — reference-based inputs.
+///
+/// Same shape as [`wide_montgomery_mul_acc`] but takes operands by
+/// reference, for non-`Copy` bigint backends. Pair with
+/// [`strict_wide_redc`] for the final reduction.
+pub fn strict_wide_montgomery_mul_acc<T>(acc_lo: &T, acc_hi: &T, a: &T, b: &T) -> (T, T)
+where
+    T: num_traits::One + WideMul + num_traits::ops::overflowing::OverflowingAdd,
+{
+    let (m_lo, m_hi) = a.wide_mul(b);
+    let (new_lo, carry1) = acc_lo.overflowing_add(&m_lo);
+    let (sum_hi, _) = acc_hi.overflowing_add(&m_hi);
+    let new_hi = if carry1 {
+        let (r, _) = sum_hi.overflowing_add(&T::one());
+        r
+    } else {
+        sum_hi
+    };
+    (new_lo, new_hi)
+}
+
+/// Wide multiply-accumulate — constant-time carry, reference-based inputs.
+///
+/// Same shape as [`wide_montgomery_mul_acc_ct`] but reference-based.
+/// Pair with [`strict_wide_redc_ct`] for the final reduction.
+pub fn strict_wide_montgomery_mul_acc_ct<T>(acc_lo: &T, acc_hi: &T, a: &T, b: &T) -> (T, T)
+where
+    T: num_traits::One
+        + WideMul
+        + num_traits::ops::overflowing::OverflowingAdd
+        + subtle::ConditionallySelectable,
+{
+    let (m_lo, m_hi) = a.wide_mul(b);
+    let (new_lo, carry1) = acc_lo.overflowing_add(&m_lo);
+    let (sum_hi, _) = acc_hi.overflowing_add(&m_hi);
+    let (r, _) = sum_hi.overflowing_add(&T::one());
+    let new_hi = T::conditional_select(&sum_hi, &r, subtle::Choice::from(carry1 as u8));
+    (new_lo, new_hi)
+}
+
 // ---------------------------------------------------------------------------
 // Public API: mod_mul / mod_exp using wide REDC
 // ---------------------------------------------------------------------------
@@ -1642,6 +1734,129 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// `mul_acc` with a zero accumulator + `redc` must produce the same
+    /// result as the existing fused `wide_montgomery_mul`. Identity check
+    /// on the new primitive.
+    #[test]
+    fn test_wide_mul_acc_identity_u8() {
+        let modulus = 13u8;
+        let n_prime = compute_n_prime_newton(modulus, 8);
+        for a in 0u8..modulus {
+            for b in 0u8..modulus {
+                let direct = wide_montgomery_mul(a, b, modulus, n_prime);
+                let (lo, hi) = wide_montgomery_mul_acc(0u8, 0u8, a, b);
+                let via_acc = wide_redc(lo, hi, modulus, n_prime);
+                assert_eq!(direct, via_acc, "identity mismatch at a={a} b={b}");
+            }
+        }
+    }
+
+    /// Σ a_i * b_i computed via `mul_acc` per term + one `redc` at the
+    /// end must equal the direct residue-domain sum of products. Proves
+    /// the accumulation semantics — the core promise of the primitive.
+    #[test]
+    fn test_wide_mul_acc_dot_product_u8() {
+        let modulus = 13u8;
+        let n_prime = compute_n_prime_newton(modulus, 8);
+        let r_mod_n = compute_r_mod_n(modulus, 8);
+        let r2 = compute_r2_mod_n(r_mod_n, modulus, 8);
+        let to_mont = |x: u8| {
+            let (lo, hi) = x.wide_mul(&r2);
+            wide_redc(lo, hi, modulus, n_prime)
+        };
+        let pairs: &[(u8, u8)] = &[(2, 3), (5, 7), (11, 4), (1, 12)];
+
+        let (mut acc_lo, mut acc_hi) = (0u8, 0u8);
+        for &(a, b) in pairs {
+            let (l, h) = wide_montgomery_mul_acc(acc_lo, acc_hi, to_mont(a), to_mont(b));
+            acc_lo = l;
+            acc_hi = h;
+        }
+        let result_mont = wide_redc(acc_lo, acc_hi, modulus, n_prime);
+        let result = wide_redc(result_mont, 0u8, modulus, n_prime);
+
+        let expected = pairs
+            .iter()
+            .fold(0u8, |acc, &(a, b)| (acc + (a * b) % modulus) % modulus);
+        assert_eq!(result, expected);
+    }
+
+    /// CT and NCT `mul_acc` variants must produce bit-identical output
+    /// over a representative input grid.
+    #[test]
+    fn test_wide_mul_acc_ct_matches_nct_u8() {
+        let modulus = 13u8;
+        for a in 0u8..modulus {
+            for b in 0u8..modulus {
+                for acc_lo in [0u8, 1, 50, 100, 200, 255] {
+                    for acc_hi in [0u8, 1, 5, modulus - 1] {
+                        let nct = wide_montgomery_mul_acc(acc_lo, acc_hi, a, b);
+                        let ct = wide_montgomery_mul_acc_ct(acc_lo, acc_hi, a, b);
+                        assert_eq!(
+                            nct, ct,
+                            "ct/nct mismatch at lo={acc_lo} hi={acc_hi} a={a} b={b}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Reference-based `strict_*_mul_acc` siblings must match the
+    /// by-value forms on `Copy` types.
+    #[test]
+    fn test_strict_wide_mul_acc_matches_basic_u8() {
+        let modulus = 13u8;
+        for a in 0u8..modulus {
+            for b in 0u8..modulus {
+                for acc_lo in [0u8, 1, 50, 100, 255] {
+                    for acc_hi in [0u8, 1, 5, modulus - 1] {
+                        assert_eq!(
+                            wide_montgomery_mul_acc(acc_lo, acc_hi, a, b),
+                            strict_wide_montgomery_mul_acc(&acc_lo, &acc_hi, &a, &b),
+                            "strict mul_acc mismatch at lo={acc_lo} hi={acc_hi} a={a} b={b}"
+                        );
+                        assert_eq!(
+                            wide_montgomery_mul_acc_ct(acc_lo, acc_hi, a, b),
+                            strict_wide_montgomery_mul_acc_ct(&acc_lo, &acc_hi, &a, &b),
+                            "strict mul_acc_ct mismatch at lo={acc_lo} hi={acc_hi} a={a} b={b}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// ML-KEM-shaped dot product at `q=3329`, `T=u32`. Exercises the
+    /// actual use-case: 4 Mont products summed via `mul_acc`, single
+    /// `redc` at the end.
+    #[test]
+    fn test_wide_mul_acc_dot_product_u32_mlkem_q() {
+        let modulus = 3329u32;
+        let w = type_bit_width::<u32>();
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r2 = compute_r2_mod_n(compute_r_mod_n(modulus, w), modulus, w);
+        let to_mont = |x: u32| {
+            let (lo, hi) = x.wide_mul(&r2);
+            wide_redc(lo, hi, modulus, n_prime)
+        };
+        let pairs: &[(u32, u32)] = &[(123, 456), (789, 1011), (2222, 3000), (1, 3328)];
+
+        let (mut acc_lo, mut acc_hi) = (0u32, 0u32);
+        for &(a, b) in pairs {
+            let (l, h) = wide_montgomery_mul_acc(acc_lo, acc_hi, to_mont(a), to_mont(b));
+            acc_lo = l;
+            acc_hi = h;
+        }
+        let result_mont = wide_redc(acc_lo, acc_hi, modulus, n_prime);
+        let result = wide_redc(result_mont, 0u32, modulus, n_prime);
+
+        let expected = pairs.iter().fold(0u64, |acc, &(a, b)| {
+            acc + (a as u64 * b as u64) % modulus as u64
+        }) % modulus as u64;
+        assert_eq!(result as u64, expected);
     }
 
     /// wide_redc_ct matches at FixedUInt sizes.

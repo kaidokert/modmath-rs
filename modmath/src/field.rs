@@ -53,7 +53,8 @@ use core::marker::PhantomData;
 use fixed_bigint::{Ct, Nct, Personality};
 
 use crate::montgomery::basic_mont::{
-    wide_montgomery_mul, wide_montgomery_mul_ct, wide_redc, wide_redc_ct,
+    wide_montgomery_mul, wide_montgomery_mul_acc, wide_montgomery_mul_acc_ct,
+    wide_montgomery_mul_ct, wide_redc, wide_redc_ct,
 };
 use crate::montgomery::{
     CiosMontMul, CiosMontMulCt, compute_n_prime_newton, compute_r_mod_n, compute_r2_mod_n,
@@ -420,6 +421,74 @@ where
             _p: PhantomData,
         }
     }
+
+    /// Wide multiply-accumulate: `(acc.0, acc.1) += a.mont * b.mont`.
+    ///
+    /// Brand-tagged wrapper around [`wide_montgomery_mul_acc`]. Pair
+    /// with [`Field::wide_redc`] to close the accumulator after a fused
+    /// inner-product loop. See the free-function for the `N ≤ R/q`
+    /// bound contract.
+    pub fn mul_acc(&self, acc: (T, T), a: &Residue<'_, T, Nct>, b: &Residue<'_, T, Nct>) -> (T, T)
+    where
+        T: WideMul,
+    {
+        wide_montgomery_mul_acc(acc.0, acc.1, a.mont, b.mont)
+    }
+
+    /// Close a wide accumulator into a brand-tagged [`Residue`].
+    pub fn wide_redc(&self, acc: (T, T)) -> Residue<'_, T, Nct>
+    where
+        T: WideMul,
+    {
+        let mont = wide_redc(acc.0, acc.1, self.modulus, self.n_prime);
+        Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Modular inverse via Fermat's little theorem: `a^(modulus − 2)`.
+    ///
+    /// **Requires `modulus` to be prime.** Variable-time over the bits
+    /// of `modulus − 2`. Returns `None` when `a` is the zero residue.
+    pub fn inv_fermat(&self, a: &Residue<'_, T, Nct>) -> Option<Residue<'_, T, Nct>>
+    where
+        T: CiosMontMul + core::ops::ShrAssign<usize>,
+    {
+        if a.mont == T::zero() {
+            return None;
+        }
+        let two = T::one().wrapping_add(&T::one());
+        let exp_val = self.modulus.wrapping_sub(&two);
+        Some(self.exp(a, &exp_val))
+    }
+
+    /// Modular inverse via extended Euclidean GCD on the raw Mont
+    /// value, then rebrand to Mont form via two Mont multiplies by
+    /// `R^2 mod N`.
+    ///
+    /// Works for any odd modulus (composite is fine). Variable-time —
+    /// do not call with secret inputs; use [`Self::inv_fermat`] for CT
+    /// paths. Returns `None` when `a` is not coprime to modulus.
+    pub fn inv_eea(&self, a: &Residue<'_, T, Nct>) -> Option<Residue<'_, T, Nct>>
+    where
+        T: WideMul + core::ops::Div<Output = T> + core::ops::Sub<Output = T>,
+    {
+        if a.mont == T::zero() {
+            return None;
+        }
+        let raw_inv = crate::inv::basic_mod_inv(a.mont, self.modulus)?;
+        // raw_inv = (a*R)^{-1} = a^{-1} * R^{-1} (residue form).
+        // Two Mont mults by R^2 lift it back to a^{-1} * R = Mont(a^{-1}).
+        let step1 = wide_montgomery_mul(raw_inv, self.r2_mod_n, self.modulus, self.n_prime);
+        let mont = wide_montgomery_mul(step1, self.r2_mod_n, self.modulus, self.n_prime);
+        Some(Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -441,6 +510,20 @@ where
     /// is not guaranteed to be branchless.
     pub fn cswap(choice: subtle::Choice, a: &mut Self, b: &mut Self) {
         T::conditional_swap(&mut a.mont, &mut b.mont, choice);
+    }
+}
+
+impl<'f, T> Residue<'f, T, Ct>
+where
+    T: subtle::ConstantTimeEq + MontStorage,
+{
+    /// Constant-time equality on the underlying Montgomery values.
+    ///
+    /// Use in place of derived `PartialEq` on Ct paths where the
+    /// equality outcome must not leak through timing (ML-KEM
+    /// decapsulation tag check, ed25519 signature verification).
+    pub fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        self.mont.ct_eq(&other.mont)
     }
 }
 
@@ -658,6 +741,54 @@ where
             _brand: PhantomData,
             _p: PhantomData,
         }
+    }
+
+    /// Wide multiply-accumulate (CT carry).
+    ///
+    /// Brand-tagged wrapper around [`wide_montgomery_mul_acc_ct`]. Pair
+    /// with [`Field::wide_redc`] (CT variant) to close the accumulator.
+    /// See the free-function for the `N ≤ R/q` bound contract.
+    pub fn mul_acc(&self, acc: (T, T), a: &Residue<'_, T, Ct>, b: &Residue<'_, T, Ct>) -> (T, T)
+    where
+        T: WideMul + subtle::ConditionallySelectable,
+    {
+        wide_montgomery_mul_acc_ct(acc.0, acc.1, a.mont, b.mont)
+    }
+
+    /// Close a wide accumulator (CT finalize) into a brand-tagged
+    /// [`Residue`].
+    pub fn wide_redc(&self, acc: (T, T)) -> Residue<'_, T, Ct>
+    where
+        T: WideMul + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+    {
+        let mont = wide_redc_ct(acc.0, acc.1, self.modulus, self.n_prime);
+        Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        }
+    }
+
+    /// Modular inverse via Fermat: `a^(modulus − 2)` through the fixed-
+    /// iteration CT Montgomery ladder.
+    ///
+    /// **Requires `modulus` to be prime.** Constant-time over the bits
+    /// of `modulus − 2` (uses [`Self::exp`]). Returns `None` for the
+    /// zero residue.
+    pub fn inv_fermat(&self, a: &Residue<'_, T, Ct>) -> Option<Residue<'_, T, Ct>>
+    where
+        T: CiosMontMulCt
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeEq
+            + core::ops::Shr<usize, Output = T>
+            + core::ops::BitAnd<Output = T>,
+    {
+        if a.mont == T::zero() {
+            return None;
+        }
+        let two = T::one().wrapping_add(&T::one());
+        let exp_val = self.modulus.wrapping_sub(&two);
+        Some(self.exp(a, &exp_val))
     }
 }
 
@@ -1023,5 +1154,122 @@ mod tests {
         // trait extension on their own side and call modmath's standalone
         // primitives. This test just proves the const-context construction
         // path is real.
+    }
+
+    /// `Field::mul_acc` + `Field::wide_redc` from a zero accumulator
+    /// must equal `Field::mul` on the same operands.
+    #[test]
+    fn field_mul_acc_round_trip_small() {
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        for a_raw in 0u16..13 {
+            for b_raw in 0u16..13 {
+                let a = f.reduce(&u16(a_raw));
+                let b = f.reduce(&u16(b_raw));
+                let direct = f.mul(&a, &b);
+                let via_acc = f.wide_redc(f.mul_acc((u16(0), u16(0)), &a, &b));
+                assert_eq!(f.into_raw(&direct), f.into_raw(&via_acc));
+            }
+        }
+    }
+
+    /// Dot product through `Field::mul_acc` + single `Field::wide_redc`
+    /// must equal the direct residue-domain sum of products.
+    #[test]
+    fn field_mul_acc_dot_product_small() {
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        let pairs: &[(u16, u16)] = &[(2, 3), (5, 7), (11, 4), (1, 12)];
+        let mut acc = (u16(0), u16(0));
+        for &(a_raw, b_raw) in pairs {
+            let a = f.reduce(&u16(a_raw));
+            let b = f.reduce(&u16(b_raw));
+            acc = f.mul_acc(acc, &a, &b);
+        }
+        let result = f.wide_redc(acc);
+        let expected: u16 = pairs
+            .iter()
+            .fold(0u16, |s, &(a, b)| (s + (a * b) % 13) % 13);
+        assert_eq!(f.into_raw(&result), u16(expected));
+    }
+
+    /// `a * inv_fermat(a) == 1` for every nonzero residue at prime
+    /// modulus 13; zero returns `None`.
+    #[test]
+    fn field_inv_fermat_small() {
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        for raw in 1u16..13 {
+            let a = f.reduce(&u16(raw));
+            let inv = f.inv_fermat(&a).unwrap();
+            assert_eq!(
+                f.into_raw(&f.mul(&a, &inv)),
+                u16(1),
+                "fermat fails at {raw}"
+            );
+        }
+        assert!(f.inv_fermat(&f.zero()).is_none());
+    }
+
+    /// Same contract as inv_fermat but via EEA path; cross-checks the
+    /// two methods agree at every nonzero residue.
+    #[test]
+    fn field_inv_eea_small() {
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        for raw in 1u16..13 {
+            let a = f.reduce(&u16(raw));
+            let inv_e = f.inv_eea(&a).unwrap();
+            let inv_f = f.inv_fermat(&a).unwrap();
+            assert_eq!(f.into_raw(&f.mul(&a, &inv_e)), u16(1), "eea fails at {raw}");
+            assert_eq!(
+                f.into_raw(&inv_e),
+                f.into_raw(&inv_f),
+                "fermat/eea disagree at {raw}"
+            );
+        }
+        assert!(f.inv_eea(&f.zero()).is_none());
+    }
+
+    /// Ct variant of `Field::mul_acc` + `Field::wide_redc` must agree
+    /// with `Field::mul`.
+    #[test]
+    fn field_mul_acc_ct_round_trip_small() {
+        let f = FieldCt::new(u16ct(13)).unwrap();
+        for a_raw in 0u16..13 {
+            for b_raw in 0u16..13 {
+                let a = f.reduce(&u16ct(a_raw));
+                let b = f.reduce(&u16ct(b_raw));
+                let direct = f.mul(&a, &b);
+                let via_acc = f.wide_redc(f.mul_acc((u16ct(0), u16ct(0)), &a, &b));
+                assert_eq!(f.into_raw(&direct), f.into_raw(&via_acc));
+            }
+        }
+    }
+
+    /// Ct `inv_fermat` must satisfy `a * inv(a) == 1` at prime modulus.
+    #[test]
+    fn field_inv_fermat_ct_small() {
+        let f = FieldCt::new(u16ct(13)).unwrap();
+        for raw in 1u16..13 {
+            let a = f.reduce(&u16ct(raw));
+            let inv = f.inv_fermat(&a).unwrap();
+            assert_eq!(
+                f.into_raw(&f.mul(&a, &inv)),
+                u16ct(1),
+                "ct fermat fails at {raw}"
+            );
+        }
+        assert!(f.inv_fermat(&f.zero()).is_none());
+    }
+
+    /// `ResidueCt::ct_eq` matches `PartialEq` outcomes on representative
+    /// inputs (true and false cases).
+    #[test]
+    fn residue_ct_eq_small() {
+        let f = FieldCt::new(u16ct(13)).unwrap();
+        let a = f.reduce(&u16ct(7));
+        let b = f.reduce(&u16ct(7));
+        let c = f.reduce(&u16ct(8));
+        let eq_ab: bool = a.ct_eq(&b).into();
+        let eq_ac: bool = a.ct_eq(&c).into();
+        assert!(eq_ab);
+        assert!(!eq_ac);
     }
 }
