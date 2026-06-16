@@ -55,11 +55,15 @@ pub mod wide {
     #[doc(inline)]
     pub use crate::montgomery::basic_mont::strict_wide_montgomery_mul as mul;
     #[doc(inline)]
+    pub use crate::montgomery::basic_mont::strict_wide_montgomery_mul_acc as mul_acc;
+    #[doc(inline)]
     pub use crate::montgomery::basic_mont::strict_wide_redc as redc;
 
     /// Constant-time finalize. Branchless conditional-subtract via
     /// `subtle::ConditionallySelectable`.
     pub mod ct {
+        #[doc(inline)]
+        pub use crate::montgomery::basic_mont::strict_wide_montgomery_mul_acc_ct as mul_acc;
         #[doc(inline)]
         pub use crate::montgomery::basic_mont::strict_wide_montgomery_mul_ct as mul;
         #[doc(inline)]
