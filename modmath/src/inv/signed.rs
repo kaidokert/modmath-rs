@@ -67,10 +67,10 @@ impl<T> Signed<T> {
     /// # Zero Canonicalization
     /// If `value` is zero, `negative` will automatically be set to `false`
     /// regardless of the input, maintaining the invariant that zero is always positive.
-    /// This requires `T: PartialEq + num_traits::Zero`.
+    /// This requires `T: PartialEq + const_num_traits::Zero`.
     pub fn new(value: T, negative: bool) -> Self
     where
-        T: PartialEq + num_traits::Zero,
+        T: PartialEq + const_num_traits::Zero,
     {
         let is_zero = value == T::zero();
         Self {
@@ -118,7 +118,7 @@ where
         + core::ops::Sub<&'a T, Output = T>
         + core::cmp::PartialOrd
         + PartialEq
-        + num_traits::Zero,
+        + const_num_traits::Zero,
     for<'a> &'a T: core::ops::Sub<T, Output = T>,
 {
     type Output = Self;
@@ -152,7 +152,7 @@ where
         + core::ops::SubAssign<&'a T>
         + PartialEq
         + PartialOrd
-        + num_traits::Zero
+        + const_num_traits::Zero
         + Clone,
     for<'b> &'b T: core::ops::Sub<T, Output = T>,
 {
@@ -184,7 +184,7 @@ where
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::cmp::PartialOrd
-        + num_traits::Zero
+        + const_num_traits::Zero
         + PartialEq,
     for<'a> &'a T: core::ops::Sub<T, Output = T>,
 {

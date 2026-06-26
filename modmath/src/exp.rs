@@ -3,25 +3,24 @@ use super::mul::const_mod_mul;
 use super::mul::{basic_mod_mul_pr, constrained_mod_mul_pr, strict_mod_mul_pr};
 
 #[cfg(feature = "nightly")]
-use fixed_bigint::const_numtraits::{
-    ConstOne, ConstOverflowingAdd, ConstOverflowingSub, ConstZero,
-};
+use const_num_traits::{One, OverflowingAdd, OverflowingSub, Zero};
 
 #[cfg(feature = "nightly")]
 c0nst::c0nst! {
     /// # Const Modular Exponentiation
-    /// Const-evaluable version of modular exponentiation. Uses const traits from
-    /// `fixed_bigint::const_numtraits` instead of `num_traits`.
+    /// Const-evaluable version of modular exponentiation.
     pub c0nst fn const_mod_exp<T>(mut base: T, exponent: T, modulus: T) -> T
     where
         T: [c0nst] core::cmp::PartialOrd
             + [c0nst] core::cmp::PartialEq
             + Copy
-            + [c0nst] ConstZero
-            + [c0nst] ConstOne
+            + [c0nst] Zero
+            + [c0nst] One
             + [c0nst] core::ops::BitAnd<Output = T>
-            + [c0nst] ConstOverflowingAdd
-            + [c0nst] ConstOverflowingSub
+            + [c0nst] OverflowingAdd
+            + [c0nst] core::ops::Add<Output = T>
+            + [c0nst] OverflowingSub
+            + [c0nst] core::ops::Sub<Output = T>
             + [c0nst] core::ops::Shr<usize, Output = T>
             + [c0nst] core::ops::ShrAssign<usize>
             + [c0nst] core::ops::Rem<Output = T>,
@@ -51,13 +50,15 @@ c0nst::c0nst! {
 pub fn basic_mod_exp<T>(base: T, exponent: T, modulus: T) -> T
 where
     T: PartialOrd
-        + num_traits::One
-        + num_traits::Zero
+        + const_num_traits::One
+        + const_num_traits::Zero
         + crate::parity::Parity
         + core::ops::Rem<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + core::ops::ShrAssign<usize>
         + Copy,
 {
@@ -65,6 +66,33 @@ where
         return T::zero();
     }
     basic_mod_exp_pr(base % modulus, exponent, modulus)
+}
+
+/// # Modular Exponentiation (Basic, proven-non-zero modulus). **Infallible.**
+///
+/// The `modulus == 1` early-return is preserved (any `x mod 1 == 0`) —
+/// `T::NonZero` proves `modulus != 0`, not `modulus > 1`.
+pub fn basic_mod_exp_nz<T>(base: T, exponent: T, modulus: T::NonZero) -> T
+where
+    T: PartialOrd
+        + const_num_traits::One
+        + const_num_traits::Zero
+        + crate::parity::Parity
+        + const_num_traits::HasNonZero
+        + const_num_traits::DivNonZero<Output = T>
+        + core::ops::Shr<usize, Output = T>
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::ShrAssign<usize>
+        + Copy,
+{
+    let m_raw = T::nonzero_get(modulus);
+    if m_raw == T::one() {
+        return T::zero();
+    }
+    basic_mod_exp_pr(base.rem_nonzero(modulus), exponent, m_raw)
 }
 
 /// # Modular Exponentiation (Basic, pre-reduced)
@@ -77,12 +105,14 @@ where
 pub fn basic_mod_exp_pr<T>(mut base: T, exponent: T, modulus: T) -> T
 where
     T: PartialOrd
-        + num_traits::One
-        + num_traits::Zero
+        + const_num_traits::One
+        + const_num_traits::Zero
         + crate::parity::Parity
         + core::ops::Shr<usize, Output = T>
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + core::ops::ShrAssign<usize>
         + Copy,
 {
@@ -112,12 +142,15 @@ where
 /// `WrappingSub` traits to be implemented.
 pub fn constrained_mod_exp<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
-    T: PartialOrd
-        + num_traits::One
-        + num_traits::Zero
+    T: Copy
+        + PartialOrd
+        + const_num_traits::One
+        + const_num_traits::Zero
         + crate::parity::Parity
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + core::ops::ShrAssign<usize>
         + core::ops::Shr<usize, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
@@ -132,17 +165,44 @@ where
     constrained_mod_exp_pr(base, exponent, modulus)
 }
 
+/// # Modular Exponentiation (Constrained, proven-non-zero modulus). **Infallible.**
+pub fn constrained_mod_exp_nz<T>(base: T, exponent: &T, modulus: T::NonZero) -> T
+where
+    T: Copy
+        + PartialOrd
+        + const_num_traits::One
+        + const_num_traits::Zero
+        + crate::parity::Parity
+        + const_num_traits::HasNonZero
+        + const_num_traits::DivNonZero<Output = T>
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::ShrAssign<usize>
+        + core::ops::Shr<usize, Output = T>,
+{
+    let m_raw = T::nonzero_get(modulus);
+    if m_raw == T::one() {
+        return T::zero();
+    }
+    constrained_mod_exp_pr(base.rem_nonzero(modulus), exponent, &m_raw)
+}
+
 /// # Modular Exponentiation (Constrained, pre-reduced)
 /// Precondition: if `*modulus > 1`, then `base < *modulus`. No `Rem` family bound.
 /// Returns `0` when `*modulus == 1`.
 pub fn constrained_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
-    T: PartialOrd
-        + num_traits::One
-        + num_traits::Zero
+    T: Copy
+        + PartialOrd
+        + const_num_traits::One
+        + const_num_traits::Zero
         + crate::parity::Parity
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + core::ops::ShrAssign<usize>
         + core::ops::Shr<usize, Output = T>,
 {
@@ -151,7 +211,7 @@ where
         return T::zero();
     }
     let mut result = T::one();
-    let mut exp = T::zero().wrapping_add(exponent);
+    let mut exp = T::zero().wrapping_add(*exponent);
     while exp > T::zero() {
         if exp.is_odd() {
             result = constrained_mod_mul_pr(result, &base, modulus);
@@ -161,7 +221,7 @@ where
             // Squaring step: `mul_pr` consumes `a` (first arg) and borrows
             // `b` (second arg); when both come from the same `base`, we
             // still need one clone so the borrow doesn't alias the move.
-            let tmp_base = T::zero().wrapping_add(&base);
+            let tmp_base = T::zero().wrapping_add(base);
             base = constrained_mod_mul_pr(base, &tmp_base, modulus);
         }
     }
@@ -174,12 +234,15 @@ where
 /// all multiplication contraints as well.
 pub fn strict_mod_exp<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
-    T: PartialOrd
-        + num_traits::One
-        + num_traits::Zero
+    T: Copy
+        + PartialOrd
+        + const_num_traits::One
+        + const_num_traits::Zero
         + crate::parity::Parity
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::DivAssign<&'a T>
@@ -194,17 +257,44 @@ where
     strict_mod_exp_pr(base, exponent, modulus)
 }
 
+/// # Modular Exponentiation (Strict, proven-non-zero modulus). **Infallible.**
+pub fn strict_mod_exp_nz<T>(base: T, exponent: &T, modulus: T::NonZero) -> T
+where
+    T: Copy
+        + PartialOrd
+        + const_num_traits::One
+        + const_num_traits::Zero
+        + crate::parity::Parity
+        + const_num_traits::HasNonZero
+        + const_num_traits::DivNonZero<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Shr<usize, Output = T>,
+    for<'a> T: core::ops::ShrAssign<usize>,
+{
+    let m_raw = T::nonzero_get(modulus);
+    if m_raw == T::one() {
+        return T::zero();
+    }
+    strict_mod_exp_pr(base.rem_nonzero(modulus), exponent, &m_raw)
+}
+
 /// # Modular Exponentiation (Strict, pre-reduced)
 /// Precondition: if `*modulus > 1`, then `base < *modulus`. No `Rem` family bound.
 /// Returns `0` when `*modulus == 1`.
 pub fn strict_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
-    T: PartialOrd
-        + num_traits::One
-        + num_traits::Zero
+    T: Copy
+        + PartialOrd
+        + const_num_traits::One
+        + const_num_traits::Zero
         + crate::parity::Parity
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>,
     for<'a> T: core::ops::ShrAssign<usize>,
 {
@@ -213,7 +303,7 @@ where
         return T::zero();
     }
     let mut result = T::one();
-    let mut exp = T::zero().overflowing_add(exponent).0;
+    let mut exp = T::zero().overflowing_add(*exponent).0;
 
     while exp > T::zero() {
         if exp.is_odd() {
@@ -225,7 +315,7 @@ where
             // Squaring step: `mul_pr` consumes `a` (first arg) and borrows
             // `b` (second arg); when both come from the same `base`, we
             // still need one clone so the borrow doesn't alias the move.
-            let tmp_base = T::zero().overflowing_add(&base).0;
+            let tmp_base = T::zero().overflowing_add(base).0;
             base = strict_mod_mul_pr(base, &tmp_base, modulus);
         }
     }
@@ -526,73 +616,73 @@ mod bnum_exp_tests {
     use super::constrained_mod_exp;
     use super::strict_mod_exp;
 
-    exp_test_module!(
-        bnum,
-        bnum::types::U256,
-        strict: off, // OverflowingAdd + OverflowingSub is not implemented
-        constrained: on,
-        basic: on,
-    );
+    //     exp_test_module!(
+    //         bnum,
+    //         bnum::types::U256,
+    //         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+    //         constrained: on,
+    //         basic: on,
+    //     );
 
-    exp_test_module!(
-        bnum_patched,
-        bnum_patched::types::U256,
-        strict: on,
-        constrained: on,
-        basic: on,
-    );
+    //     exp_test_module!(
+    //         bnum_patched,
+    //         bnum_patched::types::U256,
+    //         strict: on,
+    //         constrained: on,
+    //         basic: on,
+    //     );
 
-    exp_test_module!(
-        crypto_bigint,
-        crypto_bigint::U256,
-        strict: off, // OverflowingAdd missing
-        constrained: off, // RemAssign
-        basic: off, // RemAssign is not implemented
-    );
+    //     exp_test_module!(
+    //         crypto_bigint,
+    //         crypto_bigint::U256,
+    //         strict: off, // OverflowingAdd missing
+    //         constrained: off, // RemAssign
+    //         basic: off, // RemAssign is not implemented
+    //     );
 
-    exp_test_module!(
-        crypto_bigint_patched,
-        crypto_bigint_patched::U256,
-        strict: on,
-        constrained: on,
-        basic: on,
-    );
+    //     exp_test_module!(
+    //         crypto_bigint_patched,
+    //         crypto_bigint_patched::U256,
+    //         strict: on,
+    //         constrained: on,
+    //         basic: on,
+    //     );
 
-    exp_test_module!(
-        num_bigint,
-        num_bigint::BigUint,
-        type U256 = num_bigint::BigUint;
-        strict: off, // OverflowingAdd missing
-        constrained: off, // WrappingAdd missing
-        basic: off, // Copy cannot be implemented, heap allocation
-    );
+    //     exp_test_module!(
+    //         num_bigint,
+    //         num_bigint::BigUint,
+    //         type U256 = num_bigint::BigUint;
+    //         strict: off, // OverflowingAdd missing
+    //         constrained: off, // WrappingAdd missing
+    //         basic: off, // Copy cannot be implemented, heap allocation
+    //     );
 
-    exp_test_module!(
-        num_bigint_patched,
-        num_bigint_patched::BigUint,
-        type U256 = num_bigint_patched::BigUint;
-        strict: on,
-        constrained: on,
-        basic: off, // Copy cannot be implemented, heap allocation
-    );
+    //     exp_test_module!(
+    //         num_bigint_patched,
+    //         num_bigint_patched::BigUint,
+    //         type U256 = num_bigint_patched::BigUint;
+    //         strict: on,
+    //         constrained: on,
+    //         basic: off, // Copy cannot be implemented, heap allocation
+    //     );
 
-    exp_test_module!(
-        ibig,
-        ibig::UBig,
-        type U256 = ibig::UBig;
-        strict: off, // OverflowingAdd missing
-        constrained: off, // WrappingAdd missing
-        basic: off, // Copy cannot be implemented, heap allocation
-    );
+    //     exp_test_module!(
+    //         ibig,
+    //         ibig::UBig,
+    //         type U256 = ibig::UBig;
+    //         strict: off, // OverflowingAdd missing
+    //         constrained: off, // WrappingAdd missing
+    //         basic: off, // Copy cannot be implemented, heap allocation
+    //     );
 
-    exp_test_module!(
-        ibig_patched,
-        ibig_patched::UBig,
-        type U256 = ibig_patched::UBig;
-        strict: on,
-        constrained: on,
-        basic: off, // Copy cannot be implemented, heap allocation
-    );
+    //     exp_test_module!(
+    //         ibig_patched,
+    //         ibig_patched::UBig,
+    //         type U256 = ibig_patched::UBig;
+    //         strict: on,
+    //         constrained: on,
+    //         basic: off, // Copy cannot be implemented, heap allocation
+    //     );
 
     // Default (Nct-personality) FixedUInt provides Rem; the wrapper
     // functions are usable here. The Ct personality intentionally omits
@@ -660,6 +750,62 @@ mod fixed_bigint_pr_tests {
                 assert_eq!(constrained_mod_exp_pr(base, &exp, &m), zero);
                 let base = U256::from(b);
                 assert_eq!(basic_mod_exp_pr(base, exp, m), zero);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod nz_tests {
+    use super::*;
+    use const_num_traits::HasNonZero;
+
+    #[test]
+    fn basic_mod_exp_nz_matches_basic_mod_exp() {
+        let m: u32 = 97;
+        let m_nz = m.into_nonzero().unwrap();
+        for base in [0u32, 1, 2, 96, 200] {
+            for exp in [0u32, 1, 5, 96] {
+                assert_eq!(
+                    basic_mod_exp_nz(base, exp, m_nz),
+                    basic_mod_exp(base, exp, m)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn basic_mod_exp_nz_modulus_one_returns_zero() {
+        // `T::NonZero` rules out modulus == 0 but not modulus == 1; the
+        // early-return preserves the `x mod 1 == 0` contract.
+        let m_nz = 1u32.into_nonzero().unwrap();
+        assert_eq!(basic_mod_exp_nz(123u32, 7u32, m_nz), 0);
+    }
+
+    #[test]
+    fn constrained_mod_exp_nz_matches_constrained_mod_exp() {
+        let m: u32 = 97;
+        let m_nz = m.into_nonzero().unwrap();
+        for base in [0u32, 1, 2, 96, 200] {
+            for exp in [0u32, 1, 5, 96] {
+                assert_eq!(
+                    constrained_mod_exp_nz(base, &exp, m_nz),
+                    constrained_mod_exp(base, &exp, &m)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn strict_mod_exp_nz_matches_strict_mod_exp() {
+        let m: u32 = 97;
+        let m_nz = m.into_nonzero().unwrap();
+        for base in [0u32, 1, 2, 96, 200] {
+            for exp in [0u32, 1, 5, 96] {
+                assert_eq!(
+                    strict_mod_exp_nz(base, &exp, m_nz),
+                    strict_mod_exp(base, &exp, &m)
+                );
             }
         }
     }

@@ -1,23 +1,24 @@
 #[cfg(feature = "nightly")]
-use fixed_bigint::const_numtraits::{ConstOverflowingAdd, ConstOverflowingSub};
+use const_num_traits::{OverflowingAdd, OverflowingSub};
 
 #[cfg(feature = "nightly")]
 c0nst::c0nst! {
     /// # Const Modular Subtraction
-    /// Const-evaluable version of modular subtraction. Uses const traits from
-    /// `fixed_bigint::const_numtraits` instead of `num_traits`.
+    /// Const-evaluable version of modular subtraction.
     pub c0nst fn const_mod_sub<T>(a: T, b: T, m: T) -> T
     where
         T: [c0nst] core::cmp::PartialOrd
             + Copy
-            + [c0nst] ConstOverflowingAdd
-            + [c0nst] ConstOverflowingSub
+            + [c0nst] OverflowingAdd
+            + [c0nst] core::ops::Add<Output = T>
+            + [c0nst] OverflowingSub
+            + [c0nst] core::ops::Sub<Output = T>
             + [c0nst] core::ops::Rem<Output = T>,
     {
         let a = a % m;
-        let (diff, overflow) = a.overflowing_sub(&(b % m));
+        let (diff, overflow) = a.overflowing_sub(b % m);
         if overflow {
-            m.overflowing_add(&diff).0
+            m.overflowing_add(diff).0
         } else {
             diff
         }
@@ -31,11 +32,29 @@ pub fn basic_mod_sub<T>(a: T, b: T, m: T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + core::ops::Rem<Output = T>,
 {
     basic_mod_sub_pr(a % m, b % m, m)
+}
+
+/// # Modular Subtraction (Basic, proven-non-zero modulus). **Infallible.**
+pub fn basic_mod_sub_nz<T>(a: T, b: T, m: T::NonZero) -> T
+where
+    T: core::cmp::PartialOrd
+        + Copy
+        + const_num_traits::HasNonZero
+        + const_num_traits::DivNonZero<Output = T>
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
+{
+    let m_raw = T::nonzero_get(m);
+    basic_mod_sub_pr(a.rem_nonzero(m), b.rem_nonzero(m), m_raw)
 }
 
 /// # Modular Subtraction (Basic, pre-reduced)
@@ -44,13 +63,15 @@ pub fn basic_mod_sub_pr<T>(a: T, b: T, m: T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub,
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
 {
-    let diff = a.wrapping_sub(&b);
+    let diff = a.wrapping_sub(b);
     if diff > a {
         // If we wrapped around (underflow)
-        diff.wrapping_add(&m)
+        diff.wrapping_add(m)
     } else {
         diff
     }
@@ -62,8 +83,11 @@ where
 pub fn constrained_mod_sub<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub,
+        + Copy
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     let a_mod = &a % m;
@@ -71,18 +95,38 @@ where
     constrained_mod_sub_pr(a_mod, &b_mod, m)
 }
 
+/// # Modular Subtraction (Constrained, proven-non-zero modulus). **Infallible.**
+pub fn constrained_mod_sub_nz<T>(a: T, b: &T, m: T::NonZero) -> T
+where
+    T: core::cmp::PartialOrd
+        + Copy
+        + const_num_traits::HasNonZero
+        + const_num_traits::DivNonZero<Output = T>
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
+{
+    let m_raw = T::nonzero_get(m);
+    let b_mod = (*b).rem_nonzero(m);
+    constrained_mod_sub_pr(a.rem_nonzero(m), &b_mod, &m_raw)
+}
+
 /// # Modular Subtraction (Constrained, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
 pub fn constrained_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub,
+        + Copy
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
 {
-    let diff = a.wrapping_sub(b);
+    let diff = a.wrapping_sub(*b);
     if diff > a {
         // If we wrapped around (underflow)
-        diff.wrapping_add(m)
+        diff.wrapping_add(*m)
     } else {
         diff
     }
@@ -94,8 +138,11 @@ where
 pub fn strict_mod_sub<T>(mut a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
+        + Copy
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
     for<'b> T: core::ops::RemAssign<&'b T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
@@ -104,17 +151,37 @@ where
     strict_mod_sub_pr(a, &b_mod, m)
 }
 
+/// # Modular Subtraction (Strict, proven-non-zero modulus). **Infallible.**
+pub fn strict_mod_sub_nz<T>(a: T, b: &T, m: T::NonZero) -> T
+where
+    T: core::cmp::PartialOrd
+        + Copy
+        + const_num_traits::HasNonZero
+        + const_num_traits::DivNonZero<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
+{
+    let m_raw = T::nonzero_get(m);
+    let b_mod = (*b).rem_nonzero(m);
+    strict_mod_sub_pr(a.rem_nonzero(m), &b_mod, &m_raw)
+}
+
 /// # Modular Subtraction (Strict, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
 pub fn strict_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
+        + Copy
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
 {
-    let (diff, overflow) = a.overflowing_sub(b);
+    let (diff, overflow) = a.overflowing_sub(*b);
     if overflow {
-        m.overflowing_add(&diff).0
+        m.overflowing_add(diff).0
     } else {
         diff
     }
@@ -284,73 +351,73 @@ mod bnum_sub_tests {
     use super::constrained_mod_sub;
     use super::strict_mod_sub;
 
-    sub_test_module!(
-        bnum,
-        bnum::types::U256,
-        strict: off, // OverflowingAdd + OverflowingSub is not implemented
-        constrained: on,
-        basic: on,
-    );
+    //     sub_test_module!(
+    //         bnum,
+    //         bnum::types::U256,
+    //         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+    //         constrained: on,
+    //         basic: on,
+    //     );
 
-    sub_test_module!(
-        bnum_patched,
-        bnum_patched::types::U256,
-        strict: on,
-        constrained: on,
-        basic: on,
-    );
+    //     sub_test_module!(
+    //         bnum_patched,
+    //         bnum_patched::types::U256,
+    //         strict: on,
+    //         constrained: on,
+    //         basic: on,
+    //     );
 
-    sub_test_module!(
-        crypto_bigint,
-        crypto_bigint::U256,
-        strict: off,  // "Missing OverflowingAdd + OverflowingSub" },
-        constrained: off, // "Rem<'a> is not implemented for U256" },
-        basic: on,
-    );
+    //     sub_test_module!(
+    //         crypto_bigint,
+    //         crypto_bigint::U256,
+    //         strict: off,  // "Missing OverflowingAdd + OverflowingSub" },
+    //         constrained: off, // "Rem<'a> is not implemented for U256" },
+    //         basic: on,
+    //     );
 
-    sub_test_module!(
-        crypto_bigint_patched,
-        crypto_bigint_patched::U256,
-        strict: on,
-        constrained: on,
-        basic: on,
-    );
+    //     sub_test_module!(
+    //         crypto_bigint_patched,
+    //         crypto_bigint_patched::U256,
+    //         strict: on,
+    //         constrained: on,
+    //         basic: on,
+    //     );
 
-    sub_test_module!(
-        num_bigint,
-        num_bigint::BigUint,
-        type U256 = num_bigint::BigUint;
-        strict: off, // OverflowingAdd + OverflowingSub is not implemented
-        constrained: off, // WrappingAdd + WrappingSub is not implemented
-        basic: off, // Copy cannot be implemented, heap allocation
-    );
+    //     sub_test_module!(
+    //         num_bigint,
+    //         num_bigint::BigUint,
+    //         type U256 = num_bigint::BigUint;
+    //         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+    //         constrained: off, // WrappingAdd + WrappingSub is not implemented
+    //         basic: off, // Copy cannot be implemented, heap allocation
+    //     );
 
-    sub_test_module!(
-        num_bigint_patched,
-        num_bigint_patched::BigUint,
-        type U256 = num_bigint_patched::BigUint;
-        strict: on,
-        constrained: on,
-        basic: off, // Copy cannot be implemented, heap allocation
-    );
+    //     sub_test_module!(
+    //         num_bigint_patched,
+    //         num_bigint_patched::BigUint,
+    //         type U256 = num_bigint_patched::BigUint;
+    //         strict: on,
+    //         constrained: on,
+    //         basic: off, // Copy cannot be implemented, heap allocation
+    //     );
 
-    sub_test_module!(
-        ibig,
-        ibig::UBig,
-        type U256 = ibig::UBig;
-        strict: off, // OverflowingAdd + OverflowingSub is not implemented
-        constrained: off, // WrappingAdd + WrappingSub is not implemented
-        basic: off, // Copy cannot be implemented, heap allocation
-    );
+    //     sub_test_module!(
+    //         ibig,
+    //         ibig::UBig,
+    //         type U256 = ibig::UBig;
+    //         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+    //         constrained: off, // WrappingAdd + WrappingSub is not implemented
+    //         basic: off, // Copy cannot be implemented, heap allocation
+    //     );
 
-    sub_test_module!(
-        ibig_patched,
-        ibig_patched::UBig,
-        type U256 = ibig_patched::UBig;
-        strict: on,
-        constrained: on,
-        basic: off, // Copy cannot be implemented, heap allocation
-    );
+    //     sub_test_module!(
+    //         ibig_patched,
+    //         ibig_patched::UBig,
+    //         type U256 = ibig_patched::UBig;
+    //         strict: on,
+    //         constrained: on,
+    //         basic: off, // Copy cannot be implemented, heap allocation
+    //     );
 
     // Default (Nct-personality) FixedUInt provides Rem; the wrapper
     // functions are usable here. The Ct personality intentionally omits
@@ -397,5 +464,47 @@ mod fixed_bigint_pr_tests {
         assert_eq!(constrained_mod_sub_pr(a, &b, &m), expected);
         let a = U256::from(3u8);
         assert_eq!(basic_mod_sub_pr(a, b, m), expected);
+    }
+}
+
+#[cfg(test)]
+mod nz_tests {
+    use super::*;
+    use const_num_traits::HasNonZero;
+
+    #[test]
+    fn basic_mod_sub_nz_matches_basic_mod_sub() {
+        let m: u32 = 97;
+        let m_nz = m.into_nonzero().unwrap();
+        for a in [0u32, 1, 5, 96, 200, u32::MAX] {
+            for b in [0u32, 1, 50, 96, 300, u32::MAX - 1] {
+                assert_eq!(basic_mod_sub_nz(a, b, m_nz), basic_mod_sub(a, b, m));
+            }
+        }
+    }
+
+    #[test]
+    fn constrained_mod_sub_nz_matches_constrained_mod_sub() {
+        let m: u32 = 97;
+        let m_nz = m.into_nonzero().unwrap();
+        for a in [0u32, 1, 5, 96, 200, u32::MAX] {
+            for b in [0u32, 1, 50, 96, 300, u32::MAX - 1] {
+                assert_eq!(
+                    constrained_mod_sub_nz(a, &b, m_nz),
+                    constrained_mod_sub(a, &b, &m)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn strict_mod_sub_nz_matches_strict_mod_sub() {
+        let m: u32 = 97;
+        let m_nz = m.into_nonzero().unwrap();
+        for a in [0u32, 1, 5, 96, 200, u32::MAX] {
+            for b in [0u32, 1, 50, 96, 300, u32::MAX - 1] {
+                assert_eq!(strict_mod_sub_nz(a, &b, m_nz), strict_mod_sub(a, &b, &m));
+            }
+        }
     }
 }

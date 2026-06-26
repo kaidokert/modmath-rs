@@ -46,3 +46,15 @@ pub mod pre_reduced {
     #[doc(inline)]
     pub use crate::sub::strict_mod_sub_pr as sub;
 }
+
+/// Non-zero-modulus variants. See [`basic::nonzero`](crate::basic::nonzero).
+pub mod nonzero {
+    #[doc(inline)]
+    pub use crate::add::strict_mod_add_nz as add;
+    #[doc(inline)]
+    pub use crate::exp::strict_mod_exp_nz as exp;
+    #[doc(inline)]
+    pub use crate::mul::strict_mod_mul_nz as mul;
+    #[doc(inline)]
+    pub use crate::sub::strict_mod_sub_nz as sub;
+}

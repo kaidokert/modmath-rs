@@ -1,6 +1,6 @@
 [package]
 name = "modmath"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 description = """
 Modular math implemented with traits.
@@ -13,50 +13,43 @@ exclude = ["/.github/*"]
 keywords = ["numerics", "bignum"]
 
 [dependencies]
-num-traits = { version = "0.2", default-features = false }
-num-integer = { version = "0.1", default-features = false, optional = true }
 c0nst = { version = "0.2", optional = true }
-fixed-bigint = { version = "0.3", optional = true, default-features = false }
 subtle = { version = "2.6", default-features = false }
 zeroize = { version = "1", default-features = false, optional = true }
+# Direct dep on the const-friendly num-traits fork. Path-based for this
+# experiment. Package name now matches the dep alias (the fork was
+# renamed `num-traits` → `const-num-traits` directly at the source), so
+# no `package =` rename is needed any more.
+const-num-traits = { path = "/opt/m/rust/bigint/num-traits", default-features = false, features = ["ct"] }
+# CiosRowOps lives in a leaf crate so the trait identity stays stable
+# across compile units (the `--test` rebuild of modmath would otherwise
+# define a second, distinct `CiosRowOps` that fixed-bigint's impl can't
+# satisfy from the test binary).
+modmath-cios = { version = "0.1", path = "../modmath-cios" }
 
 [dev-dependencies]
-fixed-bigint = { version = "0.3" }
-num-bigint = { package = "num-bigint", version = "0.4"}
-# num-bigint_patched = { package = "num-bigint" , path = "../bn/num-bigint" }
-num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git" , tag = "v0.4.6_patch" }
-bnum = { version = "0.12", features = ["numtraits"] }
-# bnum_patched = { package = "bnum" , path = "../bn/bnum", features = ["numtraits"] }
-bnum_patched = { package = "bnum",features = ["numtraits"]  , git = "https://github.com/kaidokert/bnum.git", tag = "v0.12.1_patch" }
-crypto-bigint = "0.6"
-# crypto-bigint_patched = { package = "crypto-bigint", path = "../bn/crypto-bigint" }
-crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git" , tag = "v0.6.1_rsa_patch_1" }
-ibig = "0.3"
-# ibig_patched = { package = "ibig", path = "../bn/ibig-rs" }
-ibig_patched = { package = "ibig", git = "https://github.com/kaidokert/ibig-rs.git" , tag = "v0.3.6_patch" }
-## Cant figure this one out
-# uint = "0.10"
+fixed-bigint = { version = "0.4", features = ["cios"] }
+# Third-party bigint backends (num-bigint, bnum, crypto-bigint, ibig and
+# their `_patched` forks) are temporarily disabled while modmath migrates
+# to `const-num-traits`. Re-enable once those backends grow
+# `const-num-traits` impls (or an adapter shim).
+# num-bigint = { package = "num-bigint", version = "0.4"}
+# num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git" , tag = "v0.4.6_patch" }
+# bnum = { version = "0.12", features = ["numtraits"] }
+# bnum_patched = { package = "bnum",features = ["numtraits"]  , git = "https://github.com/kaidokert/bnum.git", tag = "v0.12.1_patch" }
+# crypto-bigint = "0.6"
+# crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git" , tag = "v0.6.1_rsa_patch_1" }
+# ibig = "0.3"
+# ibig_patched = { package = "ibig", git = "https://github.com/kaidokert/ibig-rs.git" , tag = "v0.3.6_patch" }
 paste = "1"
 
 [features]
-# `wide-mul` is on by default so `cargo doc`, `cargo test`, and `cargo
-# build` all include the Field/Residue surface, Montgomery wide-REDC
-# primitives, and CIOS family without requiring an explicit
-# `--features wide-mul` flag. Consumers who want a lean modmath without
-# fixed-bigint can opt out with `default-features = false`.
-default = ["wide-mul"]
+default = []
 constrained = []
 basic = []
 strict = []
-num-integer = ["dep:num-integer"]
-wide-mul = ["dep:fixed-bigint"]
-nightly = ["dep:c0nst", "c0nst/nightly", "dep:fixed-bigint", "fixed-bigint/nightly"]
-zeroize = ["dep:zeroize", "fixed-bigint?/zeroize"]
+nightly = ["dep:c0nst", "c0nst/nightly"]
+zeroize = ["dep:zeroize"]
 
-# docs.rs (published documentation) builds with `wide-mul` explicitly
-# enabled as defense-in-depth — covers the case where someone publishes
-# with a future config that drops it from defaults. Without this, docs.rs
-# would build with default features only and the wide-mul-gated public
-# API could become invisible.
 [package.metadata.docs.rs]
-features = ["wide-mul", "zeroize"]
+features = ["zeroize"]

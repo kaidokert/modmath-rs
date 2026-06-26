@@ -4,12 +4,15 @@
 /// Returns None if N' cannot be found
 pub fn strict_compute_n_prime_trial_search<T>(modulus: &T, r: &T) -> Option<T>
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
@@ -33,7 +36,7 @@ where
 
         // Increment n_prime: n_prime = n_prime + 1
         // Use overflowing_add for strict arithmetic
-        let (incremented, _overflow) = n_prime.overflowing_add(&T::one());
+        let (incremented, _overflow) = n_prime.overflowing_add(T::one());
         n_prime = incremented;
 
         // Safety check to avoid infinite loop
@@ -49,12 +52,15 @@ where
 /// Returns None if modular inverse cannot be found
 fn strict_compute_n_prime_extended_euclidean<T>(modulus: &T, r: &T) -> Option<T>
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
@@ -91,13 +97,16 @@ where
 /// Returns None if Hensel's lifting fails
 fn strict_compute_n_prime_hensels_lifting<T>(modulus: &T, r: &T, r_bits: usize) -> Option<T>
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Add<&'a T, Output = T>
@@ -123,7 +132,7 @@ where
 
         let target_mod = T::one() << k; // 2^k
         let temp_prod = modulus * &n_prime;
-        let (temp_sum, _overflow) = temp_prod.overflowing_add(&T::one());
+        let (temp_sum, _overflow) = temp_prod.overflowing_add(T::one());
         let check_val = &temp_sum % &target_mod;
 
         if check_val != T::zero() {
@@ -135,7 +144,7 @@ where
 
             if check_val == prev_power {
                 // Need to add 2^(k-1) to n_prime to satisfy the congruence
-                let (adjusted, _overflow) = n_prime.overflowing_add(&prev_power);
+                let (adjusted, _overflow) = n_prime.overflowing_add(prev_power);
                 n_prime = adjusted;
             }
         }
@@ -162,13 +171,16 @@ where
 /// Uses reference-based operations to minimize copying of large integers
 pub fn strict_compute_montgomery_params<T>(modulus: &T) -> Option<(T, T, T, usize)>
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
@@ -199,13 +211,16 @@ pub fn strict_compute_montgomery_params_with_method<T>(
     method: crate::montgomery::NPrimeMethod,
 ) -> Option<(T, T, T, usize)>
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
@@ -262,15 +277,18 @@ where
 /// Multiplies two values already in Montgomery form and returns result in Montgomery form
 pub fn strict_montgomery_mul<T>(a_mont: T, b_mont: &T, modulus: &T, n_prime: &T, r_bits: usize) -> T
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + crate::parity::Parity
         + PartialOrd
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::RemAssign<&'a T>
         + core::ops::Sub<&'a T, Output = T>,
@@ -292,13 +310,15 @@ where
 /// to minimize copying of large integers
 pub fn strict_from_montgomery<T>(a_mont: T, modulus: &T, n_prime: &T, r_bits: usize) -> T
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
+        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + num_traits::ops::overflowing::OverflowingAdd,
+        + const_num_traits::ops::overflowing::OverflowingAdd,
     for<'a> T: core::ops::Mul<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
@@ -333,7 +353,7 @@ where
     // Warning: m * N can overflow for large moduli (m < R, N < R, so m*N
     // can reach R²). For overflow-free reduction, use wide-REDC.
     let m_times_n = &m * modulus;
-    let (sum, _overflow) = a_mont.overflowing_add(&m_times_n);
+    let (sum, _overflow) = a_mont.overflowing_add(m_times_n);
     let t = sum >> r_bits; // Divide by R = 2^r_bits using bit shift
 
     // Step 3: Final reduction
@@ -344,12 +364,15 @@ where
 /// Uses reference-based operations to minimize copying of large integers
 pub fn strict_to_montgomery<T>(a: T, modulus: &T, r: &T) -> T
 where
-    T: PartialOrd
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + PartialOrd
+        + const_num_traits::Zero
+        + const_num_traits::One
         + crate::parity::Parity
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
@@ -367,16 +390,19 @@ pub fn strict_montgomery_mod_mul_with_method<T>(
     method: crate::montgomery::NPrimeMethod,
 ) -> Option<T>
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
@@ -429,16 +455,19 @@ where
 /// Returns None if Montgomery parameter computation fails
 pub fn strict_montgomery_mod_mul<T>(a: T, b: &T, modulus: &T) -> Option<T>
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
@@ -468,8 +497,9 @@ pub fn strict_montgomery_mod_exp_with_method<T>(
     method: crate::montgomery::NPrimeMethod,
 ) -> Option<T>
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + crate::parity::Parity
         + PartialEq
         + PartialOrd
@@ -477,8 +507,10 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
@@ -545,8 +577,9 @@ where
 /// Returns None if Montgomery parameter computation fails
 pub fn strict_montgomery_mod_exp<T>(base: T, exponent: &T, modulus: &T) -> Option<T>
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + crate::parity::Parity
         + PartialEq
         + PartialOrd
@@ -554,8 +587,10 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
-        + num_traits::ops::overflowing::OverflowingAdd
-        + num_traits::ops::overflowing::OverflowingSub,
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>

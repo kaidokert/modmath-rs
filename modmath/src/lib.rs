@@ -5,7 +5,7 @@
 //! Modular math implemented with traits.
 //!
 //! Provides modular arithmetic against any type implementing a minimal
-//! set of `core::ops::` and `num_traits::` traits — primitive integers
+//! set of `core::ops::` and `const_num_traits::` traits — primitive integers
 //! or any bigint backend.
 //!
 //! Schoolbook surface lives in three bound-flavor modules:
@@ -46,7 +46,6 @@ mod parity;
 mod sub;
 mod wide_mul;
 
-#[cfg(feature = "wide-mul")]
 mod field;
 mod inv;
 pub mod montgomery;
@@ -59,7 +58,6 @@ pub mod basic;
 pub mod constrained;
 pub mod strict;
 
-#[cfg(feature = "wide-mul")]
 pub use field::{Field, FieldCt, FieldNct, MontStorage, Residue, ResidueCt, ResidueNct};
 pub use parity::Parity;
 pub use wide_mul::WideMul;
@@ -82,8 +80,19 @@ pub use montgomery::{
     compute_r_mod_n,
     compute_r2_mod_n,
 };
-#[cfg(feature = "wide-mul")]
 pub use montgomery::{CiosMontMul, CiosMontMulCt};
+
+// Re-exported so the `Field::new_odd` / `basic_montgomery_mod_*_odd`
+// surface is reachable as `modmath::Odd` without forcing downstreams to
+// directly depend on `const-num-traits` for the typestate wrapper alone.
+pub use const_num_traits::Odd;
+
+// Same rationale for the divide-by-zero deletion path: the `*_nz`
+// surface in `add`/`sub`/`mul`/`exp` is bounded on these capability
+// traits; re-exporting them lets downstreams construct the proof
+// (`m.into_nonzero()?`) and drive the infallible reductions without an
+// extra direct dep on const-num-traits.
+pub use const_num_traits::{DivNonZero, HasNonZero};
 #[cfg(feature = "nightly")]
 pub use mul::const_mod_mul;
 #[cfg(feature = "nightly")]

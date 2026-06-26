@@ -50,7 +50,7 @@
 
 use core::marker::PhantomData;
 
-use fixed_bigint::{Ct, Nct, Personality};
+use const_num_traits::{Ct, Nct, Odd, Personality};
 
 use crate::montgomery::basic_mont::{
     wide_montgomery_mul, wide_montgomery_mul_acc, wide_montgomery_mul_acc_ct,
@@ -213,35 +213,58 @@ where
     T: Copy
         + PartialEq
         + PartialOrd
-        + num_traits::Zero
-        + num_traits::One
-        + num_traits::WrappingMul
-        + num_traits::WrappingAdd
-        + num_traits::WrappingSub
-        + num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::Zero
+        + const_num_traits::One
+        + const_num_traits::WrappingMul
+        + const_num_traits::WrappingAdd
+        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
         + Parity
         + MontStorage,
 {
-    /// Construct a new `Field` over the given (odd, nonzero) `modulus`.
+    /// Construct a new `Field` from an already-proven-odd modulus.
     ///
-    /// Returns `None` if `modulus` is zero or even (Montgomery requires odd N).
-    /// The precompute (`compute_r_mod_n` / `compute_r2_mod_n`) is
-    /// personality-agnostic — only depends on common modular arithmetic.
-    pub fn new(modulus: T) -> Option<Self> {
-        if modulus == T::zero() || modulus.is_even() {
-            return None;
-        }
+    /// **Infallible.** The `Odd<T>` typestate hoists the "modulus is odd and
+    /// nonzero" precondition to the caller's trust boundary — typically a
+    /// single `Odd::new(p)?` (or `Odd::new(p).unwrap()` for a const modulus)
+    /// at config load. No runtime check inside this constructor, and the
+    /// `panic_fmt` symbol that an `unwrap()` on the old `Option` API would
+    /// have synthesized stays out of the linked binary on embedded targets
+    /// when the boundary check is const-evaluated.
+    ///
+    /// `Odd<T>` covers both the "non-zero" and "odd" halves (zero is even),
+    /// so this also discharges the modulus-nonzero check that [`new`] does.
+    ///
+    /// [`new`]: Self::new
+    pub fn new_odd(modulus: Odd<T>) -> Self {
+        let modulus = modulus.get();
         let w = type_bit_width::<T>();
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
-        Some(Self {
+        Self {
             modulus,
             n_prime,
             r_mod_n,
             r2_mod_n,
             _p: PhantomData,
-        })
+        }
+    }
+
+    /// Construct a new `Field` over the given (odd, nonzero) `modulus`.
+    ///
+    /// Returns `None` if `modulus` is zero or even (Montgomery requires odd N).
+    /// Thin wrapper around [`new_odd`] that performs the parity proof at
+    /// runtime. Prefer [`new_odd`] in panic-sensitive paths so the modulus
+    /// proof becomes a one-shot boundary check rather than a returned
+    /// `Option<Self>` the caller must `.unwrap()`.
+    ///
+    /// [`new_odd`]: Self::new_odd
+    pub fn new(modulus: T) -> Option<Self> {
+        Odd::new(modulus).map(Self::new_odd)
     }
 
     /// Returns the modulus by reference.
@@ -296,12 +319,15 @@ where
     T: Copy
         + PartialEq
         + PartialOrd
-        + num_traits::Zero
-        + num_traits::One
-        + num_traits::WrappingMul
-        + num_traits::WrappingAdd
-        + num_traits::WrappingSub
-        + num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::Zero
+        + const_num_traits::One
+        + const_num_traits::WrappingMul
+        + const_num_traits::WrappingAdd
+        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
         + Parity
         + MontStorage,
 {
@@ -378,8 +404,7 @@ where
     where
         T: CiosMontMul,
     {
-        let mont = CiosMontMul::cios_mont_mul(&a.mont, &b.mont, &self.modulus, &self.n_prime)
-            .expect("CIOS mul cannot fail with valid Montgomery parameters");
+        let mont = CiosMontMul::cios_mont_mul(&a.mont, &b.mont, &self.modulus, &self.n_prime);
         Residue {
             mont,
             _brand: PhantomData,
@@ -405,14 +430,12 @@ where
         while exp_val > T::zero() {
             if exp_val.is_odd() {
                 result =
-                    CiosMontMul::cios_mont_mul(&result, &base_var, &self.modulus, &self.n_prime)
-                        .expect("CIOS mul cannot fail with valid Montgomery parameters");
+                    CiosMontMul::cios_mont_mul(&result, &base_var, &self.modulus, &self.n_prime);
             }
             exp_val >>= 1;
             if exp_val > T::zero() {
                 base_var =
-                    CiosMontMul::cios_mont_mul(&base_var, &base_var, &self.modulus, &self.n_prime)
-                        .expect("CIOS mul cannot fail with valid Montgomery parameters");
+                    CiosMontMul::cios_mont_mul(&base_var, &base_var, &self.modulus, &self.n_prime);
             }
         }
         Residue {
@@ -459,8 +482,8 @@ where
         if a.mont == T::zero() {
             return None;
         }
-        let two = T::one().wrapping_add(&T::one());
-        let exp_val = self.modulus.wrapping_sub(&two);
+        let two = T::one().wrapping_add(T::one());
+        let exp_val = self.modulus.wrapping_sub(two);
         Some(self.exp(a, &exp_val))
     }
 
@@ -532,15 +555,66 @@ where
     T: Copy
         + PartialEq
         + PartialOrd
-        + num_traits::Zero
-        + num_traits::One
-        + num_traits::WrappingMul
-        + num_traits::WrappingAdd
-        + num_traits::WrappingSub
-        + num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::Zero
+        + const_num_traits::One
+        + const_num_traits::WrappingMul
+        + const_num_traits::WrappingAdd
+        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
         + Parity
         + MontStorage,
 {
+    /// Construct a `Field<T, Ct>` from a **secret** modulus without a
+    /// value-dependent branch on the parity check.
+    ///
+    /// `Odd::new_ct` performs the parity check via [`CtParity`], producing a
+    /// masked [`subtle::CtOption`] rather than a control-flow branch. The
+    /// precompute (`compute_n_prime_newton`, `compute_r_mod_n`,
+    /// `compute_r2_mod_n`) runs unconditionally — its inputs are the secret
+    /// modulus's value, but the operations are constant-time word arithmetic
+    /// over the existing CT trait surface, and the `CtOption` wrapper
+    /// branchlessly masks the result if the modulus turned out to be even.
+    ///
+    /// Intended for the **RSA-CRT private-key path** where `p` and `q` are
+    /// secret primes. Public-modulus / verify-side callers should use
+    /// [`Field::new_odd`] instead — the secret-aware code path is strictly
+    /// more expensive on platforms with branch prediction.
+    ///
+    /// Collapses the boundary check at the consumer:
+    ///
+    /// ```ignore
+    /// // Old shape, panics on a secret-derived branch:
+    /// let field = Field::<_, Ct>::new(secret_p).expect("p is odd prime");
+    ///
+    /// // New shape, masked:
+    /// let field = Field::<_, Ct>::try_new_odd_ct(secret_p);
+    /// let result = field.map(|f| /* CT-sensitive ops */ );
+    /// ```
+    ///
+    /// [`CtParity`]: const_num_traits::CtParity
+    pub fn try_new_odd_ct(modulus: T) -> subtle::CtOption<Self>
+    where
+        T: const_num_traits::CtParity,
+    {
+        // Mask the parity check (no branch on the secret modulus); the
+        // precompute below runs unconditionally on the modulus value and is
+        // branch-free over the trait surface (wrapping/overflowing word
+        // arithmetic). When `is_odd` is unset the precompute output is
+        // meaningless — `CtOption::new(_, choice)` discards it via the
+        // standard masked-`Some` pattern.
+        let is_odd = modulus.ct_is_odd();
+        // SAFETY: when `is_odd` is unset the wrapped `Odd` proof carries a
+        // false predicate, but the resulting `Field` is unreachable through
+        // the `CtOption` mask. No body downstream consumes the proof except
+        // via the masked output.
+        let proof = unsafe { Odd::new_unchecked(modulus) };
+        let field = Self::new_odd(proof);
+        subtle::CtOption::new(field, is_odd)
+    }
+
     /// Convert a raw value to Montgomery form. Constant-time finalize.
     pub fn reduce(&self, raw: &T) -> Residue<'_, T, Ct>
     where
@@ -571,8 +645,8 @@ where
     where
         T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
     {
-        let sum = a.mont.wrapping_add(&b.mont);
-        let sub = sum.wrapping_sub(&self.modulus);
+        let sum = a.mont.wrapping_add(b.mont);
+        let sub = sum.wrapping_sub(self.modulus);
         // Carry from wrapping: sum < a means wraparound occurred.
         let carry = sum.ct_lt(&a.mont);
         // Result >= modulus when !(sum < modulus).
@@ -593,8 +667,8 @@ where
     where
         T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
     {
-        let diff = a.mont.wrapping_sub(&b.mont);
-        let corrected = diff.wrapping_add(&self.modulus);
+        let diff = a.mont.wrapping_sub(b.mont);
+        let corrected = diff.wrapping_add(self.modulus);
         // borrow == (a < b)
         let borrow = a.mont.ct_lt(&b.mont);
         let mont = T::conditional_select(&diff, &corrected, borrow);
@@ -614,8 +688,7 @@ where
     where
         T: CiosMontMulCt,
     {
-        let mont = CiosMontMulCt::cios_mont_mul_ct(&a.mont, &b.mont, &self.modulus, &self.n_prime)
-            .expect("CIOS-CT mul cannot fail with valid Montgomery parameters");
+        let mont = CiosMontMulCt::cios_mont_mul_ct(&a.mont, &b.mont, &self.modulus, &self.n_prime);
         Residue {
             mont,
             _brand: PhantomData,
@@ -645,12 +718,10 @@ where
         for i in (0..w).rev() {
             // Always square.
             result =
-                CiosMontMulCt::cios_mont_mul_ct(&result, &result, &self.modulus, &self.n_prime)
-                    .expect("CIOS-CT mul cannot fail with valid Montgomery parameters");
+                CiosMontMulCt::cios_mont_mul_ct(&result, &result, &self.modulus, &self.n_prime);
             // Always compute the conditional product.
             let multiplied =
-                CiosMontMulCt::cios_mont_mul_ct(&result, &base.mont, &self.modulus, &self.n_prime)
-                    .expect("CIOS-CT mul cannot fail with valid Montgomery parameters");
+                CiosMontMulCt::cios_mont_mul_ct(&result, &base.mont, &self.modulus, &self.n_prime);
             // Select based on bit i of exp.
             let bit_t = (*exp >> i) & one;
             let choice = bit_t.ct_eq(&one);
@@ -722,8 +793,7 @@ where
         for i in (0..hi - 1).rev() {
             // Square.
             result =
-                CiosMontMulCt::cios_mont_mul_ct(&result, &result, &self.modulus, &self.n_prime)
-                    .expect("CIOS-CT mul cannot fail with valid Montgomery parameters");
+                CiosMontMulCt::cios_mont_mul_ct(&result, &result, &self.modulus, &self.n_prime);
             // Multiply only when the bit is set — branch on a public value.
             if (*exp >> i) & one != zero {
                 result = CiosMontMulCt::cios_mont_mul_ct(
@@ -731,8 +801,7 @@ where
                     &base.mont,
                     &self.modulus,
                     &self.n_prime,
-                )
-                .expect("CIOS-CT mul cannot fail with valid Montgomery parameters");
+                );
             }
         }
 
@@ -786,42 +855,11 @@ where
         if a.mont == T::zero() {
             return None;
         }
-        let two = T::one().wrapping_add(&T::one());
-        let exp_val = self.modulus.wrapping_sub(&two);
+        let two = T::one().wrapping_add(T::one());
+        let exp_val = self.modulus.wrapping_sub(two);
         Some(self.exp(a, &exp_val))
     }
 }
-
-// ---------------------------------------------------------------------------
-// NCT -> CT bridge (no generic `From` impl)
-// ---------------------------------------------------------------------------
-//
-// Under fixed-bigint's personality typestate, the bridge from a
-// `Field<T, Nct>` to a `Field<T, Ct>` over the same modulus value is not
-// a single type-level conversion — `T` itself has to cross personalities.
-// A `Field<TNct, Nct>` is only useful when `TNct` resolves to an Nct-typed
-// FixedUInt (so `MulAccOps::GetWordOutput = Option<...>` and
-// `CiosMontMul` resolves); a `Field<TCt, Ct>` is only useful when `TCt`
-// resolves to a Ct-typed FixedUInt (so `ConditionallySelectable` resolves).
-// Nct and Ct are distinct types, so a generic `From<Field<T, Nct>> for
-// Field<T, Ct>` over a single `T` lands you in a methodless variant on one
-// side or the other (the bounds in the per-P impl blocks don't resolve).
-//
-// The actual bridge pattern is:
-//
-// ```ignore
-// let f = Field::new(modulus_nct).unwrap();             // Field<TNct, Nct>
-// let modulus_ct: U256Ct = (*f.modulus()).into();       // free Nct -> Ct
-// let fc = Field::<_, Ct>::new(modulus_ct).unwrap();    // recompute params
-// // (or use the FieldCt alias: FieldCt::new(modulus_ct))
-// ```
-//
-// The recompute cost is the ~2·bit_length(T) modular doublings of
-// `compute_r_mod_n` + `compute_r2_mod_n` — ~10–15µs at 2048-bit on M3.
-// For long-lived keys (RSA-CRT) this is amortized; for ed25519 verify
-// it's noise. Consumers wanting a zero-cost personality bridge can
-// implement a type-specific bridge in their wrapper (see ed25519's
-// `Curve25519Field`).
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -831,6 +869,9 @@ where
 mod tests {
     use super::*;
     use fixed_bigint::FixedUInt;
+    use subtle::Choice;
+    #[cfg(feature = "zeroize")]
+    use zeroize::Zeroize;
 
     // Field<T, P> requires the right combination of T-bounds for the chosen
     // P (CiosMontMul for Nct, CiosMontMulCt for Ct), which in practice means
@@ -857,6 +898,62 @@ mod tests {
             let r = f.reduce(&u16(raw));
             assert_eq!(f.into_raw(&r), u16(raw), "round trip failed for {raw}");
         }
+    }
+
+    #[test]
+    fn new_odd_matches_new() {
+        // The infallible Odd-typestate constructor and the runtime-checked
+        // `Option`-returning one must agree on the precompute (modulus,
+        // n_prime, r_mod_n, r2_mod_n) for the same modulus value.
+        let m = u16(13);
+        let modulus_odd = Odd::new(m).expect("13 is odd");
+        let from_odd: Field<U16> = Field::new_odd(modulus_odd);
+        let from_opt: Field<U16> = Field::new(m).unwrap();
+        assert_eq!(from_odd.modulus(), from_opt.modulus());
+        // Round-trip through Field::mul under each to confirm the precompute
+        // tables match observably.
+        let a = from_odd.reduce(&u16(7));
+        let b = from_odd.reduce(&u16(5));
+        let via_odd = from_odd.into_raw(&from_odd.mul(&a, &b));
+        let a2 = from_opt.reduce(&u16(7));
+        let b2 = from_opt.reduce(&u16(5));
+        let via_opt = from_opt.into_raw(&from_opt.mul(&a2, &b2));
+        assert_eq!(via_odd, via_opt);
+        assert_eq!(via_odd, u16(35 % 13));
+    }
+
+    #[test]
+    fn new_rejects_even_and_zero() {
+        // Wrapper preserves the rejection semantics of the old API.
+        assert!(Field::<U16>::new(u16(0)).is_none());
+        assert!(Field::<U16>::new(u16(12)).is_none()); // even
+        assert!(Field::<U16>::new(u16(13)).is_some()); // odd
+    }
+
+    /// `try_new_odd_ct` produces a `CtOption<Field<T, Ct>>` whose
+    /// `Some`-ness tracks `T::ct_is_odd`. The precompute runs
+    /// unconditionally; the parity check is masked, not branched. Test
+    /// on `u32` (which impls `CtParity` directly) since that's the
+    /// straightforward case — the RSA-CRT consumer pattern will be on a
+    /// bigint type, but the contract we're pinning here is the
+    /// modmath-side adapter.
+    #[test]
+    fn try_new_odd_ct_masks_parity() {
+        // Even modulus → `None`-masked.
+        let even = Field::<u32, Ct>::try_new_odd_ct(12);
+        assert_eq!(even.is_some().unwrap_u8(), 0);
+
+        // Zero is even → `None`-masked.
+        let zero = Field::<u32, Ct>::try_new_odd_ct(0);
+        assert_eq!(zero.is_some().unwrap_u8(), 0);
+
+        // Odd modulus → `Some` with a usable Field.
+        let odd = Field::<u32, Ct>::try_new_odd_ct(13);
+        assert_eq!(odd.is_some().unwrap_u8(), 1);
+        let field: Field<u32, Ct> = odd.unwrap();
+        // Same precompute as the infallible boundary constructor:
+        let baseline = Field::<u32, Ct>::new_odd(Odd::new(13u32).unwrap());
+        assert_eq!(field.modulus(), baseline.modulus());
     }
 
     #[test]
@@ -951,7 +1048,6 @@ mod tests {
 
     #[test]
     fn ct_cswap_small() {
-        use subtle::Choice;
         let f = FieldCt::new(u16ct(13)).unwrap();
         let mut a = f.reduce(&u16ct(3));
         let mut b = f.reduce(&u16ct(7));
@@ -1037,7 +1133,6 @@ mod tests {
     #[cfg(feature = "zeroize")]
     #[test]
     fn residue_zeroize_wipes_mont_small() {
-        use zeroize::Zeroize;
         fn assert_zeroize_on_drop<T: zeroize::ZeroizeOnDrop>(_: &T) {}
         let f = FieldCt::new(u16ct(13)).unwrap();
         let mut r = f.reduce(&u16ct(7));

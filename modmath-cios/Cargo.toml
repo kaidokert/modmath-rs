@@ -1,0 +1,10 @@
+[package]
+name = "modmath-cios"
+version = "0.1.0"
+edition = "2024"
+description = "Row-op trait surface for CIOS Montgomery multiplication."
+repository = "https://github.com/kaidokert/modmath-rs"
+license = "Apache-2.0"
+keywords = ["numerics", "bignum", "cryptography", "montgomery"]
+
+[dependencies]

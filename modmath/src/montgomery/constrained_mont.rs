@@ -9,19 +9,22 @@ use crate::inv::constrained_mod_inv;
 /// Returns None if N' cannot be found (should not happen for valid Montgomery parameters)
 fn compute_n_prime_trial_search_constrained<T>(modulus: &T, r: &T) -> Option<T>
 where
-    T: Clone
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     // We need to find N' where modulus * N' ≡ R - 1 (mod R)
-    let target = r.clone().wrapping_sub(&T::one()); // This is -1 mod R
+    let target = r.clone().wrapping_sub(T::one()); // This is -1 mod R
 
     // Simple trial search for N'
     let mut n_prime = T::one();
@@ -29,7 +32,7 @@ where
         if (modulus.clone() * &n_prime) % r == target {
             return Some(n_prime);
         }
-        n_prime = n_prime.wrapping_add(&T::one());
+        n_prime = n_prime.wrapping_add(T::one());
 
         // Safety check to avoid infinite loop
         if &n_prime >= r {
@@ -43,13 +46,16 @@ where
 /// Returns None if modular inverse cannot be found
 fn compute_n_prime_extended_euclidean_constrained<T>(modulus: &T, r: &T) -> Option<T>
 where
-    T: Clone
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub,
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T> + core::ops::Div<&'a T, Output = T>,
 {
@@ -60,9 +66,9 @@ where
     if let Some(modulus_inv) = constrained_mod_inv(modulus.clone(), r) {
         // N' = -modulus^(-1) mod R = R - modulus^(-1) mod R
         if modulus_inv == T::zero() {
-            Some(r.clone().wrapping_sub(&T::one())) // Handle edge case where inverse is 0
+            Some(r.clone().wrapping_sub(T::one())) // Handle edge case where inverse is 0
         } else {
-            Some(r.clone().wrapping_sub(&modulus_inv))
+            Some(r.clone().wrapping_sub(modulus_inv))
         }
     } else {
         None // Could not find modular inverse - gcd(modulus, R) should be 1 for valid Montgomery parameters
@@ -74,13 +80,15 @@ where
 /// Returns None if Hensel's lifting fails to produce correct N'
 fn compute_n_prime_hensels_lifting_constrained<T>(modulus: &T, r: &T, r_bits: usize) -> Option<T>
 where
-    T: Clone
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + core::ops::Shl<usize, Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
@@ -93,20 +101,20 @@ where
     for k in 2..=r_bits {
         let target_mod = T::one() << k; // 2^k
         let temp_prod = modulus.clone() * &n_prime;
-        let temp_sum = temp_prod.wrapping_add(&T::one());
+        let temp_sum = temp_prod.wrapping_add(T::one());
         let check_val = &temp_sum % &target_mod;
 
         if check_val != T::zero() {
             let prev_power = T::one() << (k - 1); // 2^(k-1)
             if check_val == prev_power {
-                n_prime = n_prime.wrapping_add(&prev_power);
+                n_prime = n_prime.wrapping_add(prev_power);
             }
         }
     }
 
     // Final check
     let final_check = (modulus.clone() * &n_prime) % r;
-    let target = r.clone().wrapping_sub(&T::one()); // -1 mod R
+    let target = r.clone().wrapping_sub(T::one()); // -1 mod R
 
     if final_check != target {
         None // Hensel lifting failed to produce correct N'
@@ -124,15 +132,17 @@ pub fn constrained_compute_montgomery_params_with_method<T>(
     method: NPrimeMethod,
 ) -> Option<(T, T, T, usize)>
 where
-    T: Clone
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
-        + core::ops::Shl<usize, Output = T>
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
+        + core::ops::Shl<usize, Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -178,13 +188,16 @@ where
 /// Returns None if parameter computation fails
 pub fn constrained_compute_montgomery_params<T>(modulus: &T) -> Option<(T, T, T, usize)>
 where
-    T: Clone
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
@@ -202,11 +215,14 @@ where
 /// Convert to Montgomery form (Constrained): a -> (a * R) mod N
 pub fn constrained_to_montgomery<T>(a: T, modulus: &T, r: &T) -> T
 where
-    T: num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::parity::Parity,
     for<'a> T: core::ops::RemAssign<&'a T>,
@@ -219,14 +235,16 @@ where
 /// Uses Montgomery reduction algorithm
 pub fn constrained_from_montgomery<T>(a_mont: T, modulus: &T, n_prime: &T, r_bits: usize) -> T
 where
-    T: Clone
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub,
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>,
     for<'a> T: core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::BitAnd<&'a T, Output = T>,
 {
@@ -239,13 +257,13 @@ where
     // Fast path for R=1 (r_bits == 0): Montgomery reduction simplifies to conditional subtraction
     if r_bits == 0 {
         return if &a_mont >= modulus {
-            a_mont.wrapping_sub(modulus)
+            a_mont.wrapping_sub(*modulus)
         } else {
             a_mont
         };
     }
 
-    let mask = (T::one() << r_bits).wrapping_sub(&T::one()); // mask = 2^r_bits - 1
+    let mask = (T::one() << r_bits).wrapping_sub(T::one()); // mask = 2^r_bits - 1
 
     // Step 1: m = ((a_mont & mask) * N') & mask
     let a_low = &a_mont & &mask;
@@ -256,12 +274,12 @@ where
     // Warning: m * N can overflow for large moduli (m < R, N < R, so m*N
     // can reach R²). For overflow-free reduction, use wide-REDC.
     let m_times_n = m * modulus;
-    let temp_sum = a_mont.wrapping_add(&m_times_n);
+    let temp_sum = a_mont.wrapping_add(m_times_n);
     let t = temp_sum >> r_bits;
 
     // Step 3: Final reduction
     if &t >= modulus {
-        t.wrapping_sub(modulus)
+        t.wrapping_sub(*modulus)
     } else {
         t
     }
@@ -276,14 +294,16 @@ pub fn constrained_montgomery_mul<T>(
     r_bits: usize,
 ) -> T
 where
-    T: Clone
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
         + crate::parity::Parity
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
@@ -306,17 +326,19 @@ pub fn constrained_montgomery_mod_mul_with_method<T>(
     method: NPrimeMethod,
 ) -> Option<T>
 where
-    T: Clone
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + crate::parity::Parity
         + PartialEq
         + PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
-        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -344,17 +366,19 @@ where
 /// Returns None if Montgomery parameter computation fails
 pub fn constrained_montgomery_mod_mul<T>(a: T, b: &T, modulus: &T) -> Option<T>
 where
-    T: Clone
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + crate::parity::Parity
         + PartialEq
         + PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
-        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -378,18 +402,20 @@ pub fn constrained_montgomery_mod_exp_with_method<T>(
     method: NPrimeMethod,
 ) -> Option<T>
 where
-    T: Clone
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + crate::parity::Parity
         + PartialEq
         + PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
-        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Add<&'a T, Output = T>
@@ -439,18 +465,20 @@ where
 /// Returns None if Montgomery parameter computation fails
 pub fn constrained_montgomery_mod_exp<T>(base: T, exponent: &T, modulus: &T) -> Option<T>
 where
-    T: Clone
-        + num_traits::Zero
-        + num_traits::One
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
         + crate::parity::Parity
         + PartialEq
         + PartialOrd
-        + num_traits::ops::wrapping::WrappingAdd
-        + num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd
+        + const_num_traits::ops::wrapping::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
-        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Add<&'a T, Output = T>

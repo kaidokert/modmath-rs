@@ -45,3 +45,20 @@ pub mod pre_reduced {
     #[doc(inline)]
     pub use crate::sub::basic_mod_sub_pr as sub;
 }
+
+/// Non-zero-modulus variants. Caller provides `m: T::NonZero` (one
+/// boundary-time `m.into_nonzero()?` proof); every `% m` reduction
+/// inside collapses to `rem_nonzero` with no divide-by-zero panic
+/// path. Verified end-to-end against fixed-bigint's
+/// `NonZeroFixedUInt`-driven `DivNonZero` impl (see
+/// fixed-bigint's `ct-verify/panic-free-audit` matrix).
+pub mod nonzero {
+    #[doc(inline)]
+    pub use crate::add::basic_mod_add_nz as add;
+    #[doc(inline)]
+    pub use crate::exp::basic_mod_exp_nz as exp;
+    #[doc(inline)]
+    pub use crate::mul::basic_mod_mul_nz as mul;
+    #[doc(inline)]
+    pub use crate::sub::basic_mod_sub_nz as sub;
+}

@@ -1,4 +1,10 @@
 [workspace]
 resolver="2"
 
-members = ["modmath"]
+members = ["modmath", "modmath-cios"]
+
+# Path-pin sibling crates during the coordinated experimental window.
+# Revert before publishing.
+[patch.crates-io]
+fixed-bigint = { path = "/opt/m/rust/bigint/fixed-bigint-rs" }
+modmath-cios = { path = "modmath-cios" }
