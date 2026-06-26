@@ -16,11 +16,11 @@ keywords = ["numerics", "bignum"]
 c0nst = { version = "0.2", optional = true }
 subtle = { version = "2.6", default-features = false }
 zeroize = { version = "1", default-features = false, optional = true }
-# Direct dep on the const-friendly num-traits fork. Path-based for this
-# experiment. Package name now matches the dep alias (the fork was
-# renamed `num-traits` → `const-num-traits` directly at the source), so
-# no `package =` rename is needed any more.
-const-num-traits = { path = "/opt/m/rust/bigint/num-traits", default-features = false, features = ["ct"] }
+# Direct dep on the const-friendly num-traits fork, pinned to the
+# v0.1.0-alpha.0 prerelease tag. Package name now matches the dep alias
+# (the fork was renamed `num-traits` → `const-num-traits` directly at
+# the source), so no `package =` rename is needed any more.
+const-num-traits = { git = "https://github.com/kaidokert/num-traits", tag = "v0.1.0-alpha.0", default-features = false, features = ["ct"] }
 # CiosRowOps lives in a leaf crate so the trait identity stays stable
 # across compile units (the `--test` rebuild of modmath would otherwise
 # define a second, distinct `CiosRowOps` that fixed-bigint's impl can't
@@ -28,7 +28,7 @@ const-num-traits = { path = "/opt/m/rust/bigint/num-traits", default-features = 
 modmath-cios = { version = "0.1", path = "../modmath-cios" }
 
 [dev-dependencies]
-fixed-bigint = { version = "0.4", features = ["cios"] }
+fixed-bigint = { version = "0.4", default-features = false, features = ["cios"] }
 # Third-party bigint backends (num-bigint, bnum, crypto-bigint, ibig and
 # their `_patched` forks) are temporarily disabled while modmath migrates
 # to `const-num-traits`. Re-enable once those backends grow
