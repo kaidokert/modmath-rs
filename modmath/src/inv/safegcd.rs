@@ -100,14 +100,15 @@ where
     T::Word: core::ops::BitAnd<Output = T::Word>
         + core::ops::Shl<usize, Output = T::Word>
         + One
-        + Zero
-        + ConstantTimeEq,
+        + CtIsZero,
 {
     let n = value.word_count();
     let word_bits = core::mem::size_of::<T::Word>() * 8;
     let msb_mask = T::Word::one() << (word_bits - 1);
     let masked = value.word(n - 1) & msb_mask;
-    !masked.ct_eq(&T::Word::zero())
+    // Delegates to cnt's CtIsZero rather than ct_eq(&T::Word::zero()).
+    // Identical semantics; the dedicated trait is cnt-tested upstream.
+    !masked.ct_is_zero()
 }
 
 /// Constant-time `delta > 0` for the i64 state variable.
@@ -138,8 +139,7 @@ where
     T::Word: core::ops::BitAnd<Output = T::Word>
         + core::ops::Shl<usize, Output = T::Word>
         + One
-        + Zero
-        + ConstantTimeEq,
+        + CtIsZero,
 {
     let logical = value.clone() >> 1;
     let msb_set = ct_msb_set(value);
@@ -257,6 +257,7 @@ where
     T::Word: Copy
         + ConditionallySelectable
         + ConstantTimeEq
+        + CtIsZero
         + CtParity
         + One
         + Zero

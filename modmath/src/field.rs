@@ -881,9 +881,19 @@ where
     /// Modular inverse via Fermat: `a^(modulus − 2)` through the fixed-
     /// iteration CT Montgomery ladder.
     ///
-    /// **Requires `modulus` to be prime.** Constant-time over the bits
-    /// of `modulus − 2` (uses [`Self::exp`]) and over the zero check on
-    /// `a`. Returns `CtOption::None`-masked for the zero residue.
+    /// **Requires `modulus` to be prime.** Constant-time over `a`'s
+    /// bits and zero-ness via the fixed `T::BITS`-iteration Montgomery
+    /// ladder in [`Self::exp`]. The loop count depends only on the
+    /// carrier type's bit width, not on `modulus - 2`'s significant
+    /// bit count or `a`'s value. Returns `CtOption::None`-masked for
+    /// the zero residue.
+    ///
+    /// Cost: one full ladder over every bit of `T` (e.g. 256
+    /// square-and-multiply iterations for `FixedUInt<u32, 8>` over a
+    /// Curve25519 scalar field), regardless of whether `modulus - 2`
+    /// occupies the full carrier width. For composite moduli (RSA
+    /// `n = p·q`) where Fermat doesn't apply, use
+    /// [`Self::inv_safegcd_ct`] instead.
     ///
     /// Audit note: the prior `Option`-returning version had an
     /// `if a.mont == T::zero() { return None }` early branch — variable
@@ -915,9 +925,27 @@ where
     /// (no inverse exists). Failure timing is independent of input
     /// magnitudes.
     ///
+    /// ## Carrier headroom precondition
+    ///
+    /// Also returns `CtOption::None` masked when the carrier `T`
+    /// lacks **one bit of headroom over `modulus`** (the safegcd
+    /// `2·modulus ≤ T::MAX` precondition). The check is folded into
+    /// the returned mask at no value-dependent cost (one MSB
+    /// extraction on the cached modulus per call). When the modulus
+    /// occupies the full carrier width (MSB set in `T`), this method
+    /// returns `None` regardless of value coprimality — the carrier
+    /// is too tight for the algorithm's intermediate sums.
+    ///
+    /// **Pick a `T` at least one bit wider than the modulus:**
+    /// `FixedUInt<u32, 65>` for a 2048-bit RSA modulus,
+    /// `FixedUInt<u32, 129>` for a 4096-bit one. Krabipqc / PQC moduli
+    /// (3329, 8380417, etc.) leave plenty of headroom on any
+    /// reasonable carrier and are unaffected.
+    ///
     /// Used by RSA private-key blinding, where the modulus is the
     /// composite `n = p·q` and Fermat's little theorem doesn't apply.
-    /// See [`crate::inv::safegcd`] for the algorithm and preconditions.
+    /// See [`crate::inv::safegcd`] for the algorithm and full
+    /// precondition list.
     ///
     /// [`inv_fermat`]: Self::inv_fermat
     pub fn inv_safegcd_ct(&self, a: &Residue<'_, T, Ct>) -> subtle::CtOption<Residue<'_, T, Ct>>
@@ -934,6 +962,7 @@ where
         <T as modmath_cios::CiosRowOps>::Word: Copy
             + subtle::ConditionallySelectable
             + subtle::ConstantTimeEq
+            + const_num_traits::CtIsZero
             + const_num_traits::CtParity
             + const_num_traits::One
             + const_num_traits::Zero
