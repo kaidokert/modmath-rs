@@ -842,22 +842,29 @@ where
     /// iteration CT Montgomery ladder.
     ///
     /// **Requires `modulus` to be prime.** Constant-time over the bits
-    /// of `modulus − 2` (uses [`Self::exp`]). Returns `None` for the
-    /// zero residue.
-    pub fn inv_fermat(&self, a: &Residue<'_, T, Ct>) -> Option<Residue<'_, T, Ct>>
+    /// of `modulus − 2` (uses [`Self::exp`]) and over the zero check on
+    /// `a`. Returns `CtOption::None`-masked for the zero residue.
+    ///
+    /// Audit note: the prior `Option`-returning version had an
+    /// `if a.mont == T::zero() { return None }` early branch — variable
+    /// time on the residue's zero-ness, which silently broke the Ct
+    /// contract. This version uses `CtIsZero` for the masked check and
+    /// `CtOption` for the masked return; the exponentiation runs
+    /// unconditionally and the result is masked.
+    pub fn inv_fermat(&self, a: &Residue<'_, T, Ct>) -> subtle::CtOption<Residue<'_, T, Ct>>
     where
         T: CiosMontMulCt
+            + const_num_traits::CtIsZero
             + subtle::ConditionallySelectable
             + subtle::ConstantTimeEq
             + core::ops::Shr<usize, Output = T>
             + core::ops::BitAnd<Output = T>,
     {
-        if a.mont == T::zero() {
-            return None;
-        }
+        let a_is_nonzero = !a.mont.ct_is_zero();
         let two = T::one().wrapping_add(T::one());
         let exp_val = self.modulus.wrapping_sub(two);
-        Some(self.exp(a, &exp_val))
+        let result = self.exp(a, &exp_val);
+        subtle::CtOption::new(result, a_is_nonzero)
     }
 
     /// Constant-time modular inverse via Bernstein-Yang divsteps.
@@ -1539,14 +1546,14 @@ mod tests {
         let f = FieldCt::new(u16ct(13)).unwrap();
         for raw in 1u16..13 {
             let a = f.reduce(&u16ct(raw));
-            let inv = f.inv_fermat(&a).unwrap();
+            let inv = f.inv_fermat(&a).into_option().unwrap();
             assert_eq!(
                 f.into_raw(&f.mul(&a, &inv)),
                 u16ct(1),
                 "ct fermat fails at {raw}"
             );
         }
-        assert!(f.inv_fermat(&f.zero()).is_none());
+        assert!(f.inv_fermat(&f.zero()).into_option().is_none());
     }
 
     /// `ResidueCt::ct_eq` matches `PartialEq` outcomes on representative
