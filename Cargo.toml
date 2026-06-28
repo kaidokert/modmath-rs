@@ -6,5 +6,5 @@ members = ["modmath", "modmath-cios"]
 # Path-pin sibling crates during the coordinated experimental window.
 # Revert before publishing.
 [patch.crates-io]
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.4.0-alpha.1" }
+fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.4.0-alpha.4" }
 modmath-cios = { path = "modmath-cios" }

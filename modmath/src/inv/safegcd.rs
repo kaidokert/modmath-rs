@@ -52,7 +52,7 @@
 //! suitable for cases where the latency budget allows it (RSA blinding
 //! at 2048 bits is dominated by the main exponentiation anyway).
 
-use const_num_traits::{One, WrappingAdd, WrappingSub, Zero};
+use const_num_traits::{CtIsZero, CtParity, One, WrappingAdd, WrappingSub, Zero};
 use modmath_cios::CiosRowOps;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeLess, CtOption};
 
@@ -72,14 +72,18 @@ pub(crate) const fn divsteps_total(modulus_bits: usize) -> usize {
 // ---------------------------------------------------------------------------
 
 /// Returns `Choice::from(1)` iff the low bit of `value` is set.
+///
+/// Delegates to cnt's [`CtParity`] on the low limb. The CT contract
+/// for "is this primitive odd" lives upstream; we compose by
+/// extracting `word(0)` (which is a primitive once the limb level is
+/// reached).
 #[inline]
 fn ct_low_bit<T>(value: &T) -> Choice
 where
     T: CiosRowOps,
-    T::Word: core::ops::BitAnd<Output = T::Word> + One + Zero + ConstantTimeEq,
+    T::Word: CtParity,
 {
-    let masked = value.word(0) & T::Word::one();
-    !masked.ct_eq(&T::Word::zero())
+    value.word(0).ct_is_odd()
 }
 
 /// Returns `Choice::from(1)` iff the most-significant bit of `value`'s
@@ -175,13 +179,17 @@ where
 
 /// Modular negate: `(m - x) mod m`, preserving the `[0, m)` invariant.
 /// Returns 0 when `x == 0` (since `-0 mod m = 0`).
+///
+/// Delegates to cnt's [`CtIsZero`] for the masked zero check rather
+/// than hand-rolling `ct_eq(&T::zero())`. Identical semantically; the
+/// dedicated trait is cnt-tested.
 #[inline]
 fn neg_mod_ct<T>(x: &T, m: &T) -> T
 where
-    T: Clone + Zero + ConditionallySelectable + WrappingSub<Output = T> + ConstantTimeEq,
+    T: Clone + Zero + ConditionallySelectable + WrappingSub<Output = T> + CtIsZero,
 {
     let zero = T::zero();
-    let x_is_zero = x.ct_eq(&zero);
+    let x_is_zero = x.ct_is_zero();
     let neg = m.clone().wrapping_sub(x.clone());
     T::conditional_select(&neg, &zero, x_is_zero)
 }
@@ -203,7 +211,7 @@ where
         + ConditionallySelectable
         + WrappingAdd<Output = T>
         + core::ops::Shr<usize, Output = T>,
-    T::Word: core::ops::BitAnd<Output = T::Word> + One + Zero + ConstantTimeEq,
+    T::Word: CtParity,
 {
     let x_odd = ct_low_bit(x);
     let x_plus_m = x.clone().wrapping_add(m.clone());
@@ -238,6 +246,7 @@ where
         + ConditionallySelectable
         + ConstantTimeEq
         + ConstantTimeLess
+        + CtIsZero
         + Zero
         + One
         + WrappingAdd<Output = T>
@@ -248,6 +257,7 @@ where
     T::Word: Copy
         + ConditionallySelectable
         + ConstantTimeEq
+        + CtParity
         + One
         + Zero
         + core::ops::BitAnd<Output = T::Word>

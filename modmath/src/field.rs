@@ -879,6 +879,7 @@ where
             + WideMul
             + subtle::ConditionallySelectable
             + subtle::ConstantTimeLess
+            + const_num_traits::CtIsZero
             + modmath_cios::CiosRowOps
             + core::ops::Shr<usize, Output = T>
             + core::ops::Shl<usize, Output = T>
@@ -886,6 +887,7 @@ where
         <T as modmath_cios::CiosRowOps>::Word: Copy
             + subtle::ConditionallySelectable
             + subtle::ConstantTimeEq
+            + const_num_traits::CtParity
             + const_num_traits::One
             + const_num_traits::Zero
             + core::ops::BitAnd<Output = <T as modmath_cios::CiosRowOps>::Word>
