@@ -8,6 +8,7 @@
 //! two CIOS row kernels. modmath never touches raw limb arrays.
 
 use const_num_traits::BorrowingSub;
+use const_num_traits::ops::ct::CtIsZero;
 use const_num_traits::ops::overflowing::OverflowingAdd;
 use const_num_traits::{One, WrappingMul, Zero};
 use modmath_cios::CiosRowOps;
@@ -97,6 +98,7 @@ where
     T::Word: const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::WrappingMul
+        + const_num_traits::CtIsZero
         + const_num_traits::ops::overflowing::OverflowingAdd
         + core::ops::Add<Output = T::Word>
         + core::ops::Mul<Output = T::Word>
@@ -130,8 +132,11 @@ where
         acc_hi2 = zero;
     }
 
+    // Final reduction. Delegates to cnt's CtIsZero on the high word and
+    // subtle's Choice arithmetic; the borrow flag from BorrowingSub already
+    // encodes `acc < modulus` (no separate compare needed).
     let (sub_result, borrow) = <T as BorrowingSub>::borrowing_sub(acc, *modulus, false);
-    let acc_hi_nonzero = !acc_hi.ct_eq(&zero);
+    let acc_hi_nonzero = !acc_hi.ct_is_zero();
     let needs_sub = acc_hi_nonzero | !Choice::from(borrow as u8);
     T::conditional_select(&acc, &sub_result, needs_sub)
 }
@@ -186,6 +191,7 @@ where
     T::Word: const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::WrappingMul
+        + const_num_traits::CtIsZero
         + const_num_traits::ops::overflowing::OverflowingAdd
         + core::ops::Add<Output = T::Word>
         + core::ops::Mul<Output = T::Word>
