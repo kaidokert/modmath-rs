@@ -249,7 +249,8 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Rem<Output = T>
-        + crate::parity::Parity,
+        + crate::parity::Parity
+        + crate::NonCt,
 {
     crate::mul::basic_mod_mul(a, r, modulus)
 }
@@ -267,7 +268,8 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::parity::Parity,
+        + crate::parity::Parity
+        + crate::NonCt,
 {
     crate::mul::basic_mod_mul_pr(a, r, modulus)
 }
@@ -346,7 +348,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + crate::parity::Parity,
+        + crate::parity::Parity
+        + crate::NonCt,
 {
     // Montgomery multiplication algorithm:
     // Input: a_mont, b_mont (both in Montgomery form), modulus N, N', r_bits
@@ -379,7 +382,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + crate::parity::Parity,
+        + crate::parity::Parity
+        + crate::NonCt,
 {
     let product = crate::mul::basic_mod_mul_pr(a_mont, b_mont, modulus);
     basic_from_montgomery(product, modulus, n_prime, r_bits)

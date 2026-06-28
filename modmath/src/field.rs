@@ -366,6 +366,7 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
         + Parity
+        + crate::NonCt
         + MontStorage,
 {
     /// Convert a raw value `< modulus` (or arbitrary value, which is then
