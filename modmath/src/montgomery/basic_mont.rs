@@ -1268,73 +1268,24 @@ where
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_pr_odd(base, exponent, m))
 }
 
-/// Complete Montgomery modular exponentiation (Basic, CT, proven-odd
-/// modulus). **Infallible.** Same dispatch as
-/// [`basic_montgomery_mod_exp_ct`] but with the modulus parity proof
-/// hoisted into the type.
-pub fn basic_montgomery_mod_exp_odd_ct<T>(base: T, exponent: T, modulus: Odd<T>) -> T
-where
-    T: Copy
-        + const_num_traits::Zero
-        + const_num_traits::One
-        + PartialEq
-        + PartialOrd
-        + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
-        + Parity
-        + const_num_traits::CtIsZero
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
-        + core::ops::Rem<Output = T>
-        + core::ops::Shr<usize, Output = T>
-        + core::ops::BitAnd<Output = T>
-        + subtle::ConditionallySelectable
-        + subtle::ConstantTimeEq
-        + subtle::ConstantTimeLess,
-{
-    let m = modulus.get();
-    basic_montgomery_mod_exp_pr_odd_ct(reduce_mod(base, m), exponent, modulus)
-}
-
-/// Complete Montgomery modular exponentiation (Basic, CT): base^exponent mod modulus
-///
-/// Reduces `base` modulo `modulus` then dispatches to
-/// [`crate::basic::montgomery::ct::pre_reduced::mod_exp`]. Use this when the
-/// exponent (and possibly the base) is secret — e.g. RSA private-key
-/// operations.
-///
-/// Returns None if modulus is even or zero. Thin wrapper around
-/// [`basic_montgomery_mod_exp_odd_ct`].
-pub fn basic_montgomery_mod_exp_ct<T>(base: T, exponent: T, modulus: T) -> Option<T>
-where
-    T: Copy
-        + const_num_traits::Zero
-        + const_num_traits::One
-        + PartialEq
-        + PartialOrd
-        + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
-        + const_num_traits::CtIsZero
-        + Parity
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
-        + core::ops::Rem<Output = T>
-        + core::ops::Shr<usize, Output = T>
-        + core::ops::BitAnd<Output = T>
-        + subtle::ConditionallySelectable
-        + subtle::ConstantTimeEq
-        + subtle::ConstantTimeLess,
-{
-    Odd::new(modulus).map(|m| basic_montgomery_mod_exp_odd_ct(base, exponent, m))
-}
+// NOTE: `basic_montgomery_mod_exp_odd_ct` and `basic_montgomery_mod_exp_ct`
+// previously lived here as convenience wrappers that reduced `base mod
+// modulus` internally before dispatching to the `_pr` Ct kernel. Both
+// called `reduce_mod(base, m)` which uses `core::ops::Rem` — on
+// primitives that's hardware-variable on common embedded targets
+// (Cortex-M0/M3/M4), leaking the base magnitude. The "CT over base"
+// docstring claim was therefore false on the carriers it actually
+// compiled for (FixedUInt<W, N, Ct> doesn't impl Rem at all, so the
+// functions only compiled for primitive moduli, where they leaked).
+//
+// Removed in the CT_GET_WELL_PLAN Tier 1.3 cut. Callers should
+// pre-reduce externally and dispatch to
+// [`basic_montgomery_mod_exp_pr_odd_ct`] (proven-odd modulus) or
+// [`basic_montgomery_mod_exp_pr_ct`] (runtime parity check). The
+// "external pre-reduce" is a documented precondition on the `_pr`
+// kernel anyway — callers that need CT over base should be using the
+// Field<T, Ct> high-level surface (`Field::reduce`, `Field::exp`)
+// which composes CT-only primitives end to end.
 
 /// Complete Montgomery modular exponentiation (Basic, CT, pre-reduced):
 /// base^exponent mod modulus, constant-time over `exponent` (and `base`).
@@ -2279,16 +2230,22 @@ mod tests {
         }
     }
 
-    /// basic_montgomery_mod_exp_ct must produce the same output as the NCT
-    /// version for all inputs, on a primitive type.
+    /// basic_montgomery_mod_exp_pr_ct must produce the same output as
+    /// the NCT version when the caller pre-reduces base. Replaces the
+    /// prior `basic_montgomery_mod_exp_ct_matches_nct_u32` test
+    /// (deleted with its target function — see Tier 1.3 of the
+    /// CT_GET_WELL_PLAN).
     #[test]
-    fn test_basic_montgomery_mod_exp_ct_matches_nct_u32() {
+    fn test_basic_montgomery_mod_exp_pr_ct_matches_nct_u32_with_external_reduce() {
         let modulus = 13u32;
         for base in 0u32..modulus {
             for exp in 0u32..32 {
                 let nct = basic_montgomery_mod_exp(base, exp, modulus).unwrap();
-                let ct = basic_montgomery_mod_exp_ct(base, exp, modulus).unwrap();
-                assert_eq!(nct, ct, "mod_exp_ct mismatch at base={base} exp={exp}");
+                // External pre-reduction: caller's responsibility on
+                // the CT path. Inputs are already in [0, modulus) for
+                // this test, so the `% modulus` is a no-op observable.
+                let ct = basic_montgomery_mod_exp_pr_ct(base % modulus, exp, modulus).unwrap();
+                assert_eq!(nct, ct, "mod_exp_pr_ct mismatch at base={base} exp={exp}");
             }
         }
     }

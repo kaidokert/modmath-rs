@@ -63,15 +63,27 @@ pub mod pre_reduced {
 /// `subtle::ConditionallySelectable`, removing the operand-magnitude
 /// side-channel on the final reduction step.
 ///
-/// Only `mod_exp` has both NCT and CT siblings here today; there is no
-/// `mod_mul_ct` because the underlying source crate hasn't published
-/// one (the CIOS path is the canonical CT-mul entry point — see
-/// [`modmath::montgomery::cios::cios_montgomery_mul_ct`](crate::montgomery::cios::cios_montgomery_mul_ct)).
+/// **Only the `pre_reduced::mod_exp` entry is exposed.** The
+/// internal-reduce wrapper (`basic_montgomery_mod_exp_ct`) was
+/// removed in the CT_GET_WELL_PLAN Tier 1.3 cut — its docstring
+/// claimed CT over base, but the `core::ops::Rem` it used for the
+/// initial reduction is hardware-variable on common embedded targets.
+/// Callers needing CT-over-base should:
+///
+/// - reduce the base externally via a CT primitive (e.g.
+///   `Field::reduce` on the `Ct` personality, which composes the CT
+///   wide-REDC reduction), then dispatch to
+///   [`pre_reduced::mod_exp`](self::ct::pre_reduced::mod_exp); or
+/// - use the high-level [`Field<T, Ct>::exp`](crate::field::Field::exp)
+///   surface, which handles reduction + exponentiation as a single
+///   end-to-end CT pipeline.
+///
+/// There is no `mod_mul_ct` here because the underlying source crate
+/// hasn't published one (the CIOS path is the canonical CT-mul entry
+/// point — see
+/// [`cios_montgomery_mul_ct`](crate::montgomery::cios::cios_montgomery_mul_ct)).
 pub mod ct {
-    #[doc(inline)]
-    pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_ct as mod_exp;
-
-    /// Pre-reduced CT variants.
+    /// Pre-reduced CT variants. Precondition: `base < modulus`.
     pub mod pre_reduced {
         #[doc(inline)]
         pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr_ct as mod_exp;
