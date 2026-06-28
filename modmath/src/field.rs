@@ -706,6 +706,7 @@ where
     pub fn exp(&self, base: &Residue<'_, T, Ct>, exp: &T) -> Residue<'_, T, Ct>
     where
         T: CiosMontMulCt
+            + const_num_traits::CtIsZero
             + subtle::ConditionallySelectable
             + subtle::ConstantTimeEq
             + core::ops::Shr<usize, Output = T>
@@ -722,9 +723,11 @@ where
             // Always compute the conditional product.
             let multiplied =
                 CiosMontMulCt::cios_mont_mul_ct(&result, &base.mont, &self.modulus, &self.n_prime);
-            // Select based on bit i of exp.
+            // Select based on bit i of exp. Delegates to CtIsZero
+            // rather than ct_eq(&one); semantics identical for a value
+            // already known to be 0 or 1.
             let bit_t = (*exp >> i) & one;
-            let choice = bit_t.ct_eq(&one);
+            let choice = !bit_t.ct_is_zero();
             result = T::conditional_select(&result, &multiplied, choice);
         }
         Residue {

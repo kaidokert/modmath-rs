@@ -1182,6 +1182,7 @@ where
         + const_num_traits::WrappingAdd
         + const_num_traits::WrappingSub
         + Parity
+        + const_num_traits::CtIsZero
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
@@ -1217,6 +1218,7 @@ where
         + const_num_traits::WrappingMul
         + const_num_traits::WrappingAdd
         + const_num_traits::WrappingSub
+        + const_num_traits::CtIsZero
         + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -1265,6 +1267,7 @@ where
         + const_num_traits::WrappingMul
         + const_num_traits::WrappingAdd
         + const_num_traits::WrappingSub
+        + const_num_traits::CtIsZero
         + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -1301,8 +1304,10 @@ where
 
         // Extract bit i of exponent (i is public; the shift amount is the
         // loop index, not derived from exp). Bit value is secret.
+        // Delegates to cnt's CtIsZero for the masked "is bit set" check
+        // rather than hand-rolling ct_eq(&one).
         let bit_t = (exponent >> i) & one;
-        let choice = bit_t.ct_eq(&one);
+        let choice = !bit_t.ct_is_zero();
         result = T::conditional_select(&result, &multiplied, choice);
     }
 
@@ -1324,6 +1329,7 @@ where
         + const_num_traits::WrappingMul
         + const_num_traits::WrappingAdd
         + const_num_traits::WrappingSub
+        + const_num_traits::CtIsZero
         + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
