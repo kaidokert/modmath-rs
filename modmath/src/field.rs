@@ -254,6 +254,43 @@ where
         }
     }
 
+    /// Construct a new `Field` from an already-proven-odd modulus,
+    /// using the **constant-time** precompute path.
+    ///
+    /// Same precompute as [`new_odd`] (Newton's iteration for `N'`,
+    /// repeated modular doublings for `R mod N` and `R² mod N`), but
+    /// the doubling-and-reduction loop uses
+    /// [`mod_double_ct`](crate::montgomery::compute_r_mod_n_ct)
+    /// internally — no value-dependent branches on the modulus.
+    ///
+    /// Use this when `modulus` is secret (e.g. RSA-CRT private primes
+    /// `p`, `q`). For public moduli (ed25519 / Curve25519 / krabipqc),
+    /// [`new_odd`] is faster and equivalent.
+    ///
+    /// Cost vs [`new_odd`]: one extra `wrapping_sub` and one
+    /// `conditional_select` per modular doubling step (`w` per
+    /// precompute call). Negligible against the subsequent field
+    /// operations the precompute amortizes.
+    ///
+    /// [`new_odd`]: Self::new_odd
+    pub fn new_odd_ct(modulus: Odd<T>) -> Self
+    where
+        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+    {
+        let modulus = modulus.get();
+        let w = type_bit_width::<T>();
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r_mod_n = crate::montgomery::compute_r_mod_n_ct(modulus, w);
+        let r2_mod_n = crate::montgomery::compute_r2_mod_n_ct(r_mod_n, modulus, w);
+        Self {
+            modulus,
+            n_prime,
+            r_mod_n,
+            r2_mod_n,
+            _p: PhantomData,
+        }
+    }
+
     /// Construct a new `Field` over the given (odd, nonzero) `modulus`.
     ///
     /// Returns `None` if `modulus` is zero or even (Montgomery requires odd N).
@@ -597,21 +634,21 @@ where
     /// [`CtParity`]: const_num_traits::CtParity
     pub fn try_new_odd_ct(modulus: T) -> subtle::CtOption<Self>
     where
-        T: const_num_traits::CtParity,
+        T: const_num_traits::CtParity + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
     {
-        // Mask the parity check (no branch on the secret modulus); the
-        // precompute below runs unconditionally on the modulus value and is
-        // branch-free over the trait surface (wrapping/overflowing word
-        // arithmetic). When `is_odd` is unset the precompute output is
-        // meaningless — `CtOption::new(_, choice)` discards it via the
-        // standard masked-`Some` pattern.
+        // Mask the parity check (no branch on the secret modulus). The
+        // precompute below uses the CT path ([`Self::new_odd_ct`]) so
+        // no value-dependent branches on the modulus value either —
+        // every step is `subtle::Choice`-masked. `CtOption::new(_,
+        // choice)` discards the result via the standard masked-`Some`
+        // pattern if the modulus turned out to be even.
         let is_odd = modulus.ct_is_odd();
         // SAFETY: when `is_odd` is unset the wrapped `Odd` proof carries a
         // false predicate, but the resulting `Field` is unreachable through
         // the `CtOption` mask. No body downstream consumes the proof except
         // via the masked output.
         let proof = unsafe { Odd::new_unchecked(modulus) };
-        let field = Self::new_odd(proof);
+        let field = Self::new_odd_ct(proof);
         subtle::CtOption::new(field, is_odd)
     }
 
@@ -1040,6 +1077,41 @@ mod tests {
         // Same precompute as the infallible boundary constructor:
         let baseline = Field::<u32, Ct>::new_odd(Odd::new(13u32).unwrap());
         assert_eq!(field.modulus(), baseline.modulus());
+    }
+
+    /// `Field::new_odd_ct` (the CT precompute path) must produce
+    /// identical precompute values to `Field::new_odd` (the
+    /// variable-time path) for every modulus. Pins the contract that
+    /// `mod_double_ct` / `mod_exp2_ct` are CT-equivalent, not just
+    /// "CT but different output."
+    #[test]
+    fn new_odd_ct_precompute_matches_new_odd() {
+        for m in [3u32, 5, 7, 11, 13, 97, 65521, 0x7FFF_FFE7] {
+            let modulus = Odd::new(m).unwrap();
+            let f_nct = Field::<u32, Ct>::new_odd(modulus);
+            let f_ct = Field::<u32, Ct>::new_odd_ct(modulus);
+            assert_eq!(f_nct.modulus(), f_ct.modulus(), "modulus mismatch at m={m}");
+            assert_eq!(f_nct.n_prime, f_ct.n_prime, "n_prime mismatch at m={m}");
+            assert_eq!(f_nct.r_mod_n, f_ct.r_mod_n, "r_mod_n mismatch at m={m}");
+            assert_eq!(f_nct.r2_mod_n, f_ct.r2_mod_n, "r2_mod_n mismatch at m={m}");
+        }
+    }
+
+    /// CT precompute on multi-limb FixedUInt produces identical
+    /// output to the variable-time precompute. The actual RSA-CRT
+    /// shape — the precompute is what would silently produce
+    /// wrong results if `mod_double_ct` had a bug.
+    #[test]
+    fn new_odd_ct_precompute_matches_new_odd_fixed_bigint() {
+        // 128-bit odd modulus (composite, RSA-CRT-shape)
+        let m = U128Ct::from(0xFFFF_FFFF_FFFF_FFE7u64);
+        let modulus = Odd::new(m).unwrap();
+        let f_nct = Field::<U128Ct, Ct>::new_odd(modulus);
+        let f_ct = Field::<U128Ct, Ct>::new_odd_ct(modulus);
+        assert_eq!(f_nct.modulus(), f_ct.modulus());
+        assert_eq!(f_nct.n_prime, f_ct.n_prime);
+        assert_eq!(f_nct.r_mod_n, f_ct.r_mod_n);
+        assert_eq!(f_nct.r2_mod_n, f_ct.r2_mod_n);
     }
 
     #[test]
