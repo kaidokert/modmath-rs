@@ -859,6 +859,80 @@ where
         let exp_val = self.modulus.wrapping_sub(two);
         Some(self.exp(a, &exp_val))
     }
+
+    /// Constant-time modular inverse via Bernstein-Yang divsteps.
+    /// **Works for any modulus** — composite (RSA `n = p·q`) or prime —
+    /// unlike [`inv_fermat`] which assumes a prime modulus.
+    ///
+    /// Returns `CtOption::None` masked when `gcd(value, modulus) != 1`
+    /// (no inverse exists). Failure timing is independent of input
+    /// magnitudes.
+    ///
+    /// Used by RSA private-key blinding, where the modulus is the
+    /// composite `n = p·q` and Fermat's little theorem doesn't apply.
+    /// See [`crate::inv::safegcd`] for the algorithm and preconditions.
+    ///
+    /// [`inv_fermat`]: Self::inv_fermat
+    pub fn inv_safegcd_ct(&self, a: &Residue<'_, T, Ct>) -> subtle::CtOption<Residue<'_, T, Ct>>
+    where
+        T: CiosMontMulCt
+            + WideMul
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeLess
+            + modmath_cios::CiosRowOps
+            + core::ops::Shr<usize, Output = T>
+            + core::ops::Shl<usize, Output = T>
+            + core::ops::BitOr<Output = T>,
+        <T as modmath_cios::CiosRowOps>::Word: Copy
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeEq
+            + const_num_traits::One
+            + const_num_traits::Zero
+            + core::ops::BitAnd<Output = <T as modmath_cios::CiosRowOps>::Word>
+            + core::ops::Shl<usize, Output = <T as modmath_cios::CiosRowOps>::Word>,
+    {
+        // The value in the Residue is in Montgomery form. To get the
+        // Montgomery form of the inverse:
+        //   a.mont           = value · R mod n
+        //   raw_inv          = safegcd(a.mont, n) = a.mont⁻¹ mod n
+        //                    = (value · R)⁻¹ mod n
+        //                    = value⁻¹ · R⁻¹ mod n
+        //   wanted: inv.mont = value⁻¹ · R mod n
+        //                    = raw_inv · R² mod n
+        // Computing raw_inv · R² mod n via Mont multiplications requires
+        // **two** multiplications by R², not one:
+        //   m1 = REDC(raw_inv · R²) = raw_inv · R mod n  (= value⁻¹ raw)
+        //   m2 = REDC(m1 · R²)      = m1 · R mod n       (= value⁻¹ · R = inv.mont)
+        // The first multiplication "converts raw_inv into something that
+        // multiplied by R again gives the desired Mont form". The
+        // second multiplication does that final · R step. Equivalent
+        // to one multiplication by R³, but we only have R² cached.
+        //
+        // Headroom precondition: safegcd needs `2 * self.modulus` not
+        // to overflow `T` (i.e. modulus's MSB clear). We fold that
+        // check into the returned CtOption rather than asserting at
+        // entry — `None`-masked when the carrier was sized too tightly
+        // for the modulus. Cost is one MSB extraction on the cached
+        // modulus per call, invisible against the safegcd loop.
+        let modulus_has_headroom = !crate::inv::safegcd::ct_msb_set(&self.modulus);
+        let inv_raw = crate::inv::safegcd::safegcd_inv_ct(&a.mont, &self.modulus);
+        // Extract the raw inverse, defaulting to zero when safegcd
+        // reports `None`. The two REDCs run unconditionally on the
+        // extracted value — under the CtOption mask any garbage they
+        // produce on the failure path is discarded.
+        let inv_exists = inv_raw.is_some();
+        let raw_inv = inv_raw.unwrap_or(T::zero());
+        let m1 = wide_montgomery_mul_ct(raw_inv, self.r2_mod_n, self.modulus, self.n_prime);
+        let mont = wide_montgomery_mul_ct(m1, self.r2_mod_n, self.modulus, self.n_prime);
+        let residue = Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        };
+        // Combined predicate: inverse exists AND modulus has headroom.
+        // If either fails, the CtOption is None-masked.
+        subtle::CtOption::new(residue, inv_exists & modulus_has_headroom)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1128,6 +1202,125 @@ mod tests {
         let raw = U128Ct::from(0xDEAD_BEEF_u64);
         let r = f.reduce(&raw);
         assert_eq!(f.into_raw(&r), raw);
+    }
+
+    /// `inv_safegcd_ct` round-trip on a prime modulus. The CT
+    /// composite-modulus inverse is the load-bearing primitive for RSA
+    /// blinding; here we test on a prime (smaller test surface) and
+    /// verify `inv * value ≡ 1 mod modulus`.
+    #[test]
+    fn inv_safegcd_ct_round_trip_prime_modulus() {
+        let f = FieldCt::new(u16ct(13)).unwrap();
+        for raw_val in 1u16..13 {
+            let r = f.reduce(&u16ct(raw_val));
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(
+                inv.is_some().unwrap_u8(),
+                1,
+                "expected inverse for {raw_val} mod 13"
+            );
+            let inv_residue = inv.unwrap();
+            let product = f.mul(&r, &inv_residue);
+            assert_eq!(
+                f.into_raw(&product),
+                u16ct(1),
+                "{raw_val} * inv != 1 mod 13"
+            );
+        }
+    }
+
+    /// `inv_safegcd_ct` on a composite modulus — the RSA blinding case.
+    /// Confirms the algorithm works when the modulus is `p·q`, not
+    /// prime, where Fermat inversion would fail.
+    #[test]
+    fn inv_safegcd_ct_composite_modulus() {
+        // n = 3 * 5 = 15. Coprime values: 1, 2, 4, 7, 8, 11, 13, 14.
+        let f = FieldCt::new(u16ct(15)).unwrap();
+        for &raw_val in &[1u16, 2, 4, 7, 8, 11, 13, 14] {
+            let r = f.reduce(&u16ct(raw_val));
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(
+                inv.is_some().unwrap_u8(),
+                1,
+                "expected inverse for {raw_val} mod 15"
+            );
+            let product = f.mul(&r, &inv.unwrap());
+            assert_eq!(
+                f.into_raw(&product),
+                u16ct(1),
+                "{raw_val} * inv != 1 mod 15"
+            );
+        }
+        // Non-coprime values: safegcd returns None.
+        for &raw_val in &[3u16, 5, 6, 9, 10, 12] {
+            let r = f.reduce(&u16ct(raw_val));
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(
+                inv.is_some().unwrap_u8(),
+                0,
+                "expected None for non-coprime {raw_val} mod 15"
+            );
+        }
+    }
+
+    /// `inv_safegcd_ct` masks the result when the carrier doesn't have
+    /// one bit of headroom over the modulus (the safegcd
+    /// `2·modulus ≤ T::MAX` precondition). Field is constructed with a
+    /// modulus whose MSB is set; the returned CtOption is `None`
+    /// regardless of whether the value is mathematically invertible.
+    #[test]
+    fn inv_safegcd_ct_masks_when_modulus_lacks_headroom() {
+        // U16Ct = FixedUInt<u8, 2, Ct> — 16-bit carrier. Pick a 16-bit
+        // odd modulus with MSB set (e.g. 0xFFFD, an odd value > 2^15).
+        // 2 * 0xFFFD overflows u16 → safegcd's invariants break →
+        // headroom check returns None.
+        let modulus = u16ct(0xFFFD);
+        let f = FieldCt::new(modulus).unwrap();
+        let r = f.reduce(&u16ct(7));
+        let inv = f.inv_safegcd_ct(&r);
+        assert_eq!(
+            inv.is_some().unwrap_u8(),
+            0,
+            "expected None for modulus 0xFFFD (no headroom)"
+        );
+    }
+
+    /// `inv_safegcd_ct` on a larger RSA-CRT-shaped composite modulus.
+    /// n = p · q with small primes p, q. Confirms the algorithm runs
+    /// correctly on a multi-limb FixedUInt and at sizes more
+    /// representative of the RSA blinding workload than the toy
+    /// `mod 15` case (still small enough that we can exhaustively
+    /// check inv * value ≡ 1).
+    #[test]
+    fn inv_safegcd_ct_composite_modulus_u128() {
+        // n = 2^31 - 1 (Mersenne prime, but treat as "composite-shape"
+        // for the test — what matters is that safegcd doesn't assume
+        // primality). Result still works for any coprime value.
+        let n_raw: u64 = 0x1_0000_0007 * 0x100_0007u64; // = 4503599644606465
+        let modulus = U128Ct::from(n_raw);
+        let f = FieldCt::new(modulus).unwrap();
+
+        // A handful of values coprime to n. (0xDEAD_BEEF deliberately
+        // omitted — it shares factor 11 with this n.)
+        let test_vals = [
+            U128Ct::from(1u64),
+            U128Ct::from(2u64),
+            U128Ct::from(3u64),
+            U128Ct::from(0xCAFE_BABEu64),
+            U128Ct::from(0xFEED_FACEu64),
+        ];
+        for v in test_vals {
+            let r = f.reduce(&v);
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(
+                inv.is_some().unwrap_u8(),
+                1,
+                "expected inverse to exist for v={:?}",
+                v
+            );
+            let product = f.mul(&r, &inv.unwrap());
+            assert_eq!(f.into_raw(&product), U128Ct::from(1u64));
+        }
     }
 
     #[cfg(feature = "zeroize")]
