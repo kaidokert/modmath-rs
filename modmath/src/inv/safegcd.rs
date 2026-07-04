@@ -1,3 +1,8 @@
+// Clippy's `clone_on_copy` / `op_ref` lints misfire on generic code that
+// uses `.clone()` or `&x + &T::zero()` as portable "produce owned T"
+// idioms across trait-bound flavors where T may or may not be Copy.
+#![allow(clippy::clone_on_copy, clippy::op_ref)]
+
 //! Bernstein-Yang constant-time modular inverse via "safegcd" divsteps.
 //!
 //! Computes `a⁻¹ mod n` in constant time over the value being inverted,

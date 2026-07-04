@@ -1,3 +1,9 @@
+// Clippy's `op_ref` / `clone_on_copy` lints misfire on the strict
+// flavor's `&x + &T::zero()` "portable clone" and generic `.clone()`
+// idioms — the ref forms are load-bearing when T only impls
+// `Add<&T, Output=T>` / `Clone`, not `Copy`.
+#![allow(clippy::clone_on_copy, clippy::op_ref)]
+
 /// Compute N' using trial search method - O(R) complexity (Strict)
 /// Finds N' such that modulus * N' ≡ -1 (mod R)
 /// Uses reference-based operations to minimize copying of large integers
