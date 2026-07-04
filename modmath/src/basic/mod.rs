@@ -2,8 +2,7 @@
 //!
 //! Use this module when the operand type satisfies `T: Copy + ...` —
 //! primitive integers (`u8`, `u16`, `u32`, `u64`, `u128`) and
-//! `Copy`-impl'ing bigints (`fixed_bigint::FixedUInt`,
-//! `crypto_bigint::Uint`).
+//! stack-allocated bigints that impl `Copy`.
 //!
 //! For backends that don't impl `Copy`, see
 //! [`modmath::constrained`](crate::constrained) (`Clone`-bound,
@@ -49,9 +48,8 @@ pub mod pre_reduced {
 /// Non-zero-modulus variants. Caller provides `m: T::NonZero` (one
 /// boundary-time `m.into_nonzero()?` proof); every `% m` reduction
 /// inside collapses to `rem_nonzero` with no divide-by-zero panic
-/// path. Verified end-to-end against fixed-bigint's
-/// `NonZeroFixedUInt`-driven `DivNonZero` impl (see
-/// fixed-bigint's `ct-verify/panic-free-audit` matrix).
+/// path when the carrier's `DivNonZero` impl elides the underlying
+/// zero-check.
 pub mod nonzero {
     #[doc(inline)]
     pub use crate::add::basic_mod_add_nz as add;

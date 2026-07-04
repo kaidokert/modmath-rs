@@ -1,27 +1,21 @@
 //! Row-op trait surface for CIOS Montgomery multiplication.
 //!
-//! Defines [`CiosRowOps`] — the abstraction the CIOS algorithm body in
-//! `modmath` drives — plus the single-word degenerate impls for
-//! `u8`/`u16`/`u32`/`u64`. Multi-limb backends (e.g. `fixed-bigint`'s
-//! `FixedUInt`) implement the trait on their own type.
+//! [`CiosRowOps`] is the minimal interface a multi-limb integer type
+//! exposes so a CIOS (Coarsely Integrated Operand Scanning) Montgomery
+//! multiplication loop can drive it: limb access plus the two fused
+//! row kernels. The algorithm itself lives with the consumer; bigint
+//! backends implement the trait on their own type.
 //!
-//! This crate is split out of `modmath` so that the trait identity
-//! stays stable across compile units. `modmath` is compiled twice
-//! during `cargo test` (once as a normal library that `fixed-bigint`
-//! links against, once with `--test` for the test binary); rustc
-//! assigns the two compilations distinct metadata hashes, so a trait
-//! defined inside `modmath` becomes two different types and impls in
-//! `fixed-bigint` fail to resolve from the test binary. By living in a
-//! leaf crate that is *not* `--test`-built in the same workspace pass,
-//! [`CiosRowOps`] has exactly one identity that both sides agree on.
+//! Single-word degenerate impls for `u8`/`u16`/`u32`/`u64` are
+//! provided here, treating each primitive as a 1-limb value.
 
 #![no_std]
 
 /// Row-level operations for CIOS Montgomery multiplication.
 ///
 /// Implementors provide infallible limb access and the two CIOS row
-/// kernels. The CIOS algorithm (in `modmath::montgomery::cios`) is
-/// generic over this trait.
+/// kernels; the multiplication loop driving them is generic over this
+/// trait.
 ///
 /// # Preconditions
 ///
@@ -29,9 +23,9 @@
 /// - `i` is a public value (loop counter, constant) — never secret.
 ///
 /// Under these preconditions, an infallible accessor is CT-safe for
-/// both variable-time and constant-time backends. The CIOS algorithm
-/// enforces both — `i` is always a public loop counter
-/// (`0..word_count()`) or the constant `0`.
+/// both variable-time and constant-time backends. A well-formed CIOS
+/// driver upholds both by construction — `i` is only ever a public
+/// loop counter (`0..word_count()`) or the constant `0`.
 pub trait CiosRowOps: Default + Sized {
     type Word: Copy + PartialOrd;
 

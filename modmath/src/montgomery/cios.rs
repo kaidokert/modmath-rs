@@ -211,7 +211,7 @@ mod smoke_tests {
     /// New CIOS via `CiosRowOps` must match the existing wide-REDC
     /// `wide_montgomery_mul` reference for every `(a, b)` modulo a small
     /// prime. Generated per primitive — validates the trait surface
-    /// end-to-end without depending on fixed-bigint catching up.
+    /// end-to-end on the built-in single-word impls alone.
     macro_rules! cios_smoke_test {
         ($name:ident, $t:ty) => {
             #[test]

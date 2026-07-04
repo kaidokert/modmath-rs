@@ -43,9 +43,10 @@
 //! `modulus` must fit in `T` with at least one bit of headroom — i.e.
 //! `2 * modulus` does not overflow `T`. The algorithm maintains
 //! `|d|, |e| < modulus` strictly, so intermediate sums `d + e` are
-//! bounded by `2 * modulus`. Practical types (e.g.
-//! `FixedUInt<u32, 64>` for a 2048-bit RSA modulus) leave plenty of
-//! headroom.
+//! bounded by `2 * modulus`. A modulus that fully occupies the
+//! carrier width violates this — pick a carrier at least one limb
+//! wider (a 2048-bit RSA modulus needs a 2080-bit carrier at 32-bit
+//! limbs).
 //!
 //! ## Implementation note
 //!

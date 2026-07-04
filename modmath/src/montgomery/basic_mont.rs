@@ -393,7 +393,7 @@ where
 // Wide-REDC private helpers (R = 2^W, full type width)
 // ---------------------------------------------------------------------------
 
-/// Bit width of type T (e.g. 32 for u32, 128 for FixedUInt<u32,4>).
+/// Bit width of type T (e.g. 32 for u32, 128 for a 4×32-limb bigint).
 pub const fn type_bit_width<T>() -> usize {
     core::mem::size_of::<T>() * 8
 }
@@ -426,7 +426,7 @@ where
 /// selects via `subtle::Choice`.
 ///
 /// Used by [`compute_r_mod_n_ct`] / [`compute_r2_mod_n_ct`] for the Ct
-/// precompute path called from [`Field::new_odd_ct`].
+/// precompute path called from [`Field::new_odd_ct`](crate::field::Field::new_odd_ct).
 fn mod_double_ct<T>(val: T, modulus: T) -> T
 where
     T: Copy
@@ -527,9 +527,9 @@ where
 
 /// Compute R mod N = 2^W mod N via W modular doublings starting from 1.
 ///
-/// **Variable-time.** Used by [`Field::new_odd`] for the Nct precompute
+/// **Variable-time.** Used by [`Field::new_odd`](crate::field::Field::new_odd) for the Nct precompute
 /// path (public modulus); the CT sibling [`compute_r_mod_n_ct`] is
-/// used by [`Field::new_odd_ct`] when the modulus is secret.
+/// used by [`Field::new_odd_ct`](crate::field::Field::new_odd_ct) when the modulus is secret.
 pub fn compute_r_mod_n<T>(modulus: T, w: usize) -> T
 where
     T: Copy
@@ -546,7 +546,7 @@ where
 }
 
 /// CT version of [`compute_r_mod_n`]: `2^W mod modulus` with no
-/// value-dependent branches. Used by [`Field::new_odd_ct`] for the
+/// value-dependent branches. Used by [`Field::new_odd_ct`](crate::field::Field::new_odd_ct) for the
 /// secret-modulus precompute path.
 pub fn compute_r_mod_n_ct<T>(modulus: T, w: usize) -> T
 where
@@ -611,7 +611,7 @@ where
 ///
 /// This is the variable-time path: branches on `carry1` and on `carry3`
 /// via `||` short-circuit. Used by the NCT REDC functions. For the CT
-/// REDC path, see [`accumulate_high_half_carry_ct`].
+/// REDC path, see `accumulate_high_half_carry_ct`.
 fn accumulate_high_half_carry<T>(result: T, carry1: bool, carry2: bool) -> (T, bool)
 where
     T: const_num_traits::One
@@ -707,9 +707,9 @@ where
 /// REDC on a double-width input — variable-time, reference-based inputs.
 ///
 /// Same algorithm as [`wide_redc`] but takes all operands by reference,
-/// avoiding the per-call value copy. For `Copy` types (`u32`, `FixedUInt`)
-/// the compiler register-passes either way; the by-ref form matters for
-/// non-Copy bigint backends where each value pass would clone.
+/// avoiding the per-call value copy. For `Copy` types the compiler
+/// register-passes either way; the by-ref form matters for non-`Copy`
+/// bigint backends where each value pass would clone.
 ///
 /// Drops the `Copy` bound — usable with backends that don't impl it.
 pub fn strict_wide_redc<T>(t_lo: &T, t_hi: &T, modulus: &T, n_prime: &T) -> T
@@ -938,7 +938,7 @@ where
 /// Wide multiply-accumulate — constant-time carry propagation.
 ///
 /// Same shape as [`wide_montgomery_mul_acc`] but routes the carry
-/// combination through [`accumulate_high_half_carry_ct`] so the
+/// combination through `accumulate_high_half_carry_ct` so the
 /// per-term cost has no value-dependent branches. Use in CT-sensitive
 /// paths; pair with [`wide_redc_ct`] for the final reduction.
 ///

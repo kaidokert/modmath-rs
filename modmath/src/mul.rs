@@ -75,13 +75,10 @@ where
 ///
 /// Same body as [`basic_mod_mul`] but the modulus is taken as
 /// `T::NonZero` — every `% m` becomes `rem_nonzero(m)` with no
-/// divide-by-zero branch. **Deletes the `panic_fmt` symbol** that the
-/// runtime modulus-zero check would synthesize from the linked binary
-/// on embedded targets, when the carrier's `DivNonZero` impl elides the
-/// underlying `Div` zero-check (verified end-to-end against
-/// `fixed-bigint`'s `NonZeroFixedUInt`-driven `DivNonZero` via the
-/// `ct-verify/panic-free-audit` matrix — see fixed-bigint's CHANGELOG
-/// for the per-stage `cargo nm` table).
+/// divide-by-zero branch. When the carrier's `DivNonZero` impl elides
+/// the underlying `Div` zero-check, this **deletes the `panic_fmt`
+/// symbol** that the runtime modulus-zero check would otherwise
+/// synthesize into the linked binary on embedded targets.
 ///
 /// Sibling `*_nz` siblings in [`basic_mod_add_nz`](crate::add::basic_mod_add_nz),
 /// [`basic_mod_sub_nz`](crate::sub::basic_mod_sub_nz), and

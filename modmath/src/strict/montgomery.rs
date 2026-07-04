@@ -47,8 +47,8 @@ pub use crate::montgomery::strict_mont::strict_to_montgomery as to_mont;
 /// operands, no `Copy` bound on `T`. Suitable for non-`Copy` bigint
 /// backends where each by-value pass would clone the operand.
 ///
-/// For the by-value variant suitable for `Copy` types (u32,
-/// `FixedUInt`), see [`modmath::basic::montgomery::wide`](crate::basic::montgomery::wide).
+/// For the by-value variant suitable for `Copy` types, see
+/// [`modmath::basic::montgomery::wide`](crate::basic::montgomery::wide).
 /// Codegen for `Copy` types is identical between the two; the strict
 /// form only matters when `T: !Copy`.
 pub mod wide {
