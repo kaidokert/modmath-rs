@@ -12,7 +12,7 @@ use const_num_traits::ops::ct::CtIsZero;
 use const_num_traits::ops::overflowing::OverflowingAdd;
 use const_num_traits::{One, WrappingMul, Zero};
 use modmath_cios::CiosRowOps;
-use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
+use subtle::{Choice, ConditionallySelectable};
 
 /// CIOS Montgomery multiplication — variable-time: `a * b * R⁻¹ mod modulus`.
 ///

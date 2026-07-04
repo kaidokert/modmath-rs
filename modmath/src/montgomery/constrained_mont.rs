@@ -1,3 +1,7 @@
+// Clippy's `clone_on_copy` / `op_ref` lints misfire on the constrained
+// flavor's generic Clone / Add<&T, Output=T> idioms.
+#![allow(clippy::clone_on_copy, clippy::op_ref)]
+
 // Constrained Montgomery arithmetic functions
 // These work with references to avoid unnecessary copies, following the pattern from exp.rs
 

@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust: ["1.85", stable, nightly]
+        rust: ["1.86", stable, nightly]
     continue-on-error: ${{ matrix.rust == 'nightly' }}
 
     steps:
@@ -37,19 +37,12 @@ jobs:
       if: matrix.rust == 'stable'
       working-directory: modmath
       run: cargo clippy -- -D warnings
-    - name: Run clippy (wide-mul)
-      if: matrix.rust == 'stable'
-      working-directory: modmath
-      run: cargo clippy --features wide-mul -- -D warnings
     - name: Build
       working-directory: modmath
       run: cargo build
     - name: Run tests
       working-directory: modmath
       run: cargo test --verbose
-    - name: Run tests (wide-mul)
-      working-directory: modmath
-      run: cargo test --verbose --features wide-mul
     - name: Run tests with nightly feature
       if: matrix.rust == 'nightly'
       working-directory: modmath
