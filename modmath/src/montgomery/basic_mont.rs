@@ -426,7 +426,7 @@ where
 /// selects via `subtle::Choice`.
 ///
 /// Used by [`compute_r_mod_n_ct`] / [`compute_r2_mod_n_ct`] for the Ct
-/// precompute path called from [`Field::new_odd_ct`](crate::field::Field::new_odd_ct).
+/// precompute path called from [`Field::new_odd_ct`](crate::Field::new_odd_ct).
 fn mod_double_ct<T>(val: T, modulus: T) -> T
 where
     T: Copy
@@ -527,9 +527,9 @@ where
 
 /// Compute R mod N = 2^W mod N via W modular doublings starting from 1.
 ///
-/// **Variable-time.** Used by [`Field::new_odd`](crate::field::Field::new_odd) for the Nct precompute
+/// **Variable-time.** Used by [`Field::new_odd`](crate::Field::new_odd) for the Nct precompute
 /// path (public modulus); the CT sibling [`compute_r_mod_n_ct`] is
-/// used by [`Field::new_odd_ct`](crate::field::Field::new_odd_ct) when the modulus is secret.
+/// used by [`Field::new_odd_ct`](crate::Field::new_odd_ct) when the modulus is secret.
 pub fn compute_r_mod_n<T>(modulus: T, w: usize) -> T
 where
     T: Copy
@@ -546,7 +546,7 @@ where
 }
 
 /// CT version of [`compute_r_mod_n`]: `2^W mod modulus` with no
-/// value-dependent branches. Used by [`Field::new_odd_ct`](crate::field::Field::new_odd_ct) for the
+/// value-dependent branches. Used by [`Field::new_odd_ct`](crate::Field::new_odd_ct) for the
 /// secret-modulus precompute path.
 pub fn compute_r_mod_n_ct<T>(modulus: T, w: usize) -> T
 where

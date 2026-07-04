@@ -81,7 +81,7 @@ pub mod pre_reduced {
 ///   `Field::reduce` on the `Ct` personality, which composes the CT
 ///   wide-REDC reduction), then dispatch to
 ///   [`pre_reduced::mod_exp`](self::ct::pre_reduced::mod_exp); or
-/// - use the high-level [`Field<T, Ct>::exp`](crate::field::Field::exp)
+/// - use the high-level [`Field<T, Ct>::exp`](crate::Field::exp)
 ///   surface, which handles reduction + exponentiation as a single
 ///   end-to-end CT pipeline.
 ///

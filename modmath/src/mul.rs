@@ -91,7 +91,7 @@ where
 /// Routing note: the `_nz` surface is Nct-aligned because the
 /// underlying `_pr` bodies are operand-magnitude-branching. Secret
 /// (Ct-personality) moduli go through
-/// [`Field::try_new_odd_ct`](crate::field::Field::try_new_odd_ct) and
+/// [`Field::try_new_odd_ct`](crate::Field::try_new_odd_ct) and
 /// the Montgomery path (which doesn't divide), not through `_nz`.
 pub fn basic_mod_mul_nz<T>(a: T, b: T, m: T::NonZero) -> T
 where
