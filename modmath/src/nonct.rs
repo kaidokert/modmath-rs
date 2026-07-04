@@ -74,14 +74,13 @@ mod fixed_bigint_impl {
 #[cfg(test)]
 mod tests {
     use super::NonCt;
-    use const_num_traits::Nct;
-    use fixed_bigint::FixedUInt;
 
-    /// Compile-check: primitives and Nct-personality FixedUInt impl NonCt.
-    /// The Ct-personality non-impl is documented in the module docstring;
-    /// a compile-fail test fixture is the correct place to enforce it.
+    /// Compile-check: primitives impl NonCt. FixedUInt<_, _, Nct> impl
+    /// lives behind the `fixed-bigint` feature; the Ct-personality
+    /// non-impl is documented in the module docstring and belongs in a
+    /// compile-fail fixture.
     #[test]
-    fn nonct_impl_check() {
+    fn nonct_impl_check_primitives() {
         fn assert_nonct<T: NonCt>() {}
         assert_nonct::<u8>();
         assert_nonct::<u16>();
@@ -89,6 +88,14 @@ mod tests {
         assert_nonct::<u64>();
         assert_nonct::<u128>();
         assert_nonct::<usize>();
+    }
+
+    #[cfg(feature = "fixed-bigint")]
+    #[test]
+    fn nonct_impl_check_fixed_bigint() {
+        use const_num_traits::Nct;
+        use fixed_bigint::FixedUInt;
+        fn assert_nonct<T: NonCt>() {}
         assert_nonct::<FixedUInt<u32, 4, Nct>>();
         assert_nonct::<FixedUInt<u32, 8, Nct>>();
     }

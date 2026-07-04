@@ -61,11 +61,20 @@ use const_num_traits::{CtIsZero, CtParity, One, WrappingAdd, WrappingSub, Zero};
 use modmath_cios::CiosRowOps;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeLess, CtOption};
 
-/// Total number of divsteps for an `n`-bit operand. Per the paper
-/// (Theorem 11.2), `⌈(45·n + 64) / 19⌉` is the proven sufficient count.
-/// A small safety margin is added because the bound is tight.
+/// Total number of divsteps for an `n`-bit operand. Per Theorem 11.2
+/// of the Bernstein-Yang paper, for the *integer* case with δ₀=1 (our
+/// initialization at [`safegcd_inv_ct`]) the proven sufficient count
+/// is `⌊(49·n + 80)/17⌋` for `n < 46` and `⌊(49·n + 57)/17⌋` for
+/// `n ≥ 46`. Under-iterating causes worst-case coprime pairs to exit
+/// divsteps with `g ≠ 0`, silently masking valid inverses to `None`.
+/// (The `(45·n + 64)/19` bound is the *polynomial* case from Section
+/// 7 — not applicable here.)
 pub(crate) const fn divsteps_total(modulus_bits: usize) -> usize {
-    (45 * modulus_bits + 64).div_ceil(19) + 4
+    if modulus_bits < 46 {
+        (49 * modulus_bits + 80) / 17
+    } else {
+        (49 * modulus_bits + 57) / 17
+    }
 }
 
 /// Returns `Choice::from(1)` iff the low bit of `value` is set.
@@ -225,10 +234,13 @@ where
 /// `CtOption::None` masked when no inverse exists. The failure path
 /// timing is independent of input magnitudes.
 ///
+/// The `modulus is odd` and `modulus > 1` preconditions are folded
+/// into the returned mask: passing an even modulus or `1` yields
+/// `CtOption::None`, matching the behavior for "no inverse exists" —
+/// the divsteps loop still runs the full step count in constant time.
+///
 /// # Preconditions
 ///
-/// - `modulus` is odd
-/// - `modulus > 1`
 /// - `value < modulus` (caller should reduce first)
 /// - `2 * modulus` fits in `T` without overflow (i.e. `T` is at least
 ///   one bit wider than `modulus`)
@@ -315,7 +327,16 @@ where
     let neg_d = neg_mod_ct(&d, modulus);
     let result = T::conditional_select(&d, &neg_d, f_is_neg_one);
 
-    CtOption::new(result, has_inverse)
+    // Fold in the modulus preconditions. `half_mod_ct`'s (x + m) >> 1
+    // trick is invalid unless m is odd; modulus = 1 collapses residues
+    // to a single class. Divsteps still ran (constant time), the
+    // resulting `d`/`e` are garbage in those cases, and the mask
+    // discards them.
+    let modulus_is_odd = ct_low_bit(modulus);
+    let modulus_is_one = modulus.ct_eq(&one);
+    let modulus_ok = modulus_is_odd & !modulus_is_one;
+
+    CtOption::new(result, has_inverse & modulus_ok)
 }
 
 // Inline WrappingNeg-style two's-complement negate. const-num-traits'
@@ -464,6 +485,27 @@ mod tests {
                 let prod = (inv as u128 * v as u128) % m as u128;
                 assert_eq!(prod, 1, "u64 inv * value mod m != 1");
             }
+        }
+    }
+
+    /// Even modulus and modulus = 1 violate the algorithm's precondition
+    /// (`half_mod_ct`'s trick assumes odd m; modulus = 1 has a single
+    /// residue class). The mask folds those into CtOption::None.
+    #[test]
+    fn modulus_precondition_masks() {
+        for m in [2u32, 4, 6, 100, 0xFFFF_FFFE] {
+            for v in [1u32, 3, 7, 0xCAFE_BABE] {
+                assert!(
+                    safegcd_inv_ct::<u32>(&v, &m).into_option().is_none(),
+                    "even modulus {m:#x} with value {v:#x}: expected None"
+                );
+            }
+        }
+        for v in [0u32, 1, 7] {
+            assert!(
+                safegcd_inv_ct::<u32>(&v, &1u32).into_option().is_none(),
+                "modulus = 1 with value {v}: expected None"
+            );
         }
     }
 }
