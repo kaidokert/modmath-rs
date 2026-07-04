@@ -254,6 +254,43 @@ where
         }
     }
 
+    /// Construct a new `Field` from an already-proven-odd modulus,
+    /// using the **constant-time** precompute path.
+    ///
+    /// Same precompute as [`new_odd`] (Newton's iteration for `N'`,
+    /// repeated modular doublings for `R mod N` and `R² mod N`), but
+    /// the doubling-and-reduction loop in
+    /// [`compute_r_mod_n_ct`](crate::montgomery::compute_r_mod_n_ct)
+    /// avoids value-dependent branches on the modulus.
+    ///
+    /// Use this when `modulus` is secret (e.g. RSA-CRT private primes
+    /// `p`, `q`). For public moduli (ed25519 / Curve25519 / krabipqc),
+    /// [`new_odd`] is faster and equivalent.
+    ///
+    /// Cost vs [`new_odd`]: one extra `wrapping_sub` and one
+    /// `conditional_select` per modular doubling step (`w` per
+    /// precompute call). Negligible against the subsequent field
+    /// operations the precompute amortizes.
+    ///
+    /// [`new_odd`]: Self::new_odd
+    pub fn new_odd_ct(modulus: Odd<T>) -> Self
+    where
+        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+    {
+        let modulus = modulus.get();
+        let w = type_bit_width::<T>();
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r_mod_n = crate::montgomery::compute_r_mod_n_ct(modulus, w);
+        let r2_mod_n = crate::montgomery::compute_r2_mod_n_ct(r_mod_n, modulus, w);
+        Self {
+            modulus,
+            n_prime,
+            r_mod_n,
+            r2_mod_n,
+            _p: PhantomData,
+        }
+    }
+
     /// Construct a new `Field` over the given (odd, nonzero) `modulus`.
     ///
     /// Returns `None` if `modulus` is zero or even (Montgomery requires odd N).
@@ -329,6 +366,7 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
         + Parity
+        + crate::NonCt
         + MontStorage,
 {
     /// Convert a raw value `< modulus` (or arbitrary value, which is then
@@ -597,21 +635,21 @@ where
     /// [`CtParity`]: const_num_traits::CtParity
     pub fn try_new_odd_ct(modulus: T) -> subtle::CtOption<Self>
     where
-        T: const_num_traits::CtParity,
+        T: const_num_traits::CtParity + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
     {
-        // Mask the parity check (no branch on the secret modulus); the
-        // precompute below runs unconditionally on the modulus value and is
-        // branch-free over the trait surface (wrapping/overflowing word
-        // arithmetic). When `is_odd` is unset the precompute output is
-        // meaningless — `CtOption::new(_, choice)` discards it via the
-        // standard masked-`Some` pattern.
+        // Mask the parity check (no branch on the secret modulus). The
+        // precompute below uses the CT path ([`Self::new_odd_ct`]) so
+        // no value-dependent branches on the modulus value either —
+        // every step is `subtle::Choice`-masked. `CtOption::new(_,
+        // choice)` discards the result via the standard masked-`Some`
+        // pattern if the modulus turned out to be even.
         let is_odd = modulus.ct_is_odd();
         // SAFETY: when `is_odd` is unset the wrapped `Odd` proof carries a
         // false predicate, but the resulting `Field` is unreachable through
         // the `CtOption` mask. No body downstream consumes the proof except
         // via the masked output.
         let proof = unsafe { Odd::new_unchecked(modulus) };
-        let field = Self::new_odd(proof);
+        let field = Self::new_odd_ct(proof);
         subtle::CtOption::new(field, is_odd)
     }
 
@@ -706,6 +744,7 @@ where
     pub fn exp(&self, base: &Residue<'_, T, Ct>, exp: &T) -> Residue<'_, T, Ct>
     where
         T: CiosMontMulCt
+            + const_num_traits::CtIsZero
             + subtle::ConditionallySelectable
             + subtle::ConstantTimeEq
             + core::ops::Shr<usize, Output = T>
@@ -724,7 +763,7 @@ where
                 CiosMontMulCt::cios_mont_mul_ct(&result, &base.mont, &self.modulus, &self.n_prime);
             // Select based on bit i of exp.
             let bit_t = (*exp >> i) & one;
-            let choice = bit_t.ct_eq(&one);
+            let choice = !bit_t.ct_is_zero();
             result = T::conditional_select(&result, &multiplied, choice);
         }
         Residue {
@@ -841,23 +880,126 @@ where
     /// Modular inverse via Fermat: `a^(modulus − 2)` through the fixed-
     /// iteration CT Montgomery ladder.
     ///
-    /// **Requires `modulus` to be prime.** Constant-time over the bits
-    /// of `modulus − 2` (uses [`Self::exp`]). Returns `None` for the
-    /// zero residue.
-    pub fn inv_fermat(&self, a: &Residue<'_, T, Ct>) -> Option<Residue<'_, T, Ct>>
+    /// **Requires `modulus` to be prime.** Constant-time over `a`'s
+    /// bits and zero-ness via the fixed `T::BITS`-iteration Montgomery
+    /// ladder in [`Self::exp`]. The loop count depends only on the
+    /// carrier type's bit width, not on `modulus - 2`'s significant
+    /// bit count or `a`'s value. Returns `CtOption::None`-masked for
+    /// the zero residue.
+    ///
+    /// Cost: one full ladder over every bit of `T` (e.g. 256
+    /// square-and-multiply iterations for `FixedUInt<u32, 8>` over a
+    /// Curve25519 scalar field), regardless of whether `modulus - 2`
+    /// occupies the full carrier width. For composite moduli (RSA
+    /// `n = p·q`) where Fermat doesn't apply, use
+    /// [`Self::inv_safegcd_ct`] instead.
+    pub fn inv_fermat(&self, a: &Residue<'_, T, Ct>) -> subtle::CtOption<Residue<'_, T, Ct>>
     where
         T: CiosMontMulCt
+            + const_num_traits::CtIsZero
             + subtle::ConditionallySelectable
             + subtle::ConstantTimeEq
             + core::ops::Shr<usize, Output = T>
             + core::ops::BitAnd<Output = T>,
     {
-        if a.mont == T::zero() {
-            return None;
-        }
+        let a_is_nonzero = !a.mont.ct_is_zero();
         let two = T::one().wrapping_add(T::one());
         let exp_val = self.modulus.wrapping_sub(two);
-        Some(self.exp(a, &exp_val))
+        let result = self.exp(a, &exp_val);
+        subtle::CtOption::new(result, a_is_nonzero)
+    }
+
+    /// Constant-time modular inverse via Bernstein-Yang divsteps.
+    /// **Works for any modulus** — composite (RSA `n = p·q`) or prime —
+    /// unlike [`inv_fermat`] which assumes a prime modulus.
+    ///
+    /// Returns `CtOption::None` masked when `gcd(value, modulus) != 1`
+    /// (no inverse exists). Failure timing is independent of input
+    /// magnitudes.
+    ///
+    /// ## Carrier headroom precondition
+    ///
+    /// Also returns `CtOption::None` masked when the carrier `T`
+    /// lacks **one bit of headroom over `modulus`** (the safegcd
+    /// `2·modulus ≤ T::MAX` precondition). The check is folded into
+    /// the returned mask at no value-dependent cost (one MSB
+    /// extraction on the cached modulus per call). When the modulus
+    /// occupies the full carrier width (MSB set in `T`), this method
+    /// returns `None` regardless of value coprimality — the carrier
+    /// is too tight for the algorithm's intermediate sums.
+    ///
+    /// **Pick a `T` at least one bit wider than the modulus:**
+    /// `FixedUInt<u32, 65>` for a 2048-bit RSA modulus,
+    /// `FixedUInt<u32, 129>` for a 4096-bit one. Krabipqc / PQC moduli
+    /// (3329, 8380417, etc.) leave plenty of headroom on any
+    /// reasonable carrier and are unaffected.
+    ///
+    /// Used by RSA private-key blinding, where the modulus is the
+    /// composite `n = p·q` and Fermat's little theorem doesn't apply.
+    /// See [`crate::inv::safegcd`] for the algorithm and full
+    /// precondition list.
+    ///
+    /// [`inv_fermat`]: Self::inv_fermat
+    pub fn inv_safegcd_ct(&self, a: &Residue<'_, T, Ct>) -> subtle::CtOption<Residue<'_, T, Ct>>
+    where
+        T: CiosMontMulCt
+            + WideMul
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeLess
+            + const_num_traits::CtIsZero
+            + modmath_cios::CiosRowOps
+            + core::ops::Shr<usize, Output = T>
+            + core::ops::Shl<usize, Output = T>
+            + core::ops::BitOr<Output = T>,
+        <T as modmath_cios::CiosRowOps>::Word: Copy
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeEq
+            + const_num_traits::CtIsZero
+            + const_num_traits::CtParity
+            + const_num_traits::One
+            + const_num_traits::Zero
+            + core::ops::BitAnd<Output = <T as modmath_cios::CiosRowOps>::Word>
+            + core::ops::Shl<usize, Output = <T as modmath_cios::CiosRowOps>::Word>,
+    {
+        // The value in the Residue is in Montgomery form. To get the
+        // Montgomery form of the inverse:
+        //   a.mont           = value · R mod n
+        //   raw_inv          = safegcd(a.mont, n) = a.mont⁻¹ mod n
+        //                    = (value · R)⁻¹ mod n
+        //                    = value⁻¹ · R⁻¹ mod n
+        //   wanted: inv.mont = value⁻¹ · R mod n
+        //                    = raw_inv · R² mod n
+        // Computing raw_inv · R² mod n via Mont multiplications requires
+        // **two** multiplications by R², not one:
+        //   m1 = REDC(raw_inv · R²) = raw_inv · R mod n  (= value⁻¹ raw)
+        //   m2 = REDC(m1 · R²)      = m1 · R mod n       (= value⁻¹ · R = inv.mont)
+        // The first multiplication "converts raw_inv into something that
+        // multiplied by R again gives the desired Mont form". The
+        // second multiplication does that final · R step. Equivalent
+        // to one multiplication by R³, but we only have R² cached.
+        //
+        // Headroom precondition: safegcd needs `2 * self.modulus` not
+        // to overflow `T` (i.e. modulus's MSB clear). We fold that
+        // check into the returned CtOption rather than asserting at
+        // entry — `None`-masked when the carrier was sized too tightly
+        // for the modulus. Cost is one MSB extraction on the cached
+        // modulus per call, invisible against the safegcd loop.
+        let modulus_has_headroom = !crate::inv::safegcd::ct_msb_set(&self.modulus);
+        let inv_raw = crate::inv::safegcd::safegcd_inv_ct(&a.mont, &self.modulus);
+        // Extract the raw inverse, defaulting to zero when safegcd
+        // reports `None`. The two REDCs run unconditionally on the
+        // extracted value — under the CtOption mask any garbage they
+        // produce on the failure path is discarded.
+        let inv_exists = inv_raw.is_some();
+        let raw_inv = inv_raw.unwrap_or(T::zero());
+        let m1 = wide_montgomery_mul_ct(raw_inv, self.r2_mod_n, self.modulus, self.n_prime);
+        let mont = wide_montgomery_mul_ct(m1, self.r2_mod_n, self.modulus, self.n_prime);
+        let residue = Residue {
+            mont,
+            _brand: PhantomData,
+            _p: PhantomData,
+        };
+        subtle::CtOption::new(residue, inv_exists & modulus_has_headroom)
     }
 }
 
@@ -954,6 +1096,41 @@ mod tests {
         // Same precompute as the infallible boundary constructor:
         let baseline = Field::<u32, Ct>::new_odd(Odd::new(13u32).unwrap());
         assert_eq!(field.modulus(), baseline.modulus());
+    }
+
+    /// `Field::new_odd_ct` (the CT precompute path) must produce
+    /// identical precompute values to `Field::new_odd` (the
+    /// variable-time path) for every modulus. Pins the contract that
+    /// `mod_double_ct` / `mod_exp2_ct` are CT-equivalent, not just
+    /// "CT but different output."
+    #[test]
+    fn new_odd_ct_precompute_matches_new_odd() {
+        for m in [3u32, 5, 7, 11, 13, 97, 65521, 0x7FFF_FFE7] {
+            let modulus = Odd::new(m).unwrap();
+            let f_nct = Field::<u32, Ct>::new_odd(modulus);
+            let f_ct = Field::<u32, Ct>::new_odd_ct(modulus);
+            assert_eq!(f_nct.modulus(), f_ct.modulus(), "modulus mismatch at m={m}");
+            assert_eq!(f_nct.n_prime, f_ct.n_prime, "n_prime mismatch at m={m}");
+            assert_eq!(f_nct.r_mod_n, f_ct.r_mod_n, "r_mod_n mismatch at m={m}");
+            assert_eq!(f_nct.r2_mod_n, f_ct.r2_mod_n, "r2_mod_n mismatch at m={m}");
+        }
+    }
+
+    /// CT precompute on multi-limb FixedUInt produces identical
+    /// output to the variable-time precompute. The actual RSA-CRT
+    /// shape — the precompute is what would silently produce
+    /// wrong results if `mod_double_ct` had a bug.
+    #[test]
+    fn new_odd_ct_precompute_matches_new_odd_fixed_bigint() {
+        // 128-bit odd modulus (composite, RSA-CRT-shape)
+        let m = U128Ct::from(0xFFFF_FFFF_FFFF_FFE7u64);
+        let modulus = Odd::new(m).unwrap();
+        let f_nct = Field::<U128Ct, Ct>::new_odd(modulus);
+        let f_ct = Field::<U128Ct, Ct>::new_odd_ct(modulus);
+        assert_eq!(f_nct.modulus(), f_ct.modulus());
+        assert_eq!(f_nct.n_prime, f_ct.n_prime);
+        assert_eq!(f_nct.r_mod_n, f_ct.r_mod_n);
+        assert_eq!(f_nct.r2_mod_n, f_ct.r2_mod_n);
     }
 
     #[test]
@@ -1128,6 +1305,125 @@ mod tests {
         let raw = U128Ct::from(0xDEAD_BEEF_u64);
         let r = f.reduce(&raw);
         assert_eq!(f.into_raw(&r), raw);
+    }
+
+    /// `inv_safegcd_ct` round-trip on a prime modulus. The CT
+    /// composite-modulus inverse is the load-bearing primitive for RSA
+    /// blinding; here we test on a prime (smaller test surface) and
+    /// verify `inv * value ≡ 1 mod modulus`.
+    #[test]
+    fn inv_safegcd_ct_round_trip_prime_modulus() {
+        let f = FieldCt::new(u16ct(13)).unwrap();
+        for raw_val in 1u16..13 {
+            let r = f.reduce(&u16ct(raw_val));
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(
+                inv.is_some().unwrap_u8(),
+                1,
+                "expected inverse for {raw_val} mod 13"
+            );
+            let inv_residue = inv.unwrap();
+            let product = f.mul(&r, &inv_residue);
+            assert_eq!(
+                f.into_raw(&product),
+                u16ct(1),
+                "{raw_val} * inv != 1 mod 13"
+            );
+        }
+    }
+
+    /// `inv_safegcd_ct` on a composite modulus — the RSA blinding case.
+    /// Confirms the algorithm works when the modulus is `p·q`, not
+    /// prime, where Fermat inversion would fail.
+    #[test]
+    fn inv_safegcd_ct_composite_modulus() {
+        // n = 3 * 5 = 15. Coprime values: 1, 2, 4, 7, 8, 11, 13, 14.
+        let f = FieldCt::new(u16ct(15)).unwrap();
+        for &raw_val in &[1u16, 2, 4, 7, 8, 11, 13, 14] {
+            let r = f.reduce(&u16ct(raw_val));
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(
+                inv.is_some().unwrap_u8(),
+                1,
+                "expected inverse for {raw_val} mod 15"
+            );
+            let product = f.mul(&r, &inv.unwrap());
+            assert_eq!(
+                f.into_raw(&product),
+                u16ct(1),
+                "{raw_val} * inv != 1 mod 15"
+            );
+        }
+        // Non-coprime values: safegcd returns None.
+        for &raw_val in &[3u16, 5, 6, 9, 10, 12] {
+            let r = f.reduce(&u16ct(raw_val));
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(
+                inv.is_some().unwrap_u8(),
+                0,
+                "expected None for non-coprime {raw_val} mod 15"
+            );
+        }
+    }
+
+    /// `inv_safegcd_ct` masks the result when the carrier doesn't have
+    /// one bit of headroom over the modulus (the safegcd
+    /// `2·modulus ≤ T::MAX` precondition). Field is constructed with a
+    /// modulus whose MSB is set; the returned CtOption is `None`
+    /// regardless of whether the value is mathematically invertible.
+    #[test]
+    fn inv_safegcd_ct_masks_when_modulus_lacks_headroom() {
+        // U16Ct = FixedUInt<u8, 2, Ct> — 16-bit carrier. Pick a 16-bit
+        // odd modulus with MSB set (e.g. 0xFFFD, an odd value > 2^15).
+        // 2 * 0xFFFD overflows u16 → safegcd's invariants break →
+        // headroom check returns None.
+        let modulus = u16ct(0xFFFD);
+        let f = FieldCt::new(modulus).unwrap();
+        let r = f.reduce(&u16ct(7));
+        let inv = f.inv_safegcd_ct(&r);
+        assert_eq!(
+            inv.is_some().unwrap_u8(),
+            0,
+            "expected None for modulus 0xFFFD (no headroom)"
+        );
+    }
+
+    /// `inv_safegcd_ct` on a larger RSA-CRT-shaped composite modulus.
+    /// n = p · q with small primes p, q. Confirms the algorithm runs
+    /// correctly on a multi-limb FixedUInt and at sizes more
+    /// representative of the RSA blinding workload than the toy
+    /// `mod 15` case (still small enough that we can exhaustively
+    /// check inv * value ≡ 1).
+    #[test]
+    fn inv_safegcd_ct_composite_modulus_u128() {
+        // n = (2^32 + 7) · (2^24 + 7) — RSA-CRT-shape two-prime
+        // composite, ~52 bits. safegcd handles composites; the result
+        // works for any coprime value.
+        let n_raw: u64 = 0x1_0000_0007 * 0x100_0007u64; // = 4503599644606465
+        let modulus = U128Ct::from(n_raw);
+        let f = FieldCt::new(modulus).unwrap();
+
+        // A handful of values coprime to n. (0xDEAD_BEEF deliberately
+        // omitted — it shares factor 11 with this n.)
+        let test_vals = [
+            U128Ct::from(1u64),
+            U128Ct::from(2u64),
+            U128Ct::from(3u64),
+            U128Ct::from(0xCAFE_BABEu64),
+            U128Ct::from(0xFEED_FACEu64),
+        ];
+        for v in test_vals {
+            let r = f.reduce(&v);
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(
+                inv.is_some().unwrap_u8(),
+                1,
+                "expected inverse to exist for v={:?}",
+                v
+            );
+            let product = f.mul(&r, &inv.unwrap());
+            assert_eq!(f.into_raw(&product), U128Ct::from(1u64));
+        }
     }
 
     #[cfg(feature = "zeroize")]
@@ -1344,14 +1640,14 @@ mod tests {
         let f = FieldCt::new(u16ct(13)).unwrap();
         for raw in 1u16..13 {
             let a = f.reduce(&u16ct(raw));
-            let inv = f.inv_fermat(&a).unwrap();
+            let inv = f.inv_fermat(&a).into_option().unwrap();
             assert_eq!(
                 f.into_raw(&f.mul(&a, &inv)),
                 u16ct(1),
                 "ct fermat fails at {raw}"
             );
         }
-        assert!(f.inv_fermat(&f.zero()).is_none());
+        assert!(f.inv_fermat(&f.zero()).into_option().is_none());
     }
 
     /// `ResidueCt::ct_eq` matches `PartialEq` outcomes on representative

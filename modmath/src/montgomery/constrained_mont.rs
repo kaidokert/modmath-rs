@@ -1,3 +1,7 @@
+// Clippy's `clone_on_copy` / `op_ref` lints misfire on the constrained
+// flavor's generic Clone / Add<&T, Output=T> idioms.
+#![allow(clippy::clone_on_copy, clippy::op_ref)]
+
 // Constrained Montgomery arithmetic functions
 // These work with references to avoid unnecessary copies, following the pattern from exp.rs
 
@@ -224,7 +228,8 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::parity::Parity,
+        + crate::parity::Parity
+        + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
@@ -305,6 +310,7 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::parity::Parity
+        + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
@@ -339,6 +345,7 @@ where
         + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
+        + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -379,6 +386,7 @@ where
         + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
+        + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -416,6 +424,7 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
+        + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Add<&'a T, Output = T>
@@ -479,6 +488,7 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
+        + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Add<&'a T, Output = T>

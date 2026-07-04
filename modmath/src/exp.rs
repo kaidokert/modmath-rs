@@ -60,7 +60,8 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::ShrAssign<usize>
-        + Copy,
+        + Copy
+        + crate::NonCt,
 {
     if modulus == T::one() {
         return T::zero();
@@ -86,7 +87,8 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::ShrAssign<usize>
-        + Copy,
+        + Copy
+        + crate::NonCt,
 {
     let m_raw = T::nonzero_get(modulus);
     if m_raw == T::one() {
@@ -114,7 +116,8 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::ShrAssign<usize>
-        + Copy,
+        + Copy
+        + crate::NonCt,
 {
     // x mod 1 == 0 for every x, including 1. The square-and-multiply loop
     // below starts with `result = T::one()` and would return 1 in that case.
@@ -152,7 +155,8 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::ShrAssign<usize>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::DivAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>,
@@ -180,7 +184,8 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::ShrAssign<usize>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
 {
     let m_raw = T::nonzero_get(modulus);
     if m_raw == T::one() {
@@ -204,7 +209,8 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::ShrAssign<usize>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
 {
     // See `basic_mod_exp_pr` for the modulus==1 rationale.
     if modulus == &T::one() {
@@ -243,7 +249,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::DivAssign<&'a T>
         + core::ops::ShrAssign<usize>
@@ -271,7 +278,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
     for<'a> T: core::ops::ShrAssign<usize>,
 {
     let m_raw = T::nonzero_get(modulus);
@@ -295,7 +303,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
     for<'a> T: core::ops::ShrAssign<usize>,
 {
     // See `basic_mod_exp_pr` for the modulus==1 rationale.

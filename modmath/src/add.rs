@@ -36,7 +36,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Rem<Output = T>,
+        + core::ops::Rem<Output = T>
+        + crate::NonCt,
 {
     basic_mod_add_pr(a % m, b % m, m)
 }
@@ -57,7 +58,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
     basic_mod_add_pr(a.rem_nonzero(m), b.rem_nonzero(m), m_raw)
@@ -72,7 +74,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + crate::NonCt,
 {
     let sum = a.wrapping_add(b);
     if sum >= m || sum < a {
@@ -92,7 +95,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + crate::NonCt,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     let a_mod = &a % m;
@@ -113,7 +117,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
     let b_mod = (*b).rem_nonzero(m);
@@ -130,7 +135,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + crate::NonCt,
 {
     let sum = a.wrapping_add(*b);
     if &sum >= m || sum < a {
@@ -150,7 +156,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + crate::NonCt,
     for<'b> T: core::ops::RemAssign<&'b T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
@@ -173,7 +180,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
     let b_mod = (*b).rem_nonzero(m);
@@ -190,7 +198,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + crate::NonCt,
 {
     let (sum, overflow) = a.overflowing_add(*b);
     if &sum >= m || overflow {

@@ -37,7 +37,9 @@ pub use basic_mont::{
     type_bit_width,
     compute_n_prime_newton,
     compute_r_mod_n,
+    compute_r_mod_n_ct,
     compute_r2_mod_n,
+    compute_r2_mod_n_ct,
 };
 
 // Re-export the CIOS traits as the canonical entry point for consumers.

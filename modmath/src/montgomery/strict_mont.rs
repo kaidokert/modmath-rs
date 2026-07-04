@@ -1,3 +1,9 @@
+// Clippy's `op_ref` / `clone_on_copy` lints misfire on the strict
+// flavor's `&x + &T::zero()` "portable clone" and generic `.clone()`
+// idioms — the ref forms are load-bearing when T only impls
+// `Add<&T, Output=T>` / `Clone`, not `Copy`.
+#![allow(clippy::clone_on_copy, clippy::op_ref)]
+
 /// Compute N' using trial search method - O(R) complexity (Strict)
 /// Finds N' such that modulus * N' ≡ -1 (mod R)
 /// Uses reference-based operations to minimize copying of large integers
@@ -288,7 +294,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + crate::NonCt,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::RemAssign<&'a T>
         + core::ops::Sub<&'a T, Output = T>,
@@ -373,7 +380,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
@@ -403,6 +411,7 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
+        + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
@@ -468,6 +477,7 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
+        + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
@@ -510,7 +520,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
@@ -590,7 +601,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>

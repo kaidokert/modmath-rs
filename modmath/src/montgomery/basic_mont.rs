@@ -249,7 +249,8 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Rem<Output = T>
-        + crate::parity::Parity,
+        + crate::parity::Parity
+        + crate::NonCt,
 {
     crate::mul::basic_mod_mul(a, r, modulus)
 }
@@ -267,7 +268,8 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::parity::Parity,
+        + crate::parity::Parity
+        + crate::NonCt,
 {
     crate::mul::basic_mod_mul_pr(a, r, modulus)
 }
@@ -346,7 +348,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + crate::parity::Parity,
+        + crate::parity::Parity
+        + crate::NonCt,
 {
     // Montgomery multiplication algorithm:
     // Input: a_mont, b_mont (both in Montgomery form), modulus N, N', r_bits
@@ -379,7 +382,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + crate::parity::Parity,
+        + crate::parity::Parity
+        + crate::NonCt,
 {
     let product = crate::mul::basic_mod_mul_pr(a_mont, b_mont, modulus);
     basic_from_montgomery(product, modulus, n_prime, r_bits)
@@ -395,6 +399,11 @@ pub const fn type_bit_width<T>() -> usize {
 }
 
 /// Modular doubling: (val + val) mod modulus, handling overflow.
+///
+/// **Variable-time.** Branches on the `overflow || doubled >= modulus`
+/// magnitude check; used by [`compute_r_mod_n`] / [`compute_r2_mod_n`]
+/// for the Nct precompute path where the modulus is public. For the Ct
+/// path (secret modulus), see [`mod_double_ct`].
 fn mod_double<T>(val: T, modulus: T) -> T
 where
     T: Copy
@@ -410,6 +419,29 @@ where
     } else {
         doubled
     }
+}
+
+/// CT modular doubling: `(val + val) mod modulus`, no value-dependent
+/// branches. Always computes both the post-sub and pre-sub candidates,
+/// selects via `subtle::Choice`.
+///
+/// Used by [`compute_r_mod_n_ct`] / [`compute_r2_mod_n_ct`] for the Ct
+/// precompute path called from [`Field::new_odd_ct`].
+fn mod_double_ct<T>(val: T, modulus: T) -> T
+where
+    T: Copy
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + subtle::ConditionallySelectable
+        + subtle::ConstantTimeLess,
+{
+    let (doubled, overflow) = val.overflowing_add(val);
+    let sub_result = doubled.wrapping_sub(modulus);
+    let doubled_ge_modulus = !doubled.ct_lt(&modulus);
+    let needs_sub = Choice::from(overflow as u8) | doubled_ge_modulus;
+    T::conditional_select(&doubled, &sub_result, needs_sub)
 }
 
 /// Newton's method for N' = -N^{-1} mod 2^W.
@@ -441,6 +473,9 @@ where
 }
 
 /// Compute (val * 2^w) mod N via w modular doublings.
+///
+/// **Variable-time** (delegates to [`mod_double`]). Used for the Nct
+/// precompute path; for the Ct path see [`mod_exp2_ct`].
 fn mod_exp2<T>(val: T, modulus: T, w: usize) -> T
 where
     T: Copy
@@ -464,7 +499,37 @@ where
     result
 }
 
+/// CT modular doubling iterated `w` times: `val · 2^w mod modulus`.
+/// Constant-time over `val` and `modulus`. The `modulus == 1` edge
+/// case (every value reduces to 0) is handled branchlessly via a
+/// final `conditional_select` rather than the variable-time early
+/// return in [`mod_exp2`].
+fn mod_exp2_ct<T>(val: T, modulus: T, w: usize) -> T
+where
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + subtle::ConditionallySelectable
+        + subtle::ConstantTimeEq
+        + subtle::ConstantTimeLess,
+{
+    let mut result = val;
+    for _ in 0..w {
+        result = mod_double_ct(result, modulus);
+    }
+    let m_is_one = modulus.ct_eq(&T::one());
+    T::conditional_select(&result, &T::zero(), m_is_one)
+}
+
 /// Compute R mod N = 2^W mod N via W modular doublings starting from 1.
+///
+/// **Variable-time.** Used by [`Field::new_odd`] for the Nct precompute
+/// path (public modulus); the CT sibling [`compute_r_mod_n_ct`] is
+/// used by [`Field::new_odd_ct`] when the modulus is secret.
 pub fn compute_r_mod_n<T>(modulus: T, w: usize) -> T
 where
     T: Copy
@@ -480,7 +545,28 @@ where
     mod_exp2(T::one(), modulus, w)
 }
 
+/// CT version of [`compute_r_mod_n`]: `2^W mod modulus` with no
+/// value-dependent branches. Used by [`Field::new_odd_ct`] for the
+/// secret-modulus precompute path.
+pub fn compute_r_mod_n_ct<T>(modulus: T, w: usize) -> T
+where
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + subtle::ConditionallySelectable
+        + subtle::ConstantTimeEq
+        + subtle::ConstantTimeLess,
+{
+    mod_exp2_ct(T::one(), modulus, w)
+}
+
 /// Compute R^2 mod N via W more modular doublings from (R mod N).
+///
+/// **Variable-time.** See [`compute_r2_mod_n_ct`] for the CT sibling.
 pub fn compute_r2_mod_n<T>(r_mod_n: T, modulus: T, w: usize) -> T
 where
     T: Copy
@@ -494,6 +580,24 @@ where
         + core::ops::Sub<Output = T>,
 {
     mod_exp2(r_mod_n, modulus, w)
+}
+
+/// CT version of [`compute_r2_mod_n`]: `R² mod modulus` via W modular
+/// doublings from `R mod N`. No value-dependent branches.
+pub fn compute_r2_mod_n_ct<T>(r_mod_n: T, modulus: T, w: usize) -> T
+where
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
+        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingSub
+        + core::ops::Add<Output = T>
+        + core::ops::Sub<Output = T>
+        + subtle::ConditionallySelectable
+        + subtle::ConstantTimeEq
+        + subtle::ConstantTimeLess,
+{
+    mod_exp2_ct(r_mod_n, modulus, w)
 }
 
 /// Accumulate the high half with carries from low-half addition.
@@ -1165,72 +1269,6 @@ where
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_pr_odd(base, exponent, m))
 }
 
-/// Complete Montgomery modular exponentiation (Basic, CT, proven-odd
-/// modulus). **Infallible.** Same dispatch as
-/// [`basic_montgomery_mod_exp_ct`] but with the modulus parity proof
-/// hoisted into the type.
-pub fn basic_montgomery_mod_exp_odd_ct<T>(base: T, exponent: T, modulus: Odd<T>) -> T
-where
-    T: Copy
-        + const_num_traits::Zero
-        + const_num_traits::One
-        + PartialEq
-        + PartialOrd
-        + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
-        + Parity
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
-        + core::ops::Rem<Output = T>
-        + core::ops::Shr<usize, Output = T>
-        + core::ops::BitAnd<Output = T>
-        + subtle::ConditionallySelectable
-        + subtle::ConstantTimeEq
-        + subtle::ConstantTimeLess,
-{
-    let m = modulus.get();
-    basic_montgomery_mod_exp_pr_odd_ct(reduce_mod(base, m), exponent, modulus)
-}
-
-/// Complete Montgomery modular exponentiation (Basic, CT): base^exponent mod modulus
-///
-/// Reduces `base` modulo `modulus` then dispatches to
-/// [`crate::basic::montgomery::ct::pre_reduced::mod_exp`]. Use this when the
-/// exponent (and possibly the base) is secret — e.g. RSA private-key
-/// operations.
-///
-/// Returns None if modulus is even or zero. Thin wrapper around
-/// [`basic_montgomery_mod_exp_odd_ct`].
-pub fn basic_montgomery_mod_exp_ct<T>(base: T, exponent: T, modulus: T) -> Option<T>
-where
-    T: Copy
-        + const_num_traits::Zero
-        + const_num_traits::One
-        + PartialEq
-        + PartialOrd
-        + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
-        + Parity
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
-        + core::ops::Rem<Output = T>
-        + core::ops::Shr<usize, Output = T>
-        + core::ops::BitAnd<Output = T>
-        + subtle::ConditionallySelectable
-        + subtle::ConstantTimeEq
-        + subtle::ConstantTimeLess,
-{
-    Odd::new(modulus).map(|m| basic_montgomery_mod_exp_odd_ct(base, exponent, m))
-}
-
 /// Complete Montgomery modular exponentiation (Basic, CT, pre-reduced):
 /// base^exponent mod modulus, constant-time over `exponent` (and `base`).
 ///
@@ -1265,6 +1303,7 @@ where
         + const_num_traits::WrappingMul
         + const_num_traits::WrappingAdd
         + const_num_traits::WrappingSub
+        + const_num_traits::CtIsZero
         + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -1302,7 +1341,7 @@ where
         // Extract bit i of exponent (i is public; the shift amount is the
         // loop index, not derived from exp). Bit value is secret.
         let bit_t = (exponent >> i) & one;
-        let choice = bit_t.ct_eq(&one);
+        let choice = !bit_t.ct_is_zero();
         result = T::conditional_select(&result, &multiplied, choice);
     }
 
@@ -1324,6 +1363,7 @@ where
         + const_num_traits::WrappingMul
         + const_num_traits::WrappingAdd
         + const_num_traits::WrappingSub
+        + const_num_traits::CtIsZero
         + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -2170,16 +2210,19 @@ mod tests {
         }
     }
 
-    /// basic_montgomery_mod_exp_ct must produce the same output as the NCT
-    /// version for all inputs, on a primitive type.
+    /// basic_montgomery_mod_exp_pr_ct must produce the same output as
+    /// the NCT version when the caller pre-reduces base.
     #[test]
-    fn test_basic_montgomery_mod_exp_ct_matches_nct_u32() {
+    fn test_basic_montgomery_mod_exp_pr_ct_matches_nct_u32_with_external_reduce() {
         let modulus = 13u32;
         for base in 0u32..modulus {
             for exp in 0u32..32 {
                 let nct = basic_montgomery_mod_exp(base, exp, modulus).unwrap();
-                let ct = basic_montgomery_mod_exp_ct(base, exp, modulus).unwrap();
-                assert_eq!(nct, ct, "mod_exp_ct mismatch at base={base} exp={exp}");
+                // External pre-reduction: caller's responsibility on
+                // the CT path. Inputs are already in [0, modulus) for
+                // this test, so the `% modulus` is a no-op observable.
+                let ct = basic_montgomery_mod_exp_pr_ct(base % modulus, exp, modulus).unwrap();
+                assert_eq!(nct, ct, "mod_exp_pr_ct mismatch at base={base} exp={exp}");
             }
         }
     }

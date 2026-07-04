@@ -65,7 +65,8 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + core::ops::Rem<Output = T>,
+        + core::ops::Rem<Output = T>
+        + crate::NonCt,
 {
     basic_mod_mul_pr(a % m, b % m, m)
 }
@@ -108,7 +109,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
     basic_mod_mul_pr(a.rem_nonzero(m), b.rem_nonzero(m), m_raw)
@@ -131,7 +133,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
 {
     let m1 = m;
     let mut result = T::zero();
@@ -176,7 +179,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
@@ -199,7 +203,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
     let b_mod = (*b).rem_nonzero(m);
@@ -220,7 +225,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
 {
     // Need an owned mutable T for the double-and-add loop's right-shift;
     // mirror the `exp_pr` convention of cloning via wrapping_add(zero).
@@ -270,7 +276,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
     let b_mod = (*b).rem_nonzero(m);
@@ -288,7 +295,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
@@ -311,7 +319,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>,
+        + core::ops::Shr<usize, Output = T>
+        + crate::NonCt,
 {
     // Need an owned mutable T for the double-and-add loop's right-shift;
     // mirror the `exp_pr` convention of cloning via overflowing_add(zero).
