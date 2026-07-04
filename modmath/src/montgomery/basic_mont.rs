@@ -1272,25 +1272,6 @@ where
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_pr_odd(base, exponent, m))
 }
 
-// NOTE: `basic_montgomery_mod_exp_odd_ct` and `basic_montgomery_mod_exp_ct`
-// previously lived here as convenience wrappers that reduced `base mod
-// modulus` internally before dispatching to the `_pr` Ct kernel. Both
-// called `reduce_mod(base, m)` which uses `core::ops::Rem` — on
-// primitives that's hardware-variable on common embedded targets
-// (Cortex-M0/M3/M4), leaking the base magnitude. The "CT over base"
-// docstring claim was therefore false on the carriers it actually
-// compiled for (FixedUInt<W, N, Ct> doesn't impl Rem at all, so the
-// functions only compiled for primitive moduli, where they leaked).
-//
-// Removed in the CT_GET_WELL_PLAN Tier 1.3 cut. Callers should
-// pre-reduce externally and dispatch to
-// [`basic_montgomery_mod_exp_pr_odd_ct`] (proven-odd modulus) or
-// [`basic_montgomery_mod_exp_pr_ct`] (runtime parity check). The
-// "external pre-reduce" is a documented precondition on the `_pr`
-// kernel anyway — callers that need CT over base should be using the
-// Field<T, Ct> high-level surface (`Field::reduce`, `Field::exp`)
-// which composes CT-only primitives end to end.
-
 /// Complete Montgomery modular exponentiation (Basic, CT, pre-reduced):
 /// base^exponent mod modulus, constant-time over `exponent` (and `base`).
 ///
@@ -1362,8 +1343,6 @@ where
 
         // Extract bit i of exponent (i is public; the shift amount is the
         // loop index, not derived from exp). Bit value is secret.
-        // Delegates to cnt's CtIsZero for the masked "is bit set" check
-        // rather than hand-rolling ct_eq(&one).
         let bit_t = (exponent >> i) & one;
         let choice = !bit_t.ct_is_zero();
         result = T::conditional_select(&result, &multiplied, choice);
@@ -2235,10 +2214,7 @@ mod tests {
     }
 
     /// basic_montgomery_mod_exp_pr_ct must produce the same output as
-    /// the NCT version when the caller pre-reduces base. Replaces the
-    /// prior `basic_montgomery_mod_exp_ct_matches_nct_u32` test
-    /// (deleted with its target function — see Tier 1.3 of the
-    /// CT_GET_WELL_PLAN).
+    /// the NCT version when the caller pre-reduces base.
     #[test]
     fn test_basic_montgomery_mod_exp_pr_ct_matches_nct_u32_with_external_reduce() {
         let modulus = 13u32;

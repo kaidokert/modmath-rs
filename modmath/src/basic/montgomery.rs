@@ -63,11 +63,10 @@ pub mod pre_reduced {
 /// `subtle::ConditionallySelectable`, removing the operand-magnitude
 /// side-channel on the final reduction step.
 ///
-/// **Only the `pre_reduced::mod_exp` entry is exposed.** The
-/// internal-reduce wrapper (`basic_montgomery_mod_exp_ct`) was
-/// removed in the CT_GET_WELL_PLAN Tier 1.3 cut — its docstring
-/// claimed CT over base, but the `core::ops::Rem` it used for the
-/// initial reduction is hardware-variable on common embedded targets.
+/// **Only the `pre_reduced::mod_exp` entry is exposed.** CT-over-base
+/// requires a CT reduction primitive; `core::ops::Rem` is
+/// hardware-variable on common embedded targets, so any wrapper that
+/// internally reduced via `Rem` would leak the base magnitude.
 /// Callers needing CT-over-base should:
 ///
 /// - reduce the base externally via a CT primitive (e.g.

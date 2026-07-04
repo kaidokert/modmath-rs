@@ -1,13 +1,13 @@
 //! Sealed marker for "this type is not the Ct personality" — i.e.
 //! safe to use in variable-time algorithms.
 //!
-//! Closes the gap that the `_pr` schoolbook family had: those entries
-//! don't bound on `Rem` / `Div` (because the precondition is that the
-//! caller pre-reduced), so the missing-`Rem`-impl gate that blocks Ct
-//! on the non-`_pr` surface doesn't apply. The variable-time bodies
-//! (`while b > zero { if b.is_odd() ... ; b >>= 1; }`) silently
-//! accepted Ct operands and leaked through the loop count and per-bit
-//! branch.
+//! Closes the gap in the `_pr` schoolbook family: those entries don't
+//! bound on `Rem` / `Div` (their precondition is that the caller
+//! pre-reduced), so the missing-`Rem`-impl gate that blocks Ct on the
+//! non-`_pr` surface doesn't apply. Without this marker, the
+//! variable-time bodies (`while b > zero { if b.is_odd() ... ; b >>=
+//! 1; }`) would admit Ct operands and leak through the loop count and
+//! per-bit branch.
 //!
 //! `T: NonCt` is the bound that gates those entries. Impl'd for the
 //! primitives (conventionally Nct — variable-time at the hardware
@@ -93,10 +93,8 @@ mod tests {
         assert_nonct::<usize>();
         assert_nonct::<FixedUInt<u32, 4, Nct>>();
         assert_nonct::<FixedUInt<u32, 8, Nct>>();
-        // FixedUInt<_, _, Ct> does NOT impl NonCt — verified by the
-        // compile-fail test in `tests/compile_fail_nonct.rs` (or by
-        // observation: uncommenting the line below should fail to
-        // compile).
+        // FixedUInt<_, _, Ct> does NOT impl NonCt — uncommenting the
+        // line below must fail to compile.
         // assert_nonct::<FixedUInt<u32, 4, Ct>>();
         let _ = core::marker::PhantomData::<Ct>;
     }

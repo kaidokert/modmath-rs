@@ -259,9 +259,9 @@ where
     ///
     /// Same precompute as [`new_odd`] (Newton's iteration for `N'`,
     /// repeated modular doublings for `R mod N` and `R² mod N`), but
-    /// the doubling-and-reduction loop uses
-    /// [`mod_double_ct`](crate::montgomery::compute_r_mod_n_ct)
-    /// internally — no value-dependent branches on the modulus.
+    /// the doubling-and-reduction loop in
+    /// [`compute_r_mod_n_ct`](crate::montgomery::compute_r_mod_n_ct)
+    /// avoids value-dependent branches on the modulus.
     ///
     /// Use this when `modulus` is secret (e.g. RSA-CRT private primes
     /// `p`, `q`). For public moduli (ed25519 / Curve25519 / krabipqc),
@@ -761,9 +761,7 @@ where
             // Always compute the conditional product.
             let multiplied =
                 CiosMontMulCt::cios_mont_mul_ct(&result, &base.mont, &self.modulus, &self.n_prime);
-            // Select based on bit i of exp. Delegates to CtIsZero
-            // rather than ct_eq(&one); semantics identical for a value
-            // already known to be 0 or 1.
+            // Select based on bit i of exp.
             let bit_t = (*exp >> i) & one;
             let choice = !bit_t.ct_is_zero();
             result = T::conditional_select(&result, &multiplied, choice);
@@ -895,13 +893,6 @@ where
     /// occupies the full carrier width. For composite moduli (RSA
     /// `n = p·q`) where Fermat doesn't apply, use
     /// [`Self::inv_safegcd_ct`] instead.
-    ///
-    /// Audit note: the prior `Option`-returning version had an
-    /// `if a.mont == T::zero() { return None }` early branch — variable
-    /// time on the residue's zero-ness, which silently broke the Ct
-    /// contract. This version uses `CtIsZero` for the masked check and
-    /// `CtOption` for the masked return; the exponentiation runs
-    /// unconditionally and the result is masked.
     pub fn inv_fermat(&self, a: &Residue<'_, T, Ct>) -> subtle::CtOption<Residue<'_, T, Ct>>
     where
         T: CiosMontMulCt
@@ -1407,9 +1398,9 @@ mod tests {
     /// check inv * value ≡ 1).
     #[test]
     fn inv_safegcd_ct_composite_modulus_u128() {
-        // n = 2^31 - 1 (Mersenne prime, but treat as "composite-shape"
-        // for the test — what matters is that safegcd doesn't assume
-        // primality). Result still works for any coprime value.
+        // n = (2^32 + 7) · (2^24 + 7) — RSA-CRT-shape two-prime
+        // composite, ~52 bits. safegcd handles composites; the result
+        // works for any coprime value.
         let n_raw: u64 = 0x1_0000_0007 * 0x100_0007u64; // = 4503599644606465
         let modulus = U128Ct::from(n_raw);
         let f = FieldCt::new(modulus).unwrap();

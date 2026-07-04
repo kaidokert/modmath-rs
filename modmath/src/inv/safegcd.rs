@@ -457,11 +457,9 @@ mod tests {
         }
     }
 
-    /// u64 composite modulus, only coprime test values.
-    /// (0xDEAD_BEEF deliberately omitted — it shares factor 11 with
-    /// the test modulus n = 0x100000707000031; the algorithm correctly
-    /// returns CtOption::None for that case, which exercises the
-    /// non-coprime path on a multi-step trace.)
+    /// u64 composite modulus. Coprime values must invert; 0xDEAD_BEEF
+    /// (shares factor 11 with n = 0x100000707000031) must return
+    /// CtOption::None.
     #[test]
     fn u64_composite_coprime() {
         let n: u64 = 0x1_0000_0007 * 0x100_0007;
