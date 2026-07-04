@@ -50,14 +50,13 @@ pub use basic_mont::{
 // takes the word directly).
 pub use cios::{CiosMontMul, CiosMontMulCt};
 
-// Tests exercise the R > N path and constrained/strict APIs which require
-// `Rem`-able `T`; gated to NCT/non-FixedUInt builds via dev-deps without ct.
+// Tests exercise the R > N path and constrained/strict APIs, which
+// require `Rem`-able (Nct-personality) operands.
 #[cfg(test)]
 mod tests {
     use super::basic_mont::*;
     use super::constrained_mont::*;
     use super::strict_mont::*;
-    use super::*;
 
     #[test]
     fn test_basic_compute_montgomery_params() {
@@ -780,10 +779,8 @@ macro_rules! montgomery_test_module {
 }
 
 #[cfg(test)]
-mod bnum_montgomery_tests {
+mod backend_montgomery_tests {
     use super::basic_mont::*;
-    use super::constrained_mont::*;
-    use super::strict_mont::*;
     use super::*;
 
     //     montgomery_test_module!(
