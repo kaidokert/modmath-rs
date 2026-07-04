@@ -132,9 +132,8 @@ where
         acc_hi2 = zero;
     }
 
-    // Final reduction. Delegates to cnt's CtIsZero on the high word and
-    // subtle's Choice arithmetic; the borrow flag from BorrowingSub already
-    // encodes `acc < modulus` (no separate compare needed).
+    // Final reduction: the borrow flag from BorrowingSub already
+    // encodes `acc < modulus` — no separate compare needed.
     let (sub_result, borrow) = <T as BorrowingSub>::borrowing_sub(acc, *modulus, false);
     let acc_hi_nonzero = !acc_hi.ct_is_zero();
     let needs_sub = acc_hi_nonzero | !Choice::from(borrow as u8);

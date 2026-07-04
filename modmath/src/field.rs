@@ -999,8 +999,6 @@ where
             _brand: PhantomData,
             _p: PhantomData,
         };
-        // Combined predicate: inverse exists AND modulus has headroom.
-        // If either fails, the CtOption is None-masked.
         subtle::CtOption::new(residue, inv_exists & modulus_has_headroom)
     }
 }

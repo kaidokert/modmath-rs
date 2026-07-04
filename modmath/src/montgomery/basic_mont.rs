@@ -439,7 +439,6 @@ where
 {
     let (doubled, overflow) = val.overflowing_add(val);
     let sub_result = doubled.wrapping_sub(modulus);
-    // needs_sub = overflow OR doubled >= modulus
     let doubled_ge_modulus = !doubled.ct_lt(&modulus);
     let needs_sub = Choice::from(overflow as u8) | doubled_ge_modulus;
     T::conditional_select(&doubled, &sub_result, needs_sub)
@@ -522,8 +521,6 @@ where
     for _ in 0..w {
         result = mod_double_ct(result, modulus);
     }
-    // Mask to zero when modulus == 1. CT replacement of the variable-time
-    // early return in `mod_exp2`.
     let m_is_one = modulus.ct_eq(&T::one());
     T::conditional_select(&result, &T::zero(), m_is_one)
 }

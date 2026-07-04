@@ -61,20 +61,12 @@ use const_num_traits::{CtIsZero, CtParity, One, WrappingAdd, WrappingSub, Zero};
 use modmath_cios::CiosRowOps;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeLess, CtOption};
 
-// ---------------------------------------------------------------------------
-// Iteration count
-// ---------------------------------------------------------------------------
-
 /// Total number of divsteps for an `n`-bit operand. Per the paper
 /// (Theorem 11.2), `⌈(45·n + 64) / 19⌉` is the proven sufficient count.
 /// A small safety margin is added because the bound is tight.
 pub(crate) const fn divsteps_total(modulus_bits: usize) -> usize {
     (45 * modulus_bits + 64).div_ceil(19) + 4
 }
-
-// ---------------------------------------------------------------------------
-// CT primitives on T
-// ---------------------------------------------------------------------------
 
 /// Returns `Choice::from(1)` iff the low bit of `value` is set.
 ///
@@ -225,10 +217,6 @@ where
     T::conditional_select(&candidate_even, &candidate_odd, x_odd)
 }
 
-// ---------------------------------------------------------------------------
-// Public entry point
-// ---------------------------------------------------------------------------
-
 /// Compute `value⁻¹ mod modulus` in constant time over `value`. Works
 /// for any modulus (composite or prime), provided the modulus is odd
 /// and `2 * modulus` fits in `T`.
@@ -279,15 +267,13 @@ where
     let mut delta: i64 = 1;
 
     for _ in 0..total_steps {
-        // ---- Decide swap ---------------------------------------------------
         let delta_pos = ct_i64_positive(delta);
         let g_odd = ct_low_bit(&g);
         let swap = delta_pos & g_odd;
 
-        // ---- Apply swap (CT) -----------------------------------------------
         // swap_choice: (f, g) ← (g, -f); (d, e) ← (e, -d mod m); delta ← -delta
         let new_f_if_swap = g.clone();
-        let new_g_if_swap = f.clone().wrapping_neg_two_complement(); // helper below
+        let new_g_if_swap = f.clone().wrapping_neg_two_complement();
         let new_d_if_swap = e.clone();
         let new_e_if_swap = neg_mod_ct(&d, modulus);
 
@@ -296,16 +282,14 @@ where
         d = T::conditional_select(&d, &new_d_if_swap, swap);
         e = T::conditional_select(&e, &new_e_if_swap, swap);
 
-        // delta: if swap, negate. Then always +1.
         let neg_delta = (delta as u64).wrapping_neg() as i64;
         delta = i64::conditional_select(&delta, &neg_delta, swap);
         delta = delta.wrapping_add(1);
 
-        // ---- Conditional add (g_odd was determined before swap; after the
-        //      swap+negate, the parity of g equals the parity of the original
-        //      g — both old g and -old_f are odd when the swap fired, since
-        //      old f is always odd by loop invariant; in the non-swap case
-        //      g_odd correctly tracks current g's parity).
+        // g_odd was determined before swap; after swap+negate the parity
+        // of g equals that of the original g (both old g and -old_f are
+        // odd when the swap fired, since old f is odd by loop invariant).
+        // In the non-swap case g_odd tracks current g's parity directly.
         let g_odd_now = g_odd;
         let to_add_to_g = T::conditional_select(&T::zero(), &f, g_odd_now);
         g = g.wrapping_add(to_add_to_g);
@@ -313,7 +297,6 @@ where
         let add_to_e = add_mod_ct(&e, &d, modulus);
         e = T::conditional_select(&e, &add_to_e, g_odd_now);
 
-        // ---- Halve g (arithmetic shr 1) and e (half mod m) -----------------
         g = arithmetic_shr_one(&g);
         e = half_mod_ct(&e, modulus);
     }
@@ -335,16 +318,10 @@ where
     CtOption::new(result, has_inverse)
 }
 
-// ---------------------------------------------------------------------------
-// Trait extension: WrappingNeg-style two's-complement negate on T.
-//
-// Implemented inline here because const-num-traits' WrappingNeg has an
-// `Output` associated type that doesn't necessarily equal T for
-// generic T, and we want a clean `T -> T` two's-complement negate. For
-// any `T: WrappingSub<Output = T> + Zero`, two's-complement negate is
+// Inline WrappingNeg-style two's-complement negate. const-num-traits'
+// WrappingNeg has an `Output` associated type that doesn't necessarily
+// equal T for generic T; this trait gives a clean `T -> T` shape as
 // `0 - x` via wrapping_sub.
-// ---------------------------------------------------------------------------
-
 trait WrappingNegT: Sized {
     fn wrapping_neg_two_complement(self) -> Self;
 }
@@ -358,10 +335,6 @@ where
         T::zero().wrapping_sub(self)
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -390,7 +363,6 @@ mod tests {
                             g, w,
                             "value={v} modulus={m}: safegcd gave {g}, basic_mod_inv gave {w}"
                         );
-                        // Sanity: the result really is the inverse
                         assert_eq!((g as u64 * v as u64) % m as u64, 1, "inv check failed");
                     }
                     (Some(_), None) | (None, Some(_)) => {
@@ -418,7 +390,6 @@ mod tests {
                 assert_eq!((inv as u64 * v as u64) % 15, 1);
             }
         }
-        // Non-coprime values must return None
         for &v in &[3u32, 5, 6, 9, 10, 12] {
             assert!(
                 safegcd_inv_ct::<u32>(&v, &m).into_option().is_none(),
@@ -490,7 +461,6 @@ mod tests {
             let want = basic_mod_inv(v, m);
             assert_eq!(got, want, "value={v} modulus={m}: u64 case mismatch");
             if let Some(inv) = got {
-                // Sanity via 128-bit verify
                 let prod = (inv as u128 * v as u128) % m as u128;
                 assert_eq!(prod, 1, "u64 inv * value mod m != 1");
             }

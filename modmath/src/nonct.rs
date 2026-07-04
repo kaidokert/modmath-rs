@@ -69,19 +69,17 @@ mod fixed_bigint_impl {
 
     impl<W: MachineWord, const N: usize> sealed::Sealed for FixedUInt<W, N, Nct> {}
     impl<W: MachineWord, const N: usize> NonCt for FixedUInt<W, N, Nct> {}
-
-    // Deliberately NO impl for FixedUInt<W, N, Ct>. Calling
-    // variable-time algorithms with Ct-personality carriers must be a
-    // compile error.
 }
 
 #[cfg(test)]
 mod tests {
     use super::NonCt;
-    use const_num_traits::{Ct, Nct};
+    use const_num_traits::Nct;
     use fixed_bigint::FixedUInt;
 
     /// Compile-check: primitives and Nct-personality FixedUInt impl NonCt.
+    /// The Ct-personality non-impl is documented in the module docstring;
+    /// a compile-fail test fixture is the correct place to enforce it.
     #[test]
     fn nonct_impl_check() {
         fn assert_nonct<T: NonCt>() {}
@@ -93,9 +91,5 @@ mod tests {
         assert_nonct::<usize>();
         assert_nonct::<FixedUInt<u32, 4, Nct>>();
         assert_nonct::<FixedUInt<u32, 8, Nct>>();
-        // FixedUInt<_, _, Ct> does NOT impl NonCt — uncommenting the
-        // line below must fail to compile.
-        // assert_nonct::<FixedUInt<u32, 4, Ct>>();
-        let _ = core::marker::PhantomData::<Ct>;
     }
 }
