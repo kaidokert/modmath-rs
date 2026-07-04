@@ -53,7 +53,7 @@ strict = []
 # default; consumers operating only on primitives can disable it to
 # drop the fixed-bigint dep.
 fixed-bigint = ["dep:fixed-bigint"]
-nightly = ["dep:c0nst", "c0nst/nightly"]
+nightly = ["dep:c0nst", "c0nst/nightly", "const-num-traits/nightly", "fixed-bigint?/nightly"]
 zeroize = ["dep:zeroize"]
 
 [package.metadata.docs.rs]
