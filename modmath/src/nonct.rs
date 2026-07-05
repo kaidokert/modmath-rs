@@ -1,53 +1,31 @@
-//! Sealed marker for "this type is not the Ct personality" — i.e.
-//! safe to use in variable-time algorithms.
+//! Sealed marker for "this type is not the `Ct` personality" — safe
+//! to flow through variable-time algorithms.
 //!
-//! Closes the gap in the `_pr` schoolbook family: those entries don't
-//! bound on `Rem` / `Div` (their precondition is that the caller
-//! pre-reduced), so the missing-`Rem`-impl gate that blocks Ct on the
-//! non-`_pr` surface doesn't apply. Without this marker, the
-//! variable-time bodies (`while b > zero { if b.is_odd() ... ; b >>=
-//! 1; }`) would admit Ct operands and leak through the loop count and
-//! per-bit branch.
+//! The non-`_pr` schoolbook surface excludes `Ct` carriers
+//! structurally: it bounds on `Rem`/`Div`, which the `Ct` personality
+//! doesn't implement. The `_pr` entries drop those bounds (the caller
+//! pre-reduces), so nothing would stop a `Ct` operand from entering
+//! their variable-time bodies and leaking through loop counts and
+//! per-bit branches. [`NonCt`] closes that gap.
 //!
-//! `T: NonCt` is the bound that gates those entries. Impl'd for the
-//! primitives (conventionally Nct — variable-time at the hardware
-//! level on common cores) and for `FixedUInt<W, N, Nct>`. Deliberately
-//! **not** impl'd for `FixedUInt<W, N, Ct>`, so attempts to call
-//! variable-time entries with a `Ct`-personality carrier fail to
-//! compile.
-//!
-//! ## Why a modmath-local marker
-//!
-//! Conceptually adjacent to `const_num_traits::Personality`, but with
-//! a different consumer surface: the personality trait describes the
-//! type's CT shape; `NonCt` gates downstream algorithm choice on it.
-//! Both can coexist — the personality is the *attribute*, `NonCt` is
-//! the *gate that consumes it*.
-//!
-//! Lives in modmath rather than cnt because (a) it's a modmath-
-//! specific gate, (b) the alternative (adding a `HasPersonality`
-//! projection trait to cnt + primitive impls + FB impls) is three
-//! crates' worth of coordination for the same enforcement guarantee,
-//! and (c) if a second consumer crate ever wants the same vocabulary,
-//! we can promote to cnt then. For now, modmath-local.
+//! Distinct from `const_num_traits::Personality` on purpose:
+//! `Personality` describes a type's CT shape, while `NonCt` gates
+//! algorithm choice on it — and the gate works by *absence* of an
+//! impl, since Rust has no negative bounds.
 
 pub(crate) mod sealed {
     pub trait Sealed {}
 }
 
-/// Sealed marker for "type is not Ct-personality and is therefore
-/// allowed to flow through variable-time algorithms in modmath."
+/// Sealed marker: the type is not the `Ct` personality and may flow
+/// through modmath's variable-time algorithms.
 ///
-/// Implemented for primitives (`u8`/`u16`/`u32`/`u64`/`u128`/`usize`)
-/// and, with the `fixed-bigint` feature enabled (on by default), for
-/// `fixed_bigint::FixedUInt<W, N, Nct>`. Not implemented for
-/// `FixedUInt<W, N, Ct>` — that's the whole point.
-///
-/// Used as a bound on the variable-time `_pr` schoolbook entries in
-/// `add.rs`, `sub.rs`, `mul.rs`, `exp.rs` and on the variable-time
-/// Montgomery `_pr` family in `basic_mont.rs`. The bound is a sealed
-/// trait so downstreams can't bypass it by impl'ing `NonCt` for a Ct
-/// carrier.
+/// Implemented for the primitive integers and, behind the
+/// `fixed-bigint` feature (on by default), for
+/// `fixed_bigint::FixedUInt<W, N, Nct>`. The `Ct` personality
+/// deliberately has no impl, so variable-time entries bounded on
+/// `NonCt` reject `Ct` carriers at compile time. Sealed so a
+/// downstream impl can't reopen the gate.
 pub trait NonCt: sealed::Sealed {}
 
 macro_rules! impl_nonct_primitive {
