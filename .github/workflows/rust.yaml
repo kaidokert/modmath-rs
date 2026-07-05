@@ -46,7 +46,10 @@ jobs:
     - name: Run tests
       working-directory: modmath
       run: cargo test --verbose
+    # fixed-bigint/nightly on the CLI: the dev-dep needs its own
+    # const_trait_impl gate active once c0nst/nightly is unified on,
+    # and manifest features can't reach dev-deps.
     - name: Run tests with nightly feature
       if: matrix.rust == 'nightly'
       working-directory: modmath
-      run: cargo test --verbose --features nightly
+      run: cargo test --verbose --features nightly,fixed-bigint/nightly

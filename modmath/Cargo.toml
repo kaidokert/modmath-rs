@@ -16,17 +16,12 @@ keywords = ["numerics", "bignum"]
 c0nst = { version = "0.2", optional = true }
 subtle = { version = "2.6", default-features = false }
 zeroize = { version = "1", default-features = false, optional = true }
-const-num-traits = { version = "0.1.0", default-features = false, features = ["ct"] }
+const-num-traits = { version = "0.1.1", default-features = false, features = ["ct"] }
 # CiosRowOps lives in a leaf crate so the trait identity stays stable
 # across compile units (the `--test` rebuild of modmath would otherwise
 # define a second, distinct `CiosRowOps` that fixed-bigint's impl can't
 # satisfy from the test binary).
 modmath-cios = { version = "0.1", path = "../modmath-cios" }
-# Optional regular dep — gates the `NonCt` impl for `FixedUInt<W, N,
-# Nct>`. Default-on because most modmath consumers do use FixedUInt;
-# turning it off keeps modmath fixed-bigint-free for consumers that
-# only operate on primitives.
-fixed-bigint = { version = "0.4", default-features = false, features = ["cios"], optional = true }
 
 [dev-dependencies]
 fixed-bigint = { version = "0.4", default-features = false, features = ["cios"] }
@@ -45,15 +40,11 @@ fixed-bigint = { version = "0.4", default-features = false, features = ["cios"] 
 paste = "1"
 
 [features]
-default = ["fixed-bigint"]
+default = []
 constrained = []
 basic = []
 strict = []
-# Gates the NonCt impl for fixed_bigint::FixedUInt<W, N, Nct>. On by
-# default; consumers operating only on primitives can disable it to
-# drop the fixed-bigint dep.
-fixed-bigint = ["dep:fixed-bigint"]
-nightly = ["dep:c0nst", "c0nst/nightly", "const-num-traits/nightly", "fixed-bigint?/nightly"]
+nightly = ["dep:c0nst", "c0nst/nightly", "const-num-traits/nightly"]
 zeroize = ["dep:zeroize"]
 
 [package.metadata.docs.rs]
