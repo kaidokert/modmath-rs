@@ -17,11 +17,10 @@ c0nst = { version = "0.2", optional = true }
 subtle = { version = "2.6", default-features = false }
 zeroize = { version = "1", default-features = false, optional = true }
 const-num-traits = { version = "0.1.1", default-features = false, features = ["ct"] }
-# CiosRowOps lives in a leaf crate so the trait identity stays stable
-# across compile units (the `--test` rebuild of modmath would otherwise
-# define a second, distinct `CiosRowOps` that fixed-bigint's impl can't
-# satisfy from the test binary).
-modmath-cios = { version = "0.1", path = "../modmath-cios" }
+# Leaf crate + registry-only (no path) so `CiosRowOps` has exactly one
+# identity everywhere — modmath, its test binaries, and fixed-bigint's
+# dev-dep all resolve the same copy.
+modmath-cios = { version = "0.1" }
 
 [dev-dependencies]
 fixed-bigint = { version = "0.4", default-features = false, features = ["cios"] }
