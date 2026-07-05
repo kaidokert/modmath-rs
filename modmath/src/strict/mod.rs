@@ -1,11 +1,12 @@
 //! Schoolbook modular arithmetic with reference-based parameters
-//! throughout — neither `Copy` nor `Clone` on owned `T` is required.
+//! throughout — `Clone`, never `Copy`, so heap-allocated bigints
+//! qualify.
 //!
 //! Uses `OverflowingAdd` / `OverflowingSub` rather than
 //! `WrappingAdd` / `WrappingSub`, the strictest bound profile in the
-//! toolbox. Suitable for backends that don't expose the wrapping
-//! operations on owned values, or when avoiding `Clone` is necessary
-//! for the operand type.
+//! toolbox. Suitable for backends that don't wrap on overflow —
+//! arbitrary-precision types have no modulus-2^k to wrap at, but can
+//! report overflow against a fixed working width.
 //!
 //! See [`modmath::basic`](crate::basic) (`Copy`-bound, simplest) and
 //! [`modmath::constrained`](crate::constrained) (`Clone`-bound, mixed

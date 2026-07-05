@@ -4,13 +4,14 @@
 // `Add<&T, Output=T>` / `Clone`, not `Copy`.
 #![allow(clippy::clone_on_copy, clippy::op_ref)]
 
+use crate::parity::Parity;
 /// Compute N' using trial search method - O(R) complexity (Strict)
 /// Finds N' such that modulus * N' ≡ -1 (mod R)
 /// Uses reference-based operations to minimize copying of large integers
 /// Returns None if N' cannot be found
 pub fn strict_compute_n_prime_trial_search<T>(modulus: &T, r: &T) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -58,7 +59,7 @@ where
 /// Returns None if modular inverse cannot be found
 fn strict_compute_n_prime_extended_euclidean<T>(modulus: &T, r: &T) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -103,7 +104,7 @@ where
 /// Returns None if Hensel's lifting fails
 fn strict_compute_n_prime_hensels_lifting<T>(modulus: &T, r: &T, r_bits: usize) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -177,7 +178,7 @@ where
 /// Uses reference-based operations to minimize copying of large integers
 pub fn strict_compute_montgomery_params<T>(modulus: &T) -> Option<(T, T, T, usize)>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -217,7 +218,7 @@ pub fn strict_compute_montgomery_params_with_method<T>(
     method: crate::montgomery::NPrimeMethod,
 ) -> Option<(T, T, T, usize)>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -283,10 +284,9 @@ where
 /// Multiplies two values already in Montgomery form and returns result in Montgomery form
 pub fn strict_montgomery_mul<T>(a_mont: T, b_mont: &T, modulus: &T, n_prime: &T, r_bits: usize) -> T
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialOrd
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
@@ -303,6 +303,7 @@ where
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     // Note: this R>N path uses double-and-add mod_mul (O(k)), which
     // defeats Montgomery's perf purpose; the m*N intermediate in
@@ -317,7 +318,7 @@ where
 /// to minimize copying of large integers
 pub fn strict_from_montgomery<T>(a_mont: T, modulus: &T, n_prime: &T, r_bits: usize) -> T
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialOrd
@@ -371,11 +372,10 @@ where
 /// Uses reference-based operations to minimize copying of large integers
 pub fn strict_to_montgomery<T>(a: T, modulus: &T, r: &T) -> T
 where
-    T: Copy
+    T: Clone
         + PartialOrd
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
@@ -384,6 +384,7 @@ where
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     crate::mul::strict_mod_mul(a, r, modulus)
 }
@@ -398,10 +399,9 @@ pub fn strict_montgomery_mod_mul_with_method<T>(
     method: crate::montgomery::NPrimeMethod,
 ) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -426,6 +426,7 @@ where
         + core::ops::Sub<T, Output = T>
         + core::ops::Add<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     // Step 1: Compute Montgomery parameters using specified method
     let (r, _r_inv, n_prime, r_bits) =
@@ -464,10 +465,9 @@ where
 /// Returns None if Montgomery parameter computation fails
 pub fn strict_montgomery_mod_mul<T>(a: T, b: &T, modulus: &T) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -492,6 +492,7 @@ where
         + core::ops::Sub<T, Output = T>
         + core::ops::Add<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     strict_montgomery_mod_mul_with_method(a, b, modulus, crate::montgomery::NPrimeMethod::default())
 }
@@ -507,10 +508,9 @@ pub fn strict_montgomery_mod_exp_with_method<T>(
     method: crate::montgomery::NPrimeMethod,
 ) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -536,6 +536,7 @@ where
         + core::ops::Sub<T, Output = T>
         + core::ops::Add<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     // Step 1: Compute Montgomery parameters using specified method
     let (r, _r_inv, n_prime, r_bits) =
@@ -555,7 +556,7 @@ where
     // Use Montgomery multiplication to stay in Montgomery domain throughout
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
-        if exp.is_odd() {
+        if (&exp).is_odd() {
             result = strict_montgomery_mul(result, &base, modulus, &n_prime, r_bits);
         }
 
@@ -588,10 +589,9 @@ where
 /// Returns None if Montgomery parameter computation fails
 pub fn strict_montgomery_mod_exp<T>(base: T, exponent: &T, modulus: &T) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -617,6 +617,7 @@ where
         + core::ops::Sub<T, Output = T>
         + core::ops::Add<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     strict_montgomery_mod_exp_with_method(
         base,

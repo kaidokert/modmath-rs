@@ -40,6 +40,8 @@ mod mul;
 mod nonct;
 mod parity;
 mod sub;
+#[cfg(test)]
+mod test_carrier;
 mod wide_mul;
 
 mod field;

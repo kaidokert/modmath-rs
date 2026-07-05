@@ -1,3 +1,4 @@
+use crate::parity::Parity;
 #[cfg(feature = "nightly")]
 use const_num_traits::{One, OverflowingAdd, OverflowingSub, Zero};
 
@@ -167,10 +168,9 @@ where
 /// `WrappingSub` traits to be implemented.
 pub fn constrained_mod_mul<T>(mut a: T, b: &T, m: &T) -> T
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
@@ -180,6 +180,7 @@ where
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     a.rem_assign(m);
     let b = b % m;
@@ -189,10 +190,9 @@ where
 /// # Modular Multiplication (Constrained, proven-non-zero modulus). **Infallible.**
 pub fn constrained_mod_mul_nz<T>(a: T, b: &T, m: T::NonZero) -> T
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialOrd
         + const_num_traits::HasNonZero
         + const_num_traits::DivNonZero<Output = T>
@@ -202,9 +202,10 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
+    for<'a> &'a T: crate::parity::Parity,
 {
     let m_raw = T::nonzero_get(m);
-    let b_mod = (*b).rem_nonzero(m);
+    let b_mod = b.clone().rem_nonzero(m);
     constrained_mod_mul_pr(a.rem_nonzero(m), &b_mod, &m_raw)
 }
 
@@ -213,10 +214,9 @@ where
 /// [`basic_mod_mul_pr`] for the CT caveat.
 pub fn constrained_mod_mul_pr<T>(mut a: T, b: &T, m: &T) -> T
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
@@ -224,18 +224,17 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
+    for<'a> &'a T: crate::parity::Parity,
 {
-    // Need an owned mutable T for the double-and-add loop's right-shift;
-    // mirror the `exp_pr` convention of cloning via wrapping_add(zero).
-    let mut b = T::zero().wrapping_add(*b);
+    let mut b = b.clone();
     let mut result = T::zero();
 
     while b > T::zero() {
-        if b.is_odd() {
+        if (&b).is_odd() {
             // Inline constrained_mod_add but skip the redundant modulo on 'a' since we know it's reduced
-            let sum = result.wrapping_add(a);
+            let sum = result.clone().wrapping_add(a.clone());
             result = if &sum >= m || sum < result {
-                sum.wrapping_sub(*m)
+                sum.wrapping_sub(m.clone())
             } else {
                 sum
             };
@@ -244,9 +243,9 @@ where
         b = b >> 1;
 
         if b > T::zero() {
-            let sum = a.wrapping_add(a);
+            let sum = a.clone().wrapping_add(a.clone());
             a = if &sum >= m || sum < a {
-                sum.wrapping_sub(*m)
+                sum.wrapping_sub(m.clone())
             } else {
                 sum
             };
@@ -262,10 +261,9 @@ where
 /// # Modular Multiplication (Strict, proven-non-zero modulus). **Infallible.**
 pub fn strict_mod_mul_nz<T>(a: T, b: &T, m: T::NonZero) -> T
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialOrd
         + const_num_traits::HasNonZero
         + const_num_traits::DivNonZero<Output = T>
@@ -275,18 +273,18 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
+    for<'a> &'a T: crate::parity::Parity,
 {
     let m_raw = T::nonzero_get(m);
-    let b_mod = (*b).rem_nonzero(m);
+    let b_mod = b.clone().rem_nonzero(m);
     strict_mod_mul_pr(a.rem_nonzero(m), &b_mod, &m_raw)
 }
 
 pub fn strict_mod_mul<T>(mut a: T, b: &T, m: &T) -> T
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialOrd
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
@@ -296,6 +294,7 @@ where
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     a.rem_assign(m);
     let b = b % m;
@@ -307,10 +306,9 @@ where
 /// [`basic_mod_mul_pr`] for the CT caveat.
 pub fn strict_mod_mul_pr<T>(mut a: T, b: &T, m: &T) -> T
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialOrd
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
@@ -318,17 +316,16 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
+    for<'a> &'a T: crate::parity::Parity,
 {
-    // Need an owned mutable T for the double-and-add loop's right-shift;
-    // mirror the `exp_pr` convention of cloning via overflowing_add(zero).
-    let mut b = T::zero().overflowing_add(*b).0;
+    let mut b = b.clone();
     let mut result = T::zero();
 
     while b > T::zero() {
-        if b.is_odd() {
-            let (sum, overflow) = result.overflowing_add(a);
+        if (&b).is_odd() {
+            let (sum, overflow) = result.overflowing_add(a.clone());
             result = if &sum >= m || overflow {
-                sum.overflowing_sub(*m).0
+                sum.overflowing_sub(m.clone()).0
             } else {
                 sum
             };
@@ -337,9 +334,9 @@ where
         b = b >> 1;
 
         if b > T::zero() {
-            let (doubled, overflow) = a.overflowing_add(a);
+            let (doubled, overflow) = a.clone().overflowing_add(a);
             a = if &doubled >= m || overflow {
-                doubled.overflowing_sub(*m).0
+                doubled.overflowing_sub(m.clone()).0
             } else {
                 doubled
             };

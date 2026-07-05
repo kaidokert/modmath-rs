@@ -2,6 +2,7 @@
 use super::mul::const_mod_mul;
 use super::mul::{basic_mod_mul_pr, constrained_mod_mul_pr, strict_mod_mul_pr};
 
+use crate::parity::Parity;
 #[cfg(feature = "nightly")]
 use const_num_traits::{One, OverflowingAdd, OverflowingSub, Zero};
 
@@ -145,11 +146,10 @@ where
 /// `WrappingSub` traits to be implemented.
 pub fn constrained_mod_exp<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
-    T: Copy
+    T: Clone
         + PartialOrd
         + const_num_traits::One
         + const_num_traits::Zero
-        + crate::parity::Parity
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
@@ -161,6 +161,7 @@ where
         + core::ops::DivAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     if modulus == &T::one() {
         return T::zero();
@@ -172,11 +173,10 @@ where
 /// # Modular Exponentiation (Constrained, proven-non-zero modulus). **Infallible.**
 pub fn constrained_mod_exp_nz<T>(base: T, exponent: &T, modulus: T::NonZero) -> T
 where
-    T: Copy
+    T: Clone
         + PartialOrd
         + const_num_traits::One
         + const_num_traits::Zero
-        + crate::parity::Parity
         + const_num_traits::HasNonZero
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd
@@ -186,6 +186,7 @@ where
         + core::ops::ShrAssign<usize>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
+    for<'a> &'a T: crate::parity::Parity,
 {
     let m_raw = T::nonzero_get(modulus);
     if m_raw == T::one() {
@@ -199,11 +200,10 @@ where
 /// Returns `0` when `*modulus == 1`.
 pub fn constrained_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
-    T: Copy
+    T: Clone
         + PartialOrd
         + const_num_traits::One
         + const_num_traits::Zero
-        + crate::parity::Parity
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
@@ -211,15 +211,16 @@ where
         + core::ops::ShrAssign<usize>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
+    for<'a> &'a T: crate::parity::Parity,
 {
     // See `basic_mod_exp_pr` for the modulus==1 rationale.
     if modulus == &T::one() {
         return T::zero();
     }
     let mut result = T::one();
-    let mut exp = T::zero().wrapping_add(*exponent);
+    let mut exp = exponent.clone();
     while exp > T::zero() {
-        if exp.is_odd() {
+        if (&exp).is_odd() {
             result = constrained_mod_mul_pr(result, &base, modulus);
         }
         exp >>= 1;
@@ -227,7 +228,7 @@ where
             // Squaring step: `mul_pr` consumes `a` (first arg) and borrows
             // `b` (second arg); when both come from the same `base`, we
             // still need one clone so the borrow doesn't alias the move.
-            let tmp_base = T::zero().wrapping_add(base);
+            let tmp_base = base.clone();
             base = constrained_mod_mul_pr(base, &tmp_base, modulus);
         }
     }
@@ -240,11 +241,10 @@ where
 /// all multiplication contraints as well.
 pub fn strict_mod_exp<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
-    T: Copy
+    T: Clone
         + PartialOrd
         + const_num_traits::One
         + const_num_traits::Zero
-        + crate::parity::Parity
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
@@ -256,6 +256,7 @@ where
         + core::ops::ShrAssign<usize>
         + core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     if modulus == &T::one() {
         return T::zero();
@@ -267,11 +268,10 @@ where
 /// # Modular Exponentiation (Strict, proven-non-zero modulus). **Infallible.**
 pub fn strict_mod_exp_nz<T>(base: T, exponent: &T, modulus: T::NonZero) -> T
 where
-    T: Copy
+    T: Clone
         + PartialOrd
         + const_num_traits::One
         + const_num_traits::Zero
-        + crate::parity::Parity
         + const_num_traits::HasNonZero
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd
@@ -281,6 +281,7 @@ where
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::ShrAssign<usize>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     let m_raw = T::nonzero_get(modulus);
     if m_raw == T::one() {
@@ -294,11 +295,10 @@ where
 /// Returns `0` when `*modulus == 1`.
 pub fn strict_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
-    T: Copy
+    T: Clone
         + PartialOrd
         + const_num_traits::One
         + const_num_traits::Zero
-        + crate::parity::Parity
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
@@ -306,16 +306,17 @@ where
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::ShrAssign<usize>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     // See `basic_mod_exp_pr` for the modulus==1 rationale.
     if modulus == &T::one() {
         return T::zero();
     }
     let mut result = T::one();
-    let mut exp = T::zero().overflowing_add(*exponent).0;
+    let mut exp = exponent.clone();
 
     while exp > T::zero() {
-        if exp.is_odd() {
+        if (&exp).is_odd() {
             result = strict_mod_mul_pr(result, &base, modulus);
         }
         exp >>= 1;
@@ -324,7 +325,7 @@ where
             // Squaring step: `mul_pr` consumes `a` (first arg) and borrows
             // `b` (second arg); when both come from the same `base`, we
             // still need one clone so the borrow doesn't alias the move.
-            let tmp_base = T::zero().overflowing_add(base).0;
+            let tmp_base = base.clone();
             base = strict_mod_mul_pr(base, &tmp_base, modulus);
         }
     }

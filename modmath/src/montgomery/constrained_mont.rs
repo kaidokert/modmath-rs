@@ -7,13 +7,14 @@
 
 use super::basic_mont::NPrimeMethod;
 use crate::inv::constrained_mod_inv;
+use crate::parity::Parity;
 
 /// Compute N' using trial search method - O(R) complexity (constrained version)
 /// Finds N' such that modulus * N' ≡ -1 (mod R)
 /// Returns None if N' cannot be found (should not happen for valid Montgomery parameters)
 fn compute_n_prime_trial_search_constrained<T>(modulus: &T, r: &T) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -50,7 +51,7 @@ where
 /// Returns None if modular inverse cannot be found
 fn compute_n_prime_extended_euclidean_constrained<T>(modulus: &T, r: &T) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -84,7 +85,7 @@ where
 /// Returns None if Hensel's lifting fails to produce correct N'
 fn compute_n_prime_hensels_lifting_constrained<T>(modulus: &T, r: &T, r_bits: usize) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -136,7 +137,7 @@ pub fn constrained_compute_montgomery_params_with_method<T>(
     method: NPrimeMethod,
 ) -> Option<(T, T, T, usize)>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -192,7 +193,7 @@ where
 /// Returns None if parameter computation fails
 pub fn constrained_compute_montgomery_params<T>(modulus: &T) -> Option<(T, T, T, usize)>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -219,7 +220,7 @@ where
 /// Convert to Montgomery form (Constrained): a -> (a * R) mod N
 pub fn constrained_to_montgomery<T>(a: T, modulus: &T, r: &T) -> T
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialOrd
@@ -228,10 +229,10 @@ where
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::parity::Parity
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     crate::mul::constrained_mod_mul(a, r, modulus)
 }
@@ -240,7 +241,7 @@ where
 /// Uses Montgomery reduction algorithm
 pub fn constrained_from_montgomery<T>(a_mont: T, modulus: &T, n_prime: &T, r_bits: usize) -> T
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialOrd
@@ -262,7 +263,7 @@ where
     // Fast path for R=1 (r_bits == 0): Montgomery reduction simplifies to conditional subtraction
     if r_bits == 0 {
         return if &a_mont >= modulus {
-            a_mont.wrapping_sub(*modulus)
+            a_mont.wrapping_sub(modulus.clone())
         } else {
             a_mont
         };
@@ -284,7 +285,7 @@ where
 
     // Step 3: Final reduction
     if &t >= modulus {
-        t.wrapping_sub(*modulus)
+        t.wrapping_sub(modulus.clone())
     } else {
         t
     }
@@ -299,7 +300,7 @@ pub fn constrained_montgomery_mul<T>(
     r_bits: usize,
 ) -> T
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialOrd
@@ -309,11 +310,11 @@ where
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + crate::parity::Parity
         + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     // Note: this R>N path uses double-and-add mod_mul (O(k)), which
     // defeats Montgomery's perf purpose; the m*N intermediate in
@@ -332,10 +333,9 @@ pub fn constrained_montgomery_mod_mul_with_method<T>(
     method: NPrimeMethod,
 ) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd
@@ -355,6 +355,7 @@ where
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     let (r, _r_inv, n_prime, r_bits) =
         constrained_compute_montgomery_params_with_method(modulus, method)?;
@@ -373,10 +374,9 @@ where
 /// Returns None if Montgomery parameter computation fails
 pub fn constrained_montgomery_mod_mul<T>(a: T, b: &T, modulus: &T) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd
@@ -396,6 +396,7 @@ where
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     constrained_montgomery_mod_mul_with_method(a, b, modulus, NPrimeMethod::default())
 }
@@ -410,10 +411,9 @@ pub fn constrained_montgomery_mod_exp_with_method<T>(
     method: NPrimeMethod,
 ) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd
@@ -434,6 +434,7 @@ where
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     // Compute Montgomery parameters using specified method
     let (r, _r_inv, n_prime, r_bits) =
@@ -452,7 +453,7 @@ where
     // Binary exponentiation using Montgomery multiplication
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
-        if exp.is_odd() {
+        if (&exp).is_odd() {
             result = constrained_montgomery_mul(&result, &base, modulus, &n_prime, r_bits);
         }
 
@@ -474,10 +475,9 @@ where
 /// Returns None if Montgomery parameter computation fails
 pub fn constrained_montgomery_mod_exp<T>(base: T, exponent: &T, modulus: &T) -> Option<T>
 where
-    T: Copy
+    T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + crate::parity::Parity
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd
@@ -498,6 +498,7 @@ where
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
+    for<'a> &'a T: crate::parity::Parity,
 {
     constrained_montgomery_mod_exp_with_method(base, exponent, modulus, NPrimeMethod::default())
 }

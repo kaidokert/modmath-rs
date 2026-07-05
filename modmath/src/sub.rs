@@ -86,7 +86,7 @@ where
 pub fn constrained_mod_sub<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
@@ -103,7 +103,7 @@ where
 pub fn constrained_mod_sub_nz<T>(a: T, b: &T, m: T::NonZero) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::HasNonZero
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd
@@ -113,7 +113,7 @@ where
         + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
-    let b_mod = (*b).rem_nonzero(m);
+    let b_mod = b.clone().rem_nonzero(m);
     constrained_mod_sub_pr(a.rem_nonzero(m), &b_mod, &m_raw)
 }
 
@@ -122,17 +122,17 @@ where
 pub fn constrained_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
 {
-    let diff = a.wrapping_sub(*b);
+    let diff = a.clone().wrapping_sub(b.clone());
     if diff > a {
         // If we wrapped around (underflow)
-        diff.wrapping_add(*m)
+        diff.wrapping_add(m.clone())
     } else {
         diff
     }
@@ -144,7 +144,7 @@ where
 pub fn strict_mod_sub<T>(mut a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
@@ -162,7 +162,7 @@ where
 pub fn strict_mod_sub_nz<T>(a: T, b: &T, m: T::NonZero) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::HasNonZero
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd
@@ -172,7 +172,7 @@ where
         + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
-    let b_mod = (*b).rem_nonzero(m);
+    let b_mod = b.clone().rem_nonzero(m);
     strict_mod_sub_pr(a.rem_nonzero(m), &b_mod, &m_raw)
 }
 
@@ -181,16 +181,16 @@ where
 pub fn strict_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
 {
-    let (diff, overflow) = a.overflowing_sub(*b);
+    let (diff, overflow) = a.overflowing_sub(b.clone());
     if overflow {
-        m.overflowing_add(diff).0
+        m.clone().overflowing_add(diff).0
     } else {
         diff
     }

@@ -91,7 +91,7 @@ where
 pub fn constrained_mod_add<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
@@ -111,7 +111,7 @@ where
 pub fn constrained_mod_add_nz<T>(a: T, b: &T, m: T::NonZero) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::HasNonZero
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd
@@ -121,7 +121,7 @@ where
         + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
-    let b_mod = (*b).rem_nonzero(m);
+    let b_mod = b.clone().rem_nonzero(m);
     constrained_mod_add_pr(a.rem_nonzero(m), &b_mod, &m_raw)
 }
 
@@ -130,16 +130,16 @@ where
 pub fn constrained_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
 {
-    let sum = a.wrapping_add(*b);
+    let sum = a.clone().wrapping_add(b.clone());
     if &sum >= m || sum < a {
-        sum.wrapping_sub(*m)
+        sum.wrapping_sub(m.clone())
     } else {
         sum
     }
@@ -151,7 +151,7 @@ where
 pub fn strict_mod_add<T>(mut a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
@@ -173,7 +173,7 @@ where
 pub fn strict_mod_add_nz<T>(a: T, b: &T, m: T::NonZero) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::HasNonZero
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd
@@ -183,7 +183,7 @@ where
         + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
-    let b_mod = (*b).rem_nonzero(m);
+    let b_mod = b.clone().rem_nonzero(m);
     strict_mod_add_pr(a.rem_nonzero(m), &b_mod, &m_raw)
 }
 
@@ -192,16 +192,16 @@ where
 pub fn strict_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
+        + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
 {
-    let (sum, overflow) = a.overflowing_add(*b);
+    let (sum, overflow) = a.overflowing_add(b.clone());
     if &sum >= m || overflow {
-        sum.overflowing_sub(*m).0
+        sum.overflowing_sub(m.clone()).0
     } else {
         sum
     }
