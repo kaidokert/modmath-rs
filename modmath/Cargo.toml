@@ -21,7 +21,10 @@ const-num-traits = { version = "0.1.1", default-features = false, features = ["c
 # across compile units (the `--test` rebuild of modmath would otherwise
 # define a second, distinct `CiosRowOps` that fixed-bigint's impl can't
 # satisfy from the test binary).
-modmath-cios = { version = "0.1", path = "../modmath-cios" }
+# Version-only (no path): fixed-bigint's dev-dep also pulls modmath-cios
+# from the registry, and mixing a path copy with the registry copy would
+# split the trait identity into two incompatible `CiosRowOps`.
+modmath-cios = { version = "0.1" }
 
 [dev-dependencies]
 fixed-bigint = { version = "0.4", default-features = false, features = ["cios"] }
