@@ -26,18 +26,13 @@
 //! alongside their non-CT siblings ([`FieldCt`], `Field<T, Ct>`, `_ct`
 //! function suffixes, `<flavor>::montgomery::wide::ct::*`).
 //!
-//! Tested against built-in integers, [`num-bigint`], [`crypto-bigint`],
-//! [`bnum`], [`ibig`], and [`fixed-bigint`]. The `basic` flavor's `Copy`
-//! bound rules out heap-allocated backends (`num-bigint`, `ibig`); those
-//! use `constrained` or `strict`.
+//! Backend-agnostic: any integer type implementing the required traits
+//! works — built-in integers or third-party bigints. The `basic`
+//! flavor's `Copy` bound rules out heap-allocated backends; those use
+//! `constrained` or `strict`.
 //!
 //! [`Overflowing`]: https://docs.rs/num-traits/latest/num_traits/ops/overflowing
 //! [`subtle`]: https://crates.io/crates/subtle
-//! [`num-bigint`]: https://crates.io/crates/num-bigint
-//! [`crypto-bigint`]: https://crates.io/crates/crypto-bigint
-//! [`bnum`]: https://crates.io/crates/bnum
-//! [`ibig`]: https://crates.io/crates/ibig
-//! [`fixed-bigint`]: https://crates.io/crates/fixed-bigint
 
 mod add;
 mod exp;

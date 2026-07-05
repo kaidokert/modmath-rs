@@ -43,7 +43,11 @@ pub use crate::montgomery::basic_mont::basic_to_montgomery as to_mont;
 #[doc(inline)]
 pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp as mod_exp;
 #[doc(inline)]
+pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_odd as mod_exp_odd;
+#[doc(inline)]
 pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul as mod_mul;
+#[doc(inline)]
+pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul_odd as mod_mul_odd;
 
 /// Pre-reduced variants. Caller guarantees inputs are in `[0, m)`;
 /// the input `% m` reduction step is skipped.
@@ -51,7 +55,11 @@ pub mod pre_reduced {
     #[doc(inline)]
     pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr as mod_exp;
     #[doc(inline)]
+    pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr_odd as mod_exp_odd;
+    #[doc(inline)]
     pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul_pr as mod_mul;
+    #[doc(inline)]
+    pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul_pr_odd as mod_mul_odd;
     #[doc(inline)]
     pub use crate::montgomery::basic_mont::basic_montgomery_mul_pr as mul;
     #[doc(inline)]
@@ -63,7 +71,7 @@ pub mod pre_reduced {
 /// `subtle::ConditionallySelectable`, removing the operand-magnitude
 /// side-channel on the final reduction step.
 ///
-/// **Only the `pre_reduced::mod_exp` entry is exposed.** CT-over-base
+/// **Only pre-reduced entries are exposed.** CT-over-base
 /// requires a CT reduction primitive; `core::ops::Rem` is
 /// hardware-variable on common embedded targets, so any wrapper that
 /// internally reduced via `Rem` would leak the base magnitude.
@@ -73,7 +81,7 @@ pub mod pre_reduced {
 ///   `Field::reduce` on the `Ct` personality, which composes the CT
 ///   wide-REDC reduction), then dispatch to
 ///   [`pre_reduced::mod_exp`](self::ct::pre_reduced::mod_exp); or
-/// - use the high-level [`Field<T, Ct>::exp`](crate::field::Field::exp)
+/// - use the high-level [`Field<T, Ct>::exp`](crate::Field::exp)
 ///   surface, which handles reduction + exponentiation as a single
 ///   end-to-end CT pipeline.
 ///
@@ -86,6 +94,8 @@ pub mod ct {
     pub mod pre_reduced {
         #[doc(inline)]
         pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr_ct as mod_exp;
+        #[doc(inline)]
+        pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr_odd_ct as mod_exp_odd;
     }
 }
 

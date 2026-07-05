@@ -307,7 +307,7 @@ where
     /// Returns the modulus by reference.
     ///
     /// Returning `&T` rather than `T` avoids a memcpy of the full modulus
-    /// (~256 bytes for 2048-bit FixedUInt) at the call site. Consumers that
+    /// (~256 bytes for a 2048-bit carrier) at the call site. Consumers that
     /// need a `T` by value can copy at the use point.
     pub fn modulus(&self) -> &T {
         &self.modulus
@@ -888,7 +888,7 @@ where
     /// the zero residue.
     ///
     /// Cost: one full ladder over every bit of `T` (e.g. 256
-    /// square-and-multiply iterations for `FixedUInt<u32, 8>` over a
+    /// square-and-multiply iterations for a 256-bit carrier over a
     /// Curve25519 scalar field), regardless of whether `modulus - 2`
     /// occupies the full carrier width. For composite moduli (RSA
     /// `n = p·q`) where Fermat doesn't apply, use
@@ -928,16 +928,17 @@ where
     /// returns `None` regardless of value coprimality — the carrier
     /// is too tight for the algorithm's intermediate sums.
     ///
-    /// **Pick a `T` at least one bit wider than the modulus:**
-    /// `FixedUInt<u32, 65>` for a 2048-bit RSA modulus,
-    /// `FixedUInt<u32, 129>` for a 4096-bit one. Krabipqc / PQC moduli
+    /// **Pick a `T` at least one bit wider than the modulus** — in
+    /// practice one extra limb when the modulus fills a power-of-two
+    /// width (a 2048-bit RSA modulus needs a 2080-bit carrier at
+    /// 32-bit limbs). Krabipqc / PQC moduli
     /// (3329, 8380417, etc.) leave plenty of headroom on any
     /// reasonable carrier and are unaffected.
     ///
     /// Used by RSA private-key blinding, where the modulus is the
     /// composite `n = p·q` and Fermat's little theorem doesn't apply.
-    /// See [`crate::inv::safegcd`] for the algorithm and full
-    /// precondition list.
+    /// See the `inv::safegcd` module source for the algorithm and
+    /// full precondition list.
     ///
     /// [`inv_fermat`]: Self::inv_fermat
     pub fn inv_safegcd_ct(&self, a: &Residue<'_, T, Ct>) -> subtle::CtOption<Residue<'_, T, Ct>>
