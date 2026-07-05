@@ -5,7 +5,7 @@
 //! Modular math implemented with traits.
 //!
 //! Provides modular arithmetic against any type implementing a minimal
-//! set of `core::ops::` and `num_traits::` traits — primitive integers
+//! set of `core::ops::` and `const_num_traits::` traits — primitive integers
 //! or any bigint backend.
 //!
 //! Schoolbook surface lives in three bound-flavor modules:
@@ -26,27 +26,24 @@
 //! alongside their non-CT siblings ([`FieldCt`], `Field<T, Ct>`, `_ct`
 //! function suffixes, `<flavor>::montgomery::wide::ct::*`).
 //!
-//! Tested against built-in integers, [`num-bigint`], [`crypto-bigint`],
-//! [`bnum`], [`ibig`], and [`fixed-bigint`]. The `basic` flavor's `Copy`
-//! bound rules out heap-allocated backends (`num-bigint`, `ibig`); those
-//! use `constrained` or `strict`.
+//! Backend-agnostic: any integer type implementing the required traits
+//! works — built-in integers or third-party bigints. The `basic`
+//! flavor's `Copy` bound rules out heap-allocated backends; those use
+//! `constrained` or `strict`.
 //!
 //! [`Overflowing`]: https://docs.rs/num-traits/latest/num_traits/ops/overflowing
 //! [`subtle`]: https://crates.io/crates/subtle
-//! [`num-bigint`]: https://crates.io/crates/num-bigint
-//! [`crypto-bigint`]: https://crates.io/crates/crypto-bigint
-//! [`bnum`]: https://crates.io/crates/bnum
-//! [`ibig`]: https://crates.io/crates/ibig
-//! [`fixed-bigint`]: https://crates.io/crates/fixed-bigint
 
 mod add;
 mod exp;
 mod mul;
+mod nonct;
 mod parity;
 mod sub;
+#[cfg(test)]
+mod test_carrier;
 mod wide_mul;
 
-#[cfg(feature = "wide-mul")]
 mod field;
 mod inv;
 pub mod montgomery;
@@ -59,8 +56,8 @@ pub mod basic;
 pub mod constrained;
 pub mod strict;
 
-#[cfg(feature = "wide-mul")]
 pub use field::{Field, FieldCt, FieldNct, MontStorage, Residue, ResidueCt, ResidueNct};
+pub use nonct::NonCt;
 pub use parity::Parity;
 pub use wide_mul::WideMul;
 
@@ -80,10 +77,23 @@ pub use montgomery::{
     type_bit_width,
     compute_n_prime_newton,
     compute_r_mod_n,
+    compute_r_mod_n_ct,
     compute_r2_mod_n,
+    compute_r2_mod_n_ct,
 };
-#[cfg(feature = "wide-mul")]
 pub use montgomery::{CiosMontMul, CiosMontMulCt};
+
+// Re-exported so the `Field::new_odd` / `basic_montgomery_mod_*_odd`
+// surface is reachable as `modmath::Odd` without forcing downstreams to
+// directly depend on `const-num-traits` for the typestate wrapper alone.
+pub use const_num_traits::Odd;
+
+// Same rationale for the divide-by-zero deletion path: the `*_nz`
+// surface in `add`/`sub`/`mul`/`exp` is bounded on these capability
+// traits; re-exporting them lets downstreams construct the proof
+// (`m.into_nonzero()?`) and drive the infallible reductions without an
+// extra direct dep on const-num-traits.
+pub use const_num_traits::{DivNonZero, HasNonZero};
 #[cfg(feature = "nightly")]
 pub use mul::const_mod_mul;
 #[cfg(feature = "nightly")]

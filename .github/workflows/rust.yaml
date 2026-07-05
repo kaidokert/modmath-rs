@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust: ["1.85", stable, nightly]
+        rust: ["1.86", stable, nightly]
     continue-on-error: ${{ matrix.rust == 'nightly' }}
 
     steps:
@@ -31,26 +31,25 @@ jobs:
           components: rustfmt, clippy
     - name: Check formatting
       if: matrix.rust == 'stable'
-      working-directory: modmath
-      run: cargo fmt -- --check
+      run: cargo fmt --all -- --check
     - name: Run clippy
       if: matrix.rust == 'stable'
-      working-directory: modmath
-      run: cargo clippy -- -D warnings
-    - name: Run clippy (wide-mul)
+      run: cargo clippy --workspace --all-targets -- -D warnings
+    - name: Check docs
       if: matrix.rust == 'stable'
-      working-directory: modmath
-      run: cargo clippy --features wide-mul -- -D warnings
+      run: cargo doc --workspace --no-deps
+      env:
+        RUSTDOCFLAGS: -D warnings
     - name: Build
       working-directory: modmath
       run: cargo build
     - name: Run tests
       working-directory: modmath
       run: cargo test --verbose
-    - name: Run tests (wide-mul)
-      working-directory: modmath
-      run: cargo test --verbose --features wide-mul
+    # fixed-bigint/nightly on the CLI: the dev-dep needs its own
+    # const_trait_impl gate active once c0nst/nightly is unified on,
+    # and manifest features can't reach dev-deps.
     - name: Run tests with nightly feature
       if: matrix.rust == 'nightly'
       working-directory: modmath
-      run: cargo test --verbose --features nightly
+      run: cargo test --verbose --features nightly,fixed-bigint/nightly

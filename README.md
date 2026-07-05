@@ -22,10 +22,5 @@ The code isn't intended to be fast or efficient, just as generic as possible
 to work with multiple implementations.
 
 Note: While `const` traits are not yet stable and commonplace, this cannot
-be verify efficient. In almost all real world code you'll want to direcyl use
+be very efficient. In almost all real world code you'll want to directly use
 crates that implement big integers with `const` functions.
-
-### Tested with
-
-Tested with [`num-bigint`](https://crates.io/crates/num-bigint), [`crypto-bigint`](https://crates.io/crates/crypto-bigint), [`bnum`](https://crates.io/crates/bnum), [`ibig`](https://crates.io/crates/ibig)
-and [`fixed-bigint`](https://crates.io/crates/fixed-bigint) crates.

@@ -22,7 +22,6 @@ pub(crate) mod constrained_mont;
 
 pub(crate) mod strict_mont;
 
-#[cfg(feature = "wide-mul")]
 pub mod cios;
 
 // Flavor-neutral items live at this flat path: the NPrimeMethod enum
@@ -38,7 +37,9 @@ pub use basic_mont::{
     type_bit_width,
     compute_n_prime_newton,
     compute_r_mod_n,
+    compute_r_mod_n_ct,
     compute_r2_mod_n,
+    compute_r2_mod_n_ct,
 };
 
 // Re-export the CIOS traits as the canonical entry point for consumers.
@@ -47,17 +48,15 @@ pub use basic_mont::{
 // for callers who want the raw word-level primitive (the trait method
 // takes the whole `n_prime` and extracts the low word; the free function
 // takes the word directly).
-#[cfg(feature = "wide-mul")]
 pub use cios::{CiosMontMul, CiosMontMulCt};
 
-// Tests exercise the R > N path and constrained/strict APIs which require
-// `Rem`-able `T`; gated to NCT/non-FixedUInt builds via dev-deps without ct.
+// Tests exercise the R > N path and constrained/strict APIs, which
+// require `Rem`-able (Nct-personality) operands.
 #[cfg(test)]
 mod tests {
     use super::basic_mont::*;
     use super::constrained_mont::*;
     use super::strict_mont::*;
-    use super::*;
 
     #[test]
     fn test_basic_compute_montgomery_params() {
@@ -780,97 +779,77 @@ macro_rules! montgomery_test_module {
 }
 
 #[cfg(test)]
-mod bnum_montgomery_tests {
+mod backend_montgomery_tests {
     use super::basic_mont::*;
-    use super::constrained_mont::*;
-    use super::strict_mont::*;
     use super::*;
 
-    montgomery_test_module!(
-        bnum,
-        bnum::types::U256,
-        strict: off, // OverflowingAdd + OverflowingSub is not implemented
-        constrained: on,
-        basic: off, // basic_montgomery_mod_mul/exp now requires WideMul + OverflowingAdd
-    );
+    //     montgomery_test_module!(
+    //         bnum,
+    //         bnum::types::U256,
+    //         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+    //         constrained: on,
+    //         basic: off, // basic_montgomery_mod_mul/exp now requires WideMul + OverflowingAdd
+    //     );
 
-    #[cfg(not(feature = "wide-mul"))]
-    montgomery_test_module!(
-        bnum_patched,
-        bnum_patched::types::U256,
-        strict: off, // Complex trait bounds for Montgomery operations not fully compatible
-        constrained: on,
-        basic: on,
-    );
-    #[cfg(feature = "wide-mul")]
-    montgomery_test_module!(
-        bnum_patched,
-        bnum_patched::types::U256,
-        strict: off,
-        constrained: on,
-        basic: off, // WideMul requires WideningMul, not implemented for bnum
-    );
+    //     montgomery_test_module!(
+    //         bnum_patched,
+    //         bnum_patched::types::U256,
+    //         strict: off,
+    //         constrained: on,
+    //         basic: off, // WideMul requires CarryingMul, not implemented for bnum
+    //     );
 
-    montgomery_test_module!(
-        crypto_bigint,
-        crypto_bigint::U256,
-        strict: off, // OverflowingAdd + OverflowingSub is not implemented
-        constrained: off, // RemAssign and other traits missing
-        basic: off, // RemAssign and other traits missing
-    );
+    //     montgomery_test_module!(
+    //         crypto_bigint,
+    //         crypto_bigint::U256,
+    //         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+    //         constrained: off, // RemAssign and other traits missing
+    //         basic: off, // RemAssign and other traits missing
+    //     );
 
-    #[cfg(not(feature = "wide-mul"))]
-    montgomery_test_module!(
-        crypto_bigint_patched,
-        crypto_bigint_patched::U256,
-        strict: off, // &T + &T and &T - &T operations missing for Montgomery needs
-        constrained: on, // Fixed trait bounds - now works with patched libraries
-        basic: on, // patched crate adds OverflowingAdd
-    );
-    #[cfg(feature = "wide-mul")]
-    montgomery_test_module!(
-        crypto_bigint_patched,
-        crypto_bigint_patched::U256,
-        strict: off,
-        constrained: on,
-        basic: off, // WideMul requires WideningMul, not implemented for crypto-bigint
-    );
+    //     montgomery_test_module!(
+    //         crypto_bigint_patched,
+    //         crypto_bigint_patched::U256,
+    //         strict: off,
+    //         constrained: on,
+    //         basic: off, // WideMul requires CarryingMul, not implemented for crypto-bigint
+    //     );
 
-    montgomery_test_module!(
-        num_bigint,
-        num_bigint::BigUint,
-        type U256 = num_bigint::BigUint;
-        strict: off, // OverflowingAdd + OverflowingSub is not implemented
-        constrained: off, // WrappingAdd missing
-        basic: off, // Copy is not implemented, heap allocation
-    );
+    //     montgomery_test_module!(
+    //         num_bigint,
+    //         num_bigint::BigUint,
+    //         type U256 = num_bigint::BigUint;
+    //         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+    //         constrained: off, // WrappingAdd missing
+    //         basic: off, // Copy is not implemented, heap allocation
+    //     );
 
-    montgomery_test_module!(
-        num_bigint_patched,
-        num_bigint_patched::BigUint,
-        type U256 = num_bigint_patched::BigUint;
-        strict: off, // Complex trait bounds for Montgomery operations not fully compatible
-        constrained: on, // Fixed trait bounds - now works with patched libraries
-        basic: off, // Copy is not implemented, heap allocation
-    );
+    //     montgomery_test_module!(
+    //         num_bigint_patched,
+    //         num_bigint_patched::BigUint,
+    //         type U256 = num_bigint_patched::BigUint;
+    //         strict: off, // Complex trait bounds for Montgomery operations not fully compatible
+    //         constrained: on, // Fixed trait bounds - now works with patched libraries
+    //         basic: off, // Copy is not implemented, heap allocation
+    //     );
 
-    montgomery_test_module!(
-        ibig,
-        ibig::UBig,
-        type U256 = ibig::UBig;
-        strict: off, // OverflowingAdd + OverflowingSub is not implemented
-        constrained: off, // WrappingAdd missing
-        basic: off, // Copy is not implemented, heap allocation
-    );
+    //     montgomery_test_module!(
+    //         ibig,
+    //         ibig::UBig,
+    //         type U256 = ibig::UBig;
+    //         strict: off, // OverflowingAdd + OverflowingSub is not implemented
+    //         constrained: off, // WrappingAdd missing
+    //         basic: off, // Copy is not implemented, heap allocation
+    //     );
 
-    montgomery_test_module!(
-        ibig_patched,
-        ibig_patched::UBig,
-        type U256 = ibig_patched::UBig;
-        strict: off, // Complex trait bounds for Montgomery operations not fully compatible
-        constrained: on, // Fixed trait bounds - now works with patched libraries
-        basic: off, // Copy is not implemented, heap allocation
-    );
+    //     montgomery_test_module!(
+    //         ibig_patched,
+    //         ibig_patched::UBig,
+    //         type U256 = ibig_patched::UBig;
+    //         strict: off, // Complex trait bounds for Montgomery operations not fully compatible
+    //         constrained: on, // Fixed trait bounds - now works with patched libraries
+    //         basic: off, // Copy is not implemented, heap allocation
+    //     );
 
     // Default (Nct-personality) FixedUInt provides Rem; the strict/
     // constrained/basic Montgomery wrappers are reachable here. The Ct

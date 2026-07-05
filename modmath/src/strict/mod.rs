@@ -1,11 +1,12 @@
 //! Schoolbook modular arithmetic with reference-based parameters
-//! throughout — neither `Copy` nor `Clone` on owned `T` is required.
+//! throughout — `Clone`, never `Copy`, so heap-allocated bigints
+//! qualify.
 //!
 //! Uses `OverflowingAdd` / `OverflowingSub` rather than
 //! `WrappingAdd` / `WrappingSub`, the strictest bound profile in the
-//! toolbox. Suitable for backends that don't expose the wrapping
-//! operations on owned values, or when avoiding `Clone` is necessary
-//! for the operand type.
+//! toolbox. Suitable for backends that don't wrap on overflow —
+//! arbitrary-precision types have no modulus-2^k to wrap at, but can
+//! report overflow against a fixed working width.
 //!
 //! See [`modmath::basic`](crate::basic) (`Copy`-bound, simplest) and
 //! [`modmath::constrained`](crate::constrained) (`Clone`-bound, mixed
@@ -45,4 +46,16 @@ pub mod pre_reduced {
     pub use crate::mul::strict_mod_mul_pr as mul;
     #[doc(inline)]
     pub use crate::sub::strict_mod_sub_pr as sub;
+}
+
+/// Non-zero-modulus variants. See [`basic::nonzero`](crate::basic::nonzero).
+pub mod nonzero {
+    #[doc(inline)]
+    pub use crate::add::strict_mod_add_nz as add;
+    #[doc(inline)]
+    pub use crate::exp::strict_mod_exp_nz as exp;
+    #[doc(inline)]
+    pub use crate::mul::strict_mod_mul_nz as mul;
+    #[doc(inline)]
+    pub use crate::sub::strict_mod_sub_nz as sub;
 }

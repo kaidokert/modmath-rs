@@ -43,7 +43,11 @@ pub use crate::montgomery::basic_mont::basic_to_montgomery as to_mont;
 #[doc(inline)]
 pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp as mod_exp;
 #[doc(inline)]
+pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_odd as mod_exp_odd;
+#[doc(inline)]
 pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul as mod_mul;
+#[doc(inline)]
+pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul_odd as mod_mul_odd;
 
 /// Pre-reduced variants. Caller guarantees inputs are in `[0, m)`;
 /// the input `% m` reduction step is skipped.
@@ -51,7 +55,11 @@ pub mod pre_reduced {
     #[doc(inline)]
     pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr as mod_exp;
     #[doc(inline)]
+    pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr_odd as mod_exp_odd;
+    #[doc(inline)]
     pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul_pr as mod_mul;
+    #[doc(inline)]
+    pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul_pr_odd as mod_mul_odd;
     #[doc(inline)]
     pub use crate::montgomery::basic_mont::basic_montgomery_mul_pr as mul;
     #[doc(inline)]
@@ -63,18 +71,31 @@ pub mod pre_reduced {
 /// `subtle::ConditionallySelectable`, removing the operand-magnitude
 /// side-channel on the final reduction step.
 ///
-/// Only `mod_exp` has both NCT and CT siblings here today; there is no
-/// `mod_mul_ct` because the underlying source crate hasn't published
-/// one (the CIOS path is the canonical CT-mul entry point — see
-/// [`modmath::montgomery::cios::cios_montgomery_mul_ct`](crate::montgomery::cios::cios_montgomery_mul_ct)).
+/// **Only pre-reduced entries are exposed.** CT-over-base
+/// requires a CT reduction primitive; `core::ops::Rem` is
+/// hardware-variable on common embedded targets, so any wrapper that
+/// internally reduced via `Rem` would leak the base magnitude.
+/// Callers needing CT-over-base should:
+///
+/// - reduce the base externally via a CT primitive (e.g.
+///   `Field::reduce` on the `Ct` personality, which composes the CT
+///   wide-REDC reduction), then dispatch to
+///   [`pre_reduced::mod_exp`](self::ct::pre_reduced::mod_exp); or
+/// - use the high-level [`Field<T, Ct>::exp`](crate::Field::exp)
+///   surface, which handles reduction + exponentiation as a single
+///   end-to-end CT pipeline.
+///
+/// There is no `mod_mul_ct` here because the underlying source crate
+/// hasn't published one (the CIOS path is the canonical CT-mul entry
+/// point — see
+/// [`cios_montgomery_mul_ct`](crate::montgomery::cios::cios_montgomery_mul_ct)).
 pub mod ct {
-    #[doc(inline)]
-    pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_ct as mod_exp;
-
-    /// Pre-reduced CT variants.
+    /// Pre-reduced CT variants. Precondition: `base < modulus`.
     pub mod pre_reduced {
         #[doc(inline)]
         pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr_ct as mod_exp;
+        #[doc(inline)]
+        pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr_odd_ct as mod_exp_odd;
     }
 }
 

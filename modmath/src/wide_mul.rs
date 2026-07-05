@@ -1,120 +1,28 @@
-/// Widening multiplication producing a double-width result.
+/// Widening multiplication producing a double-width `(lo, hi)` result.
 ///
-/// When the `wide-mul` feature is enabled, types implementing
-/// `fixed_bigint::patch_num_traits::WideningMul` use an optimized path,
-/// while primitive integers use the fallback bit-by-bit algorithm.
-///
-/// Without the feature, all types use the generic bit-by-bit
-/// algorithm using OverflowingAdd and Parity.
+/// Blanket-impl'd for any `T: const_num_traits::CarryingMul<Unsigned = T>`.
 pub trait WideMul {
     fn wide_mul(&self, rhs: &Self) -> (Self, Self)
     where
         Self: Sized;
 }
 
-/// Bit-by-bit widening multiplication fallback.
-///
-/// Uses double-and-add algorithm that works with any type supporting
-/// the required traits. Uses `is_zero()` instead of comparison to
-/// minimize trait bounds.
-///
-/// # Overflow invariants
-///
-/// The algorithm maintains a double-width accumulator (result_lo, result_hi) and
-/// a double-width shift register (shift_lo, shift_hi). The product of two W-bit
-/// values fits in 2W bits, so:
-/// - The shift register holds at most `rhs * 2^k` where k is the current bit position,
-///   which is bounded by `rhs * 2^(W-1) < 2^(2W)`.
-/// - The result accumulator holds at most `lhs * rhs < 2^(2W)`.
-///
-/// Therefore, high-half additions that overflow would indicate a bug in the algorithm,
-/// not in the inputs. We assert this in debug builds.
-#[cfg(not(feature = "wide-mul"))]
-fn wide_mul_fallback<T>(lhs: T, rhs: T) -> (T, T)
-where
-    T: num_traits::ops::overflowing::OverflowingAdd
-        + crate::parity::Parity
-        + core::ops::Shr<usize, Output = T>
-        + num_traits::Zero
-        + num_traits::One
-        + Copy,
-{
-    let one = T::one();
-    let mut result_lo = T::zero();
-    let mut result_hi = T::zero();
-    let mut shift_lo = rhs;
-    let mut shift_hi = T::zero();
-    let mut a_rem = lhs;
-
-    while !a_rem.is_zero() {
-        if a_rem.is_odd() {
-            let (new_lo, carry) = result_lo.overflowing_add(&shift_lo);
-            result_lo = new_lo;
-            let (new_hi, overflow1) = result_hi.overflowing_add(&shift_hi);
-            result_hi = new_hi;
-            if carry {
-                let (new_hi, overflow2) = result_hi.overflowing_add(&one);
-                result_hi = new_hi;
-                // High-half overflow means result > 2^(2W), which is impossible
-                // for the product of two W-bit values.
-                debug_assert!(!overflow2, "wide_mul: result high-half overflow");
-            } else {
-                debug_assert!(!overflow1, "wide_mul: result high-half overflow");
-            }
-        }
-        // double the shift register
-        let (new_shift_lo, carry) = shift_lo.overflowing_add(&shift_lo);
-        shift_lo = new_shift_lo;
-        let (new_shift_hi, overflow1) = shift_hi.overflowing_add(&shift_hi);
-        shift_hi = new_shift_hi;
-        if carry {
-            let (new_shift_hi, overflow2) = shift_hi.overflowing_add(&one);
-            shift_hi = new_shift_hi;
-            // Shift register overflow means shift > 2^(2W), impossible for rhs * 2^k
-            // where k < W.
-            debug_assert!(!overflow2, "wide_mul: shift high-half overflow");
-        } else {
-            debug_assert!(!overflow1, "wide_mul: shift high-half overflow");
-        }
-        a_rem = a_rem >> 1;
-    }
-
-    (result_lo, result_hi)
-}
-
-// --- Without wide-mul: blanket impl using fallback for all types ---
-#[cfg(not(feature = "wide-mul"))]
 impl<T> WideMul for T
 where
-    T: num_traits::ops::overflowing::OverflowingAdd
-        + crate::parity::Parity
-        + core::ops::Shr<usize, Output = T>
-        + num_traits::Zero
-        + num_traits::One
-        + Copy,
+    T: Copy
+        + const_num_traits::Zero
+        + core::ops::Mul<Output = T>
+        + const_num_traits::CarryingMul<Unsigned = T>,
 {
     fn wide_mul(&self, rhs: &Self) -> (Self, Self) {
-        wide_mul_fallback(*self, *rhs)
-    }
-}
-
-// --- With wide-mul: optimized impl for WideningMul types ---
-// Note: fixed-bigint implements WideningMul for all primitive integers
-// (u8, u16, u32, u64) as well as FixedUInt, so this blanket impl
-// covers the same set of types as the fallback above.
-#[cfg(feature = "wide-mul")]
-impl<T> WideMul for T
-where
-    T: Copy + fixed_bigint::patch_num_traits::WideningMul<Output = T>,
-{
-    fn wide_mul(&self, rhs: &Self) -> (Self, Self) {
-        fixed_bigint::patch_num_traits::WideningMul::widening_mul(*self, *rhs)
+        const_num_traits::CarryingMul::carrying_mul(*self, *rhs, T::zero())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fixed_bigint::FixedUInt;
 
     #[test]
     fn test_u8_basics() {
@@ -179,7 +87,6 @@ mod tests {
 
     #[test]
     fn test_fixed_bigint() {
-        use fixed_bigint::FixedUInt;
         type U128 = FixedUInt<u32, 4>;
 
         let a = U128::from(0xDEAD_BEEF_u64);

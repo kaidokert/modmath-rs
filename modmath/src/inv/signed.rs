@@ -67,10 +67,10 @@ impl<T> Signed<T> {
     /// # Zero Canonicalization
     /// If `value` is zero, `negative` will automatically be set to `false`
     /// regardless of the input, maintaining the invariant that zero is always positive.
-    /// This requires `T: PartialEq + num_traits::Zero`.
+    /// This requires `T: PartialEq + const_num_traits::Zero`.
     pub fn new(value: T, negative: bool) -> Self
     where
-        T: PartialEq + num_traits::Zero,
+        T: PartialEq + const_num_traits::Zero,
     {
         let is_zero = value == T::zero();
         Self {
@@ -118,7 +118,7 @@ where
         + core::ops::Sub<&'a T, Output = T>
         + core::cmp::PartialOrd
         + PartialEq
-        + num_traits::Zero,
+        + const_num_traits::Zero,
     for<'a> &'a T: core::ops::Sub<T, Output = T>,
 {
     type Output = Self;
@@ -152,7 +152,7 @@ where
         + core::ops::SubAssign<&'a T>
         + PartialEq
         + PartialOrd
-        + num_traits::Zero
+        + const_num_traits::Zero
         + Clone,
     for<'b> &'b T: core::ops::Sub<T, Output = T>,
 {
@@ -184,7 +184,7 @@ where
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::cmp::PartialOrd
-        + num_traits::Zero
+        + const_num_traits::Zero
         + PartialEq,
     for<'a> &'a T: core::ops::Sub<T, Output = T>,
 {
@@ -317,6 +317,10 @@ where
 }
 
 #[cfg(test)]
+// op_ref allowed: the by-ref arms deliberately exercise the `Add<&T>` /
+// `Mul<&T>` impls; "fixing" `a * &b` to `a * b` would switch which impl
+// is under test.
+#[allow(clippy::op_ref)]
 mod signed_tests {
     use super::Signed;
 
@@ -428,7 +432,7 @@ mod signed_tests {
         // Test From<T> implementation
         let signed_from_42 = Signed::from(42u32);
         assert_eq!(signed_from_42.value, 42u32);
-        assert_eq!(signed_from_42.negative, false);
+        assert!(!signed_from_42.negative);
 
         // Test into_inner() method
         let signed_value = Signed::new(123u32, true);
@@ -440,20 +444,20 @@ mod signed_tests {
         // Test that new() automatically canonicalizes zero to positive
         let zero_positive = Signed::new(0u32, false);
         assert_eq!(zero_positive.value, 0u32);
-        assert_eq!(zero_positive.negative, false);
+        assert!(!zero_positive.negative);
 
         let zero_negative_input = Signed::new(0u32, true);
         assert_eq!(zero_negative_input.value, 0u32);
-        assert_eq!(zero_negative_input.negative, false); // Should be canonicalized to positive
+        assert!(!zero_negative_input.negative); // Should be canonicalized to positive
 
         // Test with non-zero values - should preserve the sign
         let positive_five = Signed::new(5u32, false);
         assert_eq!(positive_five.value, 5u32);
-        assert_eq!(positive_five.negative, false);
+        assert!(!positive_five.negative);
 
         let negative_three = Signed::new(3u32, true);
         assert_eq!(negative_three.value, 3u32);
-        assert_eq!(negative_three.negative, true); // Should preserve negative for non-zero
+        assert!(negative_three.negative); // Should preserve negative for non-zero
     }
 
     #[test]
@@ -463,35 +467,35 @@ mod signed_tests {
         let b = Signed::new(3u32, true); // -3
         let result = a + &b; // +5 + (-3) = +2
         assert_eq!(result.value, 2u32);
-        assert_eq!(result.negative, false);
+        assert!(!result.negative);
 
         // Test case where other > self in mixed signs
         let a = Signed::new(2u32, false); // +2
         let b = Signed::new(5u32, true); // -5
         let result = a + &b; // +2 + (-5) = -3
         assert_eq!(result.value, 3u32);
-        assert_eq!(result.negative, true);
+        assert!(result.negative);
 
         // Test both negative
         let a = Signed::new(4u32, true); // -4
         let b = Signed::new(6u32, true); // -6
         let result = a + &b; // -4 + (-6) = -10
         assert_eq!(result.value, 10u32);
-        assert_eq!(result.negative, true);
+        assert!(result.negative);
 
         // Test zero canonicalization: positive + negative with equal magnitude
         let a = Signed::new(5u32, false); // +5
         let b = Signed::new(5u32, true); // -5
         let result = a + &b; // +5 + (-5) = 0
         assert_eq!(result.value, 0u32);
-        assert_eq!(result.negative, false); // Fixed: zero should be canonicalized to positive
+        assert!(!result.negative); // Fixed: zero should be canonicalized to positive
 
         // Test zero canonicalization: negative + positive with equal magnitude
         let a = Signed::new(7u32, true); // -7
         let b = Signed::new(7u32, false); // +7
         let result = a + &b; // -7 + 7 = 0
         assert_eq!(result.value, 0u32);
-        assert_eq!(result.negative, false); // Fixed: zero should be canonicalized to positive
+        assert!(!result.negative); // Fixed: zero should be canonicalized to positive
 
         // Additional zero canonicalization test cases for Add<&Signed<T>>
 
@@ -500,35 +504,35 @@ mod signed_tests {
         let b = Signed::new(12u32, true); // -12
         let result = a + &b; // +12 + (-12) = 0
         assert_eq!(result.value, 0u32);
-        assert_eq!(result.negative, false); // Zero should be canonicalized to positive
+        assert!(!result.negative); // Zero should be canonicalized to positive
 
         // Test zero canonicalization with different values: -25 + (+25) = 0
         let a = Signed::new(25u32, true); // -25
         let b = Signed::new(25u32, false); // +25
         let result = a + &b; // -25 + 25 = 0
         assert_eq!(result.value, 0u32);
-        assert_eq!(result.negative, false); // Zero should be canonicalized to positive
+        assert!(!result.negative); // Zero should be canonicalized to positive
 
         // Test zero canonicalization with larger values: +100 + (-100) = 0
         let a = Signed::new(100u32, false); // +100
         let b = Signed::new(100u32, true); // -100
         let result = a + &b; // +100 + (-100) = 0
         assert_eq!(result.value, 0u32);
-        assert_eq!(result.negative, false); // Zero should be canonicalized to positive
+        assert!(!result.negative); // Zero should be canonicalized to positive
 
         // Test zero canonicalization with edge case: +1 + (-1) = 0
         let a = Signed::new(1u32, false); // +1
         let b = Signed::new(1u32, true); // -1
         let result = a + &b; // +1 + (-1) = 0
         assert_eq!(result.value, 0u32);
-        assert_eq!(result.negative, false); // Zero should be canonicalized to positive
+        assert!(!result.negative); // Zero should be canonicalized to positive
 
         // Test zero canonicalization with maximum value: +u32::MAX + (-u32::MAX) = 0
         let a = Signed::new(u32::MAX, false); // +u32::MAX
         let b = Signed::new(u32::MAX, true); // -u32::MAX
         let result = a + &b; // +u32::MAX + (-u32::MAX) = 0
         assert_eq!(result.value, 0u32);
-        assert_eq!(result.negative, false); // Zero should be canonicalized to positive
+        assert!(!result.negative); // Zero should be canonicalized to positive
     }
 
     #[test]
@@ -537,19 +541,19 @@ mod signed_tests {
         let a = Signed::new(7u32, false); // +7
         let result = a + &3u32; // +7 + 3 = +10
         assert_eq!(result.value, 10u32);
-        assert_eq!(result.negative, false);
+        assert!(!result.negative);
 
         // Test negative Signed + T where |signed| >= T
         let a = Signed::new(8u32, true); // -8
         let result = a + &3u32; // -8 + 3 = -5
         assert_eq!(result.value, 5u32);
-        assert_eq!(result.negative, true);
+        assert!(result.negative);
 
         // Test negative Signed + T where |signed| < T (should flip sign)
         let a = Signed::new(2u32, true); // -2
         let result = a + &5u32; // -2 + 5 = +3
         assert_eq!(result.value, 3u32);
-        assert_eq!(result.negative, false);
+        assert!(!result.negative);
     }
 
     #[test]
@@ -558,37 +562,37 @@ mod signed_tests {
         let mut a = Signed::new(10u32, false); // +10
         a += &3u32; // +10 += 3 = +13
         assert_eq!(a.value, 13u32);
-        assert_eq!(a.negative, false);
+        assert!(!a.negative);
 
         // Test AddAssign<&T> with negative Signed
         let mut a = Signed::new(15u32, true); // -15
         a += &5u32; // -15 += 5 = -10 (subtracts for negative)
         assert_eq!(a.value, 10u32);
-        assert_eq!(a.negative, true);
+        assert!(a.negative);
 
         // Test exact cancellation case (this should work without underflow)
         let mut a = Signed::new(7u32, true); // -7
         a += &7u32; // -7 += 7 = 0 (7 - 7 = 0)
         assert_eq!(a.value, 0u32);
-        assert_eq!(a.negative, false); // Fixed: zero is canonicalized to positive
+        assert!(!a.negative); // Fixed: zero is canonicalized to positive
 
         // Test another valid case where subtraction doesn't underflow
         let mut a = Signed::new(20u32, true); // -20
         a += &15u32; // -20 += 15 = -5 (20 - 15 = 5, stays negative)
         assert_eq!(a.value, 5u32);
-        assert_eq!(a.negative, true);
+        assert!(a.negative);
 
         // Test with zero addition to positive
         let mut a = Signed::new(5u32, false); // +5
         a += &0u32; // +5 += 0 = +5
         assert_eq!(a.value, 5u32);
-        assert_eq!(a.negative, false);
+        assert!(!a.negative);
 
         // Test with zero addition to negative
         let mut a = Signed::new(8u32, true); // -8
         a += &0u32; // -8 += 0 = -8 (8 - 0 = 8, stays negative)
         assert_eq!(a.value, 8u32);
-        assert_eq!(a.negative, true);
+        assert!(a.negative);
 
         // Extended test cases for sign flips and zero canonicalization:
 
@@ -600,41 +604,41 @@ mod signed_tests {
         let mut zero_case = Signed::new(5u32, true); // -5
         zero_case += &5u32; // -5 + 5 should be +0 (canonicalized)
         assert_eq!(zero_case.value, 0u32);
-        assert_eq!(zero_case.negative, false); // Fixed: zero is canonicalized to positive
+        assert!(!zero_case.negative); // Fixed: zero is canonicalized to positive
 
         // Test case: Multiple operations that should result in zero
         let mut multiple_zero = Signed::new(3u32, true); // -3
         multiple_zero += &3u32; // -3 + 3 = 0
         assert_eq!(multiple_zero.value, 0u32);
-        assert_eq!(multiple_zero.negative, false); // Fixed: zero is canonicalized to positive
+        assert!(!multiple_zero.negative); // Fixed: zero is canonicalized to positive
 
         // Test case: Large exact cancellation
         let mut large_cancel = Signed::new(100u32, true); // -100
         large_cancel += &100u32; // -100 + 100 = 0
         assert_eq!(large_cancel.value, 0u32);
-        assert_eq!(large_cancel.negative, false); // Fixed: zero is canonicalized to positive
+        assert!(!large_cancel.negative); // Fixed: zero is canonicalized to positive
 
         // Additional edge cases with zero
         let mut zero_to_zero = Signed::new(0u32, true); // -0 (invalid state)
         zero_to_zero += &0u32; // -0 + 0 = 0
         assert_eq!(zero_to_zero.value, 0u32);
-        assert_eq!(zero_to_zero.negative, false); // Fixed: zero is canonicalized to positive
+        assert!(!zero_to_zero.negative); // Fixed: zero is canonicalized to positive
 
         // Test cases that should now work: sign flips from negative to positive
         let mut sign_flip1 = Signed::new(8u32, true); // -8
         sign_flip1 += &12u32; // -8 + 12 = +4
         assert_eq!(sign_flip1.value, 4u32);
-        assert_eq!(sign_flip1.negative, false); // Should become positive
+        assert!(!sign_flip1.negative); // Should become positive
 
         let mut sign_flip2 = Signed::new(3u32, true); // -3
         sign_flip2 += &7u32; // -3 + 7 = +4
         assert_eq!(sign_flip2.value, 4u32);
-        assert_eq!(sign_flip2.negative, false); // Should become positive
+        assert!(!sign_flip2.negative); // Should become positive
 
         let mut sign_flip3 = Signed::new(1u32, true); // -1
         sign_flip3 += &10u32; // -1 + 10 = +9
         assert_eq!(sign_flip3.value, 9u32);
-        assert_eq!(sign_flip3.negative, false); // Should become positive
+        assert!(!sign_flip3.negative); // Should become positive
     }
 
     #[test]
@@ -644,7 +648,7 @@ mod signed_tests {
         let mut a = Signed::new(8u32, true); // -8
         a += &12u32; // -8 + 12 = +4
         assert_eq!(a.value, 4u32);
-        assert_eq!(a.negative, false); // Should be positive
+        assert!(!a.negative); // Should be positive
     }
 
     #[test]
@@ -654,7 +658,7 @@ mod signed_tests {
         let mut a = Signed::new(3u32, true); // -3
         a += &7u32; // Should become +4
         assert_eq!(a.value, 4u32);
-        assert_eq!(a.negative, false); // Should be positive
+        assert!(!a.negative); // Should be positive
     }
 
     #[test]
@@ -664,7 +668,7 @@ mod signed_tests {
         let mut a = Signed::new(1u32, true); // -1
         a += &10u32; // Should become +9
         assert_eq!(a.value, 9u32);
-        assert_eq!(a.negative, false); // Should be positive
+        assert!(!a.negative); // Should be positive
     }
 
     #[test]
@@ -674,7 +678,7 @@ mod signed_tests {
         let mut a = Signed::new(1u32, true); // -1
         a += &u32::MAX; // Should become +(u32::MAX - 1)
         assert_eq!(a.value, u32::MAX - 1);
-        assert_eq!(a.negative, false); // Should be positive
+        assert!(!a.negative); // Should be positive
     }
 
     #[test]
@@ -686,37 +690,37 @@ mod signed_tests {
         let a = Signed::new(8u32, true); // -8
         let result = a + &12u32; // This works with Add<&T>
         assert_eq!(result.value, 4u32);
-        assert_eq!(result.negative, false); // Correctly becomes positive
+        assert!(!result.negative); // Correctly becomes positive
 
         // Case 2: -3 + 7 should equal +4
         let a = Signed::new(3u32, true); // -3
         let result = a + &7u32;
         assert_eq!(result.value, 4u32);
-        assert_eq!(result.negative, false); // Correctly becomes positive
+        assert!(!result.negative); // Correctly becomes positive
 
         // Case 3: -1 + 10 should equal +9
         let a = Signed::new(1u32, true); // -1
         let result = a + &10u32;
         assert_eq!(result.value, 9u32);
-        assert_eq!(result.negative, false); // Correctly becomes positive
+        assert!(!result.negative); // Correctly becomes positive
 
         // Case 4: Zero canonicalization should work correctly now
         let a = Signed::new(5u32, true); // -5
         let result = a + &5u32;
         assert_eq!(result.value, 0u32);
-        assert_eq!(result.negative, false); // Fixed: zero is now canonicalized to positive
+        assert!(!result.negative); // Fixed: zero is now canonicalized to positive
 
         // Case 5: Test edge case where negative value equals the addend
         let a = Signed::new(7u32, true); // -7
         let result = a + &7u32; // -7 + 7 = 0
         assert_eq!(result.value, 0u32);
-        assert_eq!(result.negative, false); // Fixed: zero is now canonicalized to positive
+        assert!(!result.negative); // Fixed: zero is now canonicalized to positive
 
         // Case 6: Show that positive + positive works correctly
         let a = Signed::new(3u32, false); // +3
         let result = a + &5u32; // +3 + 5 = +8
         assert_eq!(result.value, 8u32);
-        assert_eq!(result.negative, false); // Correctly positive
+        assert!(!result.negative); // Correctly positive
     }
 
     #[test]
@@ -726,45 +730,45 @@ mod signed_tests {
         let b = Signed::new(3u32, false); // +3
         let result = a * b; // +4 * +3 = +12
         assert_eq!(result.value, 12u32);
-        assert_eq!(result.negative, false);
+        assert!(!result.negative);
 
         // Test Mul<Self> - positive * negative
         let a = Signed::new(5u32, false); // +5
         let b = Signed::new(2u32, true); // -2
         let result = a * b; // +5 * -2 = -10
         assert_eq!(result.value, 10u32);
-        assert_eq!(result.negative, true);
+        assert!(result.negative);
 
         // Test Mul<Self> - negative * negative
         let a = Signed::new(6u32, true); // -6
         let b = Signed::new(4u32, true); // -4
         let result = a * b; // -6 * -4 = +24
         assert_eq!(result.value, 24u32);
-        assert_eq!(result.negative, false);
+        assert!(!result.negative);
 
         // Test Mul<T> - positive Signed * T
         let a = Signed::new(7u32, false); // +7
         let result = a * 2u32; // +7 * 2 = +14
         assert_eq!(result.value, 14u32);
-        assert_eq!(result.negative, false);
+        assert!(!result.negative);
 
         // Test Mul<T> - negative Signed * T
         let a = Signed::new(3u32, true); // -3
         let result = a * 5u32; // -3 * 5 = -15
         assert_eq!(result.value, 15u32);
-        assert_eq!(result.negative, true);
+        assert!(result.negative);
 
         // Test Mul<&T> - positive Signed * &T
         let a = Signed::new(8u32, false); // +8
         let result = a * &3u32; // +8 * 3 = +24
         assert_eq!(result.value, 24u32);
-        assert_eq!(result.negative, false);
+        assert!(!result.negative);
 
         // Test Mul<&T> - negative Signed * &T
         let a = Signed::new(9u32, true); // -9
         let result = a * &2u32; // -9 * 2 = -18
         assert_eq!(result.value, 18u32);
-        assert_eq!(result.negative, true);
+        assert!(result.negative);
     }
 
     #[test]
