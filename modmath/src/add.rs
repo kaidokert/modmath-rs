@@ -131,7 +131,6 @@ pub fn constrained_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
-        + Copy
         + const_num_traits::ops::wrapping::WrappingAdd
         + const_num_traits::ops::wrapping::WrappingSub
         + core::ops::Add<Output = T>
@@ -193,7 +192,6 @@ where
 pub fn strict_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
-        + Copy
         + Copy
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::ops::overflowing::OverflowingSub
