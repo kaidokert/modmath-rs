@@ -917,23 +917,11 @@ where
     /// (no inverse exists). Failure timing is independent of input
     /// magnitudes.
     ///
-    /// ## Carrier headroom precondition
-    ///
-    /// Also returns `CtOption::None` masked when the carrier `T`
-    /// lacks **one bit of headroom over `modulus`** (the safegcd
-    /// `2·modulus ≤ T::MAX` precondition). The check is folded into
-    /// the returned mask at no value-dependent cost (one MSB
-    /// extraction on the cached modulus per call). When the modulus
-    /// occupies the full carrier width (MSB set in `T`), this method
-    /// returns `None` regardless of value coprimality — the carrier
-    /// is too tight for the algorithm's intermediate sums.
-    ///
-    /// **Pick a `T` at least one bit wider than the modulus** — in
-    /// practice one extra limb when the modulus fills a power-of-two
-    /// width (a 2048-bit RSA modulus needs a 2080-bit carrier at
-    /// 32-bit limbs). Krabipqc / PQC moduli
-    /// (3329, 8380417, etc.) leave plenty of headroom on any
-    /// reasonable carrier and are unaffected.
+    /// The modulus may occupy the full carrier width (MSB set in
+    /// `T`) — a 2048-bit RSA modulus works in an exact 2048-bit
+    /// carrier. The algorithm's signed intermediates are carried in
+    /// an internally widened representation, so no headroom bit is
+    /// required of `T`.
     ///
     /// Used by RSA private-key blinding, where the modulus is the
     /// composite `n = p·q` and Fermat's little theorem doesn't apply.
@@ -952,15 +940,7 @@ where
             + core::ops::Shr<usize, Output = T>
             + core::ops::Shl<usize, Output = T>
             + core::ops::BitOr<Output = T>,
-        <T as modmath_cios::CiosRowOps>::Word: Copy
-            + subtle::ConditionallySelectable
-            + subtle::ConstantTimeEq
-            + const_num_traits::CtIsZero
-            + const_num_traits::CtParity
-            + const_num_traits::One
-            + const_num_traits::Zero
-            + core::ops::BitAnd<Output = <T as modmath_cios::CiosRowOps>::Word>
-            + core::ops::Shl<usize, Output = <T as modmath_cios::CiosRowOps>::Word>,
+        <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
     {
         // The value in the Residue is in Montgomery form. To get the
         // Montgomery form of the inverse:
@@ -978,14 +958,6 @@ where
         // multiplied by R again gives the desired Mont form". The
         // second multiplication does that final · R step. Equivalent
         // to one multiplication by R³, but we only have R² cached.
-        //
-        // Headroom precondition: safegcd needs `2 * self.modulus` not
-        // to overflow `T` (i.e. modulus's MSB clear). We fold that
-        // check into the returned CtOption rather than asserting at
-        // entry — `None`-masked when the carrier was sized too tightly
-        // for the modulus. Cost is one MSB extraction on the cached
-        // modulus per call, invisible against the safegcd loop.
-        let modulus_has_headroom = !crate::inv::safegcd::ct_msb_set(&self.modulus);
         let inv_raw = crate::inv::safegcd::safegcd_inv_ct(&a.mont, &self.modulus);
         // Extract the raw inverse, defaulting to zero when safegcd
         // reports `None`. The two REDCs run unconditionally on the
@@ -1000,7 +972,7 @@ where
             _brand: PhantomData,
             _p: PhantomData,
         };
-        subtle::CtOption::new(residue, inv_exists & modulus_has_headroom)
+        subtle::CtOption::new(residue, inv_exists)
     }
 }
 
@@ -1367,26 +1339,33 @@ mod tests {
         }
     }
 
-    /// `inv_safegcd_ct` masks the result when the carrier doesn't have
-    /// one bit of headroom over the modulus (the safegcd
-    /// `2·modulus ≤ T::MAX` precondition). Field is constructed with a
-    /// modulus whose MSB is set; the returned CtOption is `None`
-    /// regardless of whether the value is mathematically invertible.
+    /// `inv_safegcd_ct` with a modulus that occupies the full carrier
+    /// width (MSB set) — the exact-width-carrier case (a 2048-bit RSA
+    /// modulus in a 2048-bit `T`), scaled down to a 16-bit carrier.
     #[test]
-    fn inv_safegcd_ct_masks_when_modulus_lacks_headroom() {
-        // U16Ct = FixedUInt<u8, 2, Ct> — 16-bit carrier. Pick a 16-bit
-        // odd modulus with MSB set (e.g. 0xFFFD, an odd value > 2^15).
-        // 2 * 0xFFFD overflows u16 → safegcd's invariants break →
-        // headroom check returns None.
+    fn inv_safegcd_ct_full_width_modulus() {
+        // U16Ct = FixedUInt<u8, 2, Ct> — 16-bit carrier holding the
+        // odd 16-bit modulus 0xFFFD = 13 · 71² (MSB set, composite).
         let modulus = u16ct(0xFFFD);
         let f = FieldCt::new(modulus).unwrap();
-        let r = f.reduce(&u16ct(7));
-        let inv = f.inv_safegcd_ct(&r);
-        assert_eq!(
-            inv.is_some().unwrap_u8(),
-            0,
-            "expected None for modulus 0xFFFD (no headroom)"
-        );
+        for raw_val in [1u16, 2, 7, 0xBEEF, 0xFFFC] {
+            let r = f.reduce(&u16ct(raw_val));
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(
+                inv.is_some().unwrap_u8(),
+                1,
+                "expected inverse for {raw_val:#x} mod 0xFFFD"
+            );
+            let product = f.mul(&r, &inv.unwrap());
+            assert_eq!(
+                f.into_raw(&product),
+                u16ct(1),
+                "{raw_val:#x} * inv != 1 mod 0xFFFD"
+            );
+        }
+        // Non-coprime (shares factor 13) still masks to None.
+        let r = f.reduce(&u16ct(13));
+        assert_eq!(f.inv_safegcd_ct(&r).is_some().unwrap_u8(), 0);
     }
 
     /// `inv_safegcd_ct` on a larger RSA-CRT-shaped composite modulus.

@@ -18,9 +18,10 @@
 //! ## Algorithm shape
 //!
 //! Operates on:
-//! - `f, g`: signed two's-complement values stored in unsigned `T`.
-//!   `f` starts as `modulus`, `g` starts as `value`. They evolve via
-//!   divsteps until `g == 0` and `f == ±1` (iff `gcd == 1`).
+//! - `f, g`: signed two's-complement values stored in [`SignedExt`]
+//!   (unsigned `T` plus one extension word). `f` starts as `modulus`,
+//!   `g` starts as `value`. They evolve via divsteps until `g == 0`
+//!   and `f == ±1` (iff `gcd == 1`).
 //! - `d, e`: modular coefficients kept in `[0, modulus)` throughout,
 //!   such that `d * value ≡ f mod modulus` and `e * value ≡ g mod
 //!   modulus`. At convergence, `d` is `±value⁻¹ mod modulus`.
@@ -30,23 +31,29 @@
 //! ## Why this is "signed" without naming a signed bigint type
 //!
 //! The algorithm conceptually operates on signed values `f`, `g` that
-//! range over `(-modulus, modulus)`. **The implementation never types
-//! a signed bigint.** Every "signed" op is two's-complement-on-unsigned:
+//! range over `(-modulus, modulus)`, transiently `(-2·modulus,
+//! 2·modulus)`. **The implementation never types a signed bigint.**
+//! Every "signed" op is two's complement over [`SignedExt`] — the
+//! unsigned `T` bit pattern plus one extension word for sign and
+//! overflow:
 //!
-//! - signed `f + g`  ≡ `T::wrapping_add(f, g)`         on unsigned `T`
-//! - signed `-f`     ≡ `T::wrapping_neg(f)`            on unsigned `T`
-//! - signed `f < 0`  ≡ MSB of unsigned `f` is set
-//! - arithmetic shr  ≡ `(x >> 1) | sign_extend_mask`   on unsigned `T`
+//! - signed `f + g`  ≡ wrapping add on `T`, carry (detected as
+//!   `sum < a`) propagated into the extension word
+//! - signed `-f`     ≡ `0 - f` with the borrow propagated likewise
+//! - signed `f < 0`  ≡ MSB of the extension word is set
+//! - arithmetic shr  ≡ `lo >> 1` with the extension word's low bit
+//!   shifted into the top of `lo`
 //!
-//! ## Bound precondition
+//! ## Full-width carriers
 //!
-//! `modulus` must fit in `T` with at least one bit of headroom — i.e.
-//! `2 * modulus` does not overflow `T`. The algorithm maintains
-//! `|d|, |e| < modulus` strictly, so intermediate sums `d + e` are
-//! bounded by `2 * modulus`. A modulus that fully occupies the
-//! carrier width violates this — pick a carrier at least one limb
-//! wider (a 2048-bit RSA modulus needs a 2080-bit carrier at 32-bit
-//! limbs).
+//! The modulus may occupy the full width of `T` — no headroom bit is
+//! required, so a 2048-bit RSA modulus works in an exact 2048-bit
+//! carrier. The signed intermediates can exceed `T` by up to two
+//! bits; [`SignedExt`]'s extension word absorbs them without the bit
+//! width ever being known at compile time. The modular coefficients
+//! `d`, `e` stay in `[0, modulus)` and their update formulas are
+//! written so no intermediate exceeds the carrier (see [`add_mod_ct`]
+//! and [`half_mod_ct`]).
 //!
 //! ## Implementation note
 //!
@@ -93,31 +100,6 @@ where
     value.word(0).ct_is_odd()
 }
 
-/// Returns `Choice::from(1)` iff the most-significant bit of `value`'s
-/// bit pattern is set (i.e. value is "negative" in two's-complement
-/// interpretation).
-///
-/// Exposed at crate visibility so `Field::inv_safegcd_ct` can fold the
-/// "modulus has one bit of headroom" precondition into its CtOption
-/// instead of relying on documentation alone.
-#[inline]
-pub(crate) fn ct_msb_set<T>(value: &T) -> Choice
-where
-    T: CiosRowOps,
-    T::Word: core::ops::BitAnd<Output = T::Word>
-        + core::ops::Shl<usize, Output = T::Word>
-        + One
-        + CtIsZero,
-{
-    let n = value.word_count();
-    let word_bits = core::mem::size_of::<T::Word>() * 8;
-    let msb_mask = T::Word::one() << (word_bits - 1);
-    let masked = value.word(n - 1) & msb_mask;
-    // Delegates to cnt's CtIsZero rather than ct_eq(&T::Word::zero()).
-    // Identical semantics; the dedicated trait is cnt-tested upstream.
-    !masked.ct_is_zero()
-}
-
 /// Constant-time `delta > 0` for the i64 state variable.
 #[inline]
 fn ct_i64_positive(delta: i64) -> Choice {
@@ -129,48 +111,90 @@ fn ct_i64_positive(delta: i64) -> Choice {
     Choice::from(((nonzero_top & sign_bit_clear) & 1) as u8)
 }
 
-/// Arithmetic right shift by 1 (sign-extending). For T interpreted as
-/// two's-complement, returns `value / 2` with floor rounding for
-/// negative values.
+/// Two's-complement signed value spanning `T` plus one extension word.
+///
+/// Represents `hi · 2^k + lo` where `k` is `T`'s bit width, `lo` is
+/// the unsigned low part and `hi` (a two's-complement word) carries
+/// sign and overflow. The divsteps intermediates range over
+/// `(-2·modulus, 2·modulus)` — up to two bits beyond what `T` holds
+/// when the modulus occupies the full carrier width — so `hi` only
+/// ever takes values in `{-2, -1, 0, 1}`.
+#[derive(Clone)]
+struct SignedExt<T> {
+    lo: T,
+    hi: u64,
+}
+
 #[inline]
-fn arithmetic_shr_one<T>(value: &T) -> T
+fn se_select<T: ConditionallySelectable>(
+    a: &SignedExt<T>,
+    b: &SignedExt<T>,
+    choice: Choice,
+) -> SignedExt<T> {
+    SignedExt {
+        lo: T::conditional_select(&a.lo, &b.lo, choice),
+        hi: u64::conditional_select(&a.hi, &b.hi, choice),
+    }
+}
+
+/// Signed add over the extended representation. The carry out of the
+/// low limb is detected as `sum < a` (unsigned wrap) and propagated
+/// into the extension word.
+#[inline]
+fn se_add<T>(a: &SignedExt<T>, b: &SignedExt<T>) -> SignedExt<T>
 where
-    T: CiosRowOps
-        + Clone
+    T: Clone + WrappingAdd<Output = T> + ConstantTimeLess,
+{
+    let lo = a.lo.clone().wrapping_add(b.lo.clone());
+    let carry = lo.ct_lt(&a.lo);
+    let hi =
+        a.hi.wrapping_add(b.hi)
+            .wrapping_add(carry.unwrap_u8() as u64);
+    SignedExt { lo, hi }
+}
+
+/// Signed negate (`0 - a`) over the extended representation. The
+/// borrow out of the low limb is 1 unless `lo == 0`.
+#[inline]
+fn se_neg<T>(a: &SignedExt<T>) -> SignedExt<T>
+where
+    T: Clone + Zero + WrappingSub<Output = T> + CtIsZero,
+{
+    let lo = T::zero().wrapping_sub(a.lo.clone());
+    let borrow = !a.lo.ct_is_zero();
+    let hi = 0u64
+        .wrapping_sub(a.hi)
+        .wrapping_sub(borrow.unwrap_u8() as u64);
+    SignedExt { lo, hi }
+}
+
+/// Arithmetic right shift by 1 (sign-extending) over the extended
+/// representation: the extension word's low bit shifts into the top
+/// of `lo`, and the extension word itself shifts arithmetically.
+#[inline]
+fn se_shr1<T>(a: &SignedExt<T>, n_bits: usize) -> SignedExt<T>
+where
+    T: Clone
         + ConditionallySelectable
         + One
-        + Zero
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::BitOr<Output = T>,
-    T::Word: core::ops::BitAnd<Output = T::Word>
-        + core::ops::Shl<usize, Output = T::Word>
-        + One
-        + CtIsZero,
 {
-    let logical = value.clone() >> 1;
-    let msb_set = ct_msb_set(value);
-    let n_bits = value.word_count() * core::mem::size_of::<T::Word>() * 8;
+    let logical = a.lo.clone() >> 1;
     let top_bit_mask = T::one() << (n_bits - 1);
-    let with_sign_ext = logical.clone() | top_bit_mask;
-    T::conditional_select(&logical, &with_sign_ext, msb_set)
+    let with_hi_bit = logical.clone() | top_bit_mask;
+    let hi_low_bit = Choice::from((a.hi & 1) as u8);
+    SignedExt {
+        lo: T::conditional_select(&logical, &with_hi_bit, hi_low_bit),
+        hi: ((a.hi as i64) >> 1) as u64,
+    }
 }
 
-/// Reduce `sum` to `[0, m)` when `sum` is already in `[0, 2·m)`.
-/// One conditional subtract suffices.
-#[inline]
-fn reduce_lt_2m_ct<T>(sum: T, m: &T) -> T
-where
-    T: Clone + ConditionallySelectable + WrappingSub<Output = T> + ConstantTimeLess,
-{
-    let sum_minus_m = sum.clone().wrapping_sub(m.clone());
-    let need_sub = !sum.ct_lt(m);
-    T::conditional_select(&sum, &sum_minus_m, need_sub)
-}
-
-/// Modular add: `(a + b) mod m`, assuming `a, b ∈ [0, m)` so the sum
-/// is in `[0, 2·m)`. Precondition: `2·m` fits in `T` (one bit of
-/// headroom over `m`).
+/// Modular add: `(a + b) mod m`, assuming `a, b ∈ [0, m)`. Needs no
+/// carrier headroom: `a + b ≥ m` iff `a ≥ m - b`, so select between
+/// `a + b` (exact when the sum stays below `m`) and `a - (m - b)`
+/// (exact otherwise) — every kept intermediate stays below `2^k`.
 #[inline]
 fn add_mod_ct<T>(a: &T, b: &T, m: &T) -> T
 where
@@ -180,8 +204,11 @@ where
         + WrappingSub<Output = T>
         + ConstantTimeLess,
 {
+    let m_minus_b = m.clone().wrapping_sub(b.clone());
+    let need_sub = !a.ct_lt(&m_minus_b);
     let sum = a.clone().wrapping_add(b.clone());
-    reduce_lt_2m_ct(sum, m)
+    let reduced = a.clone().wrapping_sub(m_minus_b);
+    T::conditional_select(&sum, &reduced, need_sub)
 }
 
 /// Modular negate: `(m - x) mod m`, preserving the `[0, m)` invariant.
@@ -204,32 +231,35 @@ where
 /// Modular halving: returns `y ∈ [0, m)` such that `2·y ≡ x mod m`.
 /// Precondition: `x ∈ [0, m)`, `m` is odd.
 ///
-/// For odd `m`, the inverse of 2 mod `m` is `(m + 1) / 2`; computing
-/// `x / 2 mod m` via the standard branch-free trick:
+/// Via the standard branch-free trick:
 /// - if `x` even: result is `x >> 1`.
-/// - if `x` odd: result is `(x + m) >> 1` (since `x + m` is even when
-///   `m` is odd, and the sum is in `[m, 2m)` which fits with one bit
-///   of headroom).
+/// - if `x` odd: result is `(x + m) / 2`, computed term-wise as
+///   `(x >> 1) + (m >> 1) + 1` (exact since both are odd) so no
+///   intermediate exceeds `m` — needs no carrier headroom over the
+///   `x + m` sum.
 #[inline]
 fn half_mod_ct<T>(x: &T, m: &T) -> T
 where
     T: CiosRowOps
         + Clone
         + ConditionallySelectable
+        + One
         + WrappingAdd<Output = T>
         + core::ops::Shr<usize, Output = T>,
     T::Word: CtParity,
 {
     let x_odd = ct_low_bit(x);
-    let x_plus_m = x.clone().wrapping_add(m.clone());
-    let candidate_odd = x_plus_m >> 1;
     let candidate_even = x.clone() >> 1;
+    let candidate_odd = candidate_even
+        .clone()
+        .wrapping_add(m.clone() >> 1)
+        .wrapping_add(T::one());
     T::conditional_select(&candidate_even, &candidate_odd, x_odd)
 }
 
 /// Compute `value⁻¹ mod modulus` in constant time over `value`. Works
-/// for any modulus (composite or prime), provided the modulus is odd
-/// and `2 * modulus` fits in `T`.
+/// for any odd modulus (composite or prime), including one that
+/// occupies the full width of `T` — no carrier headroom is required.
 ///
 /// Returns `CtOption::Some(inv)` when `gcd(value, modulus) == 1`, or
 /// `CtOption::None` masked when no inverse exists. The failure path
@@ -243,8 +273,6 @@ where
 /// # Preconditions
 ///
 /// - `value < modulus` (caller should reduce first)
-/// - `2 * modulus` fits in `T` without overflow (i.e. `T` is at least
-///   one bit wider than `modulus`)
 pub fn safegcd_inv_ct<T>(value: &T, modulus: &T) -> CtOption<T>
 where
     T: CiosRowOps
@@ -260,40 +288,38 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::BitOr<Output = T>,
-    T::Word: Copy
-        + ConditionallySelectable
-        + ConstantTimeEq
-        + CtIsZero
-        + CtParity
-        + One
-        + Zero
-        + core::ops::BitAnd<Output = T::Word>
-        + core::ops::Shl<usize, Output = T::Word>,
+    T::Word: CtParity,
 {
     let n_bits = value.word_count() * core::mem::size_of::<T::Word>() * 8;
     let total_steps = divsteps_total(n_bits);
 
-    let mut f = modulus.clone();
-    let mut g = value.clone();
+    let mut f = SignedExt {
+        lo: modulus.clone(),
+        hi: 0,
+    };
+    let mut g = SignedExt {
+        lo: value.clone(),
+        hi: 0,
+    };
     let mut d = T::zero();
     let mut e = T::one();
     let mut delta: i64 = 1;
 
     for _ in 0..total_steps {
         let delta_pos = ct_i64_positive(delta);
-        let g_odd = ct_low_bit(&g);
+        let g_odd = ct_low_bit(&g.lo);
         let swap = delta_pos & g_odd;
 
         // swap_choice: (f, g) ← (g, -f); (d, e) ← (e, -d mod m); delta ← -delta
-        let new_f_if_swap = g.clone();
-        let new_g_if_swap = f.clone().wrapping_neg_two_complement();
-        let new_d_if_swap = e.clone();
-        let new_e_if_swap = neg_mod_ct(&d, modulus);
+        let new_f = se_select(&f, &g, swap);
+        let neg_f = se_neg(&f);
+        g = se_select(&g, &neg_f, swap);
+        f = new_f;
 
-        f = T::conditional_select(&f, &new_f_if_swap, swap);
-        g = T::conditional_select(&g, &new_g_if_swap, swap);
-        d = T::conditional_select(&d, &new_d_if_swap, swap);
-        e = T::conditional_select(&e, &new_e_if_swap, swap);
+        let new_d = T::conditional_select(&d, &e, swap);
+        let neg_d_mod = neg_mod_ct(&d, modulus);
+        e = T::conditional_select(&e, &neg_d_mod, swap);
+        d = new_d;
 
         let neg_delta = (delta as u64).wrapping_neg() as i64;
         delta = i64::conditional_select(&delta, &neg_delta, swap);
@@ -304,24 +330,28 @@ where
         // odd when the swap fired, since old f is odd by loop invariant).
         // In the non-swap case g_odd tracks current g's parity directly.
         let g_odd_now = g_odd;
-        let to_add_to_g = T::conditional_select(&T::zero(), &f, g_odd_now);
-        g = g.wrapping_add(to_add_to_g);
+        let zero_ext = SignedExt {
+            lo: T::zero(),
+            hi: 0,
+        };
+        let to_add_to_g = se_select(&zero_ext, &f, g_odd_now);
+        g = se_add(&g, &to_add_to_g);
 
         let add_to_e = add_mod_ct(&e, &d, modulus);
         e = T::conditional_select(&e, &add_to_e, g_odd_now);
 
-        g = arithmetic_shr_one(&g);
+        g = se_shr1(&g, n_bits);
         e = half_mod_ct(&e, modulus);
     }
 
     // After total_steps divsteps, g == 0 and f == ±gcd. For the
-    // invertible case (gcd == 1), f is either +1 (bit pattern T::one())
-    // or -1 (bit pattern T::one().wrapping_neg()).
+    // invertible case (gcd == 1), f is either +1 (lo == 1, hi == 0)
+    // or -1 (lo all-ones, hi all-ones).
     let one = T::one();
-    let neg_one_pattern = one.clone().wrapping_neg_two_complement();
+    let neg_one_lo = T::zero().wrapping_sub(T::one());
 
-    let f_is_one = f.ct_eq(&one);
-    let f_is_neg_one = f.ct_eq(&neg_one_pattern);
+    let f_is_one = f.lo.ct_eq(&one) & f.hi.ct_eq(&0u64);
+    let f_is_neg_one = f.lo.ct_eq(&neg_one_lo) & f.hi.ct_eq(&u64::MAX);
     let has_inverse = f_is_one | f_is_neg_one;
 
     // Result: d if f == 1; (m - d) = -d mod m if f == -1.
@@ -340,24 +370,6 @@ where
     CtOption::new(result, has_inverse & modulus_ok)
 }
 
-// Inline WrappingNeg-style two's-complement negate. const-num-traits'
-// WrappingNeg has an `Output` associated type that doesn't necessarily
-// equal T for generic T; this trait gives a clean `T -> T` shape as
-// `0 - x` via wrapping_sub.
-trait WrappingNegT: Sized {
-    fn wrapping_neg_two_complement(self) -> Self;
-}
-
-impl<T> WrappingNegT for T
-where
-    T: Zero + WrappingSub<Output = T>,
-{
-    #[inline]
-    fn wrapping_neg_two_complement(self) -> Self {
-        T::zero().wrapping_sub(self)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -371,8 +383,7 @@ mod tests {
     }
 
     /// Exhaustive cross-check against `basic_mod_inv` over a small
-    /// odd-prime modulus. T = u32 gives plenty of headroom for the
-    /// `2 * modulus` precondition.
+    /// odd-prime modulus.
     #[test]
     fn matches_basic_mod_inv_mod_small_primes_u32() {
         for &m in &[3u32, 5, 7, 11, 13, 17, 19, 23, 29, 31, 97, 251] {
@@ -391,6 +402,27 @@ mod tests {
                         panic!("disagreement on value={v} modulus={m}");
                     }
                     (None, None) => {}
+                }
+            }
+        }
+    }
+
+    /// Exhaustive sweep of the entire u8 carrier: every odd modulus
+    /// (including all full-width, MSB-set ones) against every value.
+    /// The baseline runs in u32 where `basic_mod_inv`'s signed
+    /// intermediates have room.
+    #[test]
+    fn exhaustive_u8_all_odd_moduli() {
+        for m in (3u16..=255).step_by(2) {
+            for v in 1..m {
+                let got = safegcd_inv_ct::<u8>(&(v as u8), &(m as u8)).into_option();
+                let want = basic_mod_inv(v as u32, m as u32);
+                match (got, want) {
+                    (Some(g), Some(w)) => {
+                        assert_eq!(g as u32, w, "value={v} modulus={m}: mismatch");
+                    }
+                    (None, None) => {}
+                    _ => panic!("value={v} modulus={m}: Some/None disagreement"),
                 }
             }
         }
@@ -472,8 +504,6 @@ mod tests {
     }
 
     /// Larger primitive: u64 modulus, sanity check on a handful of pairs.
-    /// Uses a modulus < 2^63 to satisfy the `2 * modulus fits in T`
-    /// precondition.
     #[test]
     fn u64_smoke_test() {
         let m: u64 = 0x7FFF_FFFF_FFFF_FFE7; // 2^63 - 25, a prime
@@ -486,6 +516,91 @@ mod tests {
                 let prod = (inv as u128 * v as u128) % m as u128;
                 assert_eq!(prod, 1, "u64 inv * value mod m != 1");
             }
+        }
+    }
+
+    /// Full-width u32 modulus (MSB set): 2^32 - 5, the largest 32-bit
+    /// prime. Exercises the no-headroom path where the modulus
+    /// occupies every bit of the carrier.
+    #[test]
+    fn u32_full_width_modulus() {
+        let m: u32 = 0xFFFF_FFFB; // 2^32 - 5, prime
+        for v in [1u32, 2, 7, 0xDEAD_BEEF, 0xFFFF_FFFA] {
+            let got = safegcd_inv_ct::<u32>(&v, &m).into_option();
+            let inv = got.unwrap_or_else(|| panic!("expected inverse for v={v:#x}"));
+            assert_eq!(
+                (inv as u64 * v as u64) % m as u64,
+                1,
+                "full-width u32 v={v:#x}: inv*v mod m != 1"
+            );
+        }
+        // m - 1 ≡ -1 is its own inverse.
+        assert_eq!(
+            safegcd_inv_ct::<u32>(&(m - 1), &m).into_option(),
+            Some(m - 1)
+        );
+    }
+
+    /// Full-width u64 prime modulus: 2^64 - 59, the largest 64-bit
+    /// prime.
+    #[test]
+    fn u64_full_width_prime() {
+        let m: u64 = 0xFFFF_FFFF_FFFF_FFC5; // 2^64 - 59, prime
+        for v in [1u64, 2, 7, 0xDEAD_BEEF, 0xCAFE_BABE_F00D_D00D, m - 1] {
+            let got = safegcd_inv_ct::<u64>(&v, &m).into_option();
+            let inv = got.unwrap_or_else(|| panic!("expected inverse for v={v:#x}"));
+            let prod = (inv as u128 * v as u128) % m as u128;
+            assert_eq!(prod, 1, "full-width u64 v={v:#x}: inv*v mod m != 1");
+        }
+    }
+
+    /// Full-width u64 composite modulus — the RSA-blinding shape at
+    /// carrier-exact width: n = p·q with p = 2^32 - 5, q = 2^32 - 17
+    /// (both prime), so n has its MSB set. Coprime values invert;
+    /// multiples of p return None.
+    #[test]
+    fn u64_full_width_composite() {
+        let p: u64 = 0xFFFF_FFFB; // 2^32 - 5
+        let q: u64 = 0xFFFF_FFEF; // 2^32 - 17
+        let n = p * q;
+        assert!(n >> 63 == 1, "test setup: n must have MSB set");
+        for v in [1u64, 2, 3, 0xCAFE_BABE, 0xFEED_FACE_DEAD_BEEF % n] {
+            let got = safegcd_inv_ct::<u64>(&v, &n).into_option();
+            let inv = got.unwrap_or_else(|| panic!("expected inverse for v={v:#x}"));
+            let prod = (inv as u128 * v as u128) % n as u128;
+            assert_eq!(prod, 1, "full-width composite v={v:#x}: inv*v mod n != 1");
+        }
+        assert!(
+            safegcd_inv_ct::<u64>(&p, &n).into_option().is_none(),
+            "factor p must not be invertible mod p*q"
+        );
+    }
+
+    /// Full-width multi-limb carrier: FixedUInt<u32, 2> holding the
+    /// full 64-bit prime 2^64 - 59. Cross-checked against the u64
+    /// primitive path (validated independently above).
+    #[test]
+    fn fixed_bigint_full_width_modulus() {
+        use const_num_traits::Ct;
+        use fixed_bigint::FixedUInt;
+        type U64Ct = FixedUInt<u32, 2, Ct>;
+        type U64Nct = FixedUInt<u32, 2>;
+
+        let m_raw: u64 = 0xFFFF_FFFF_FFFF_FFC5; // 2^64 - 59, prime
+        let m = U64Ct::from(m_raw);
+        for v_raw in [1u64, 2, 7, 42, 0xDEAD_BEEF, m_raw - 1] {
+            let v = U64Ct::from(v_raw);
+            let got = safegcd_inv_ct(&v, &m).into_option();
+            let inv = got.unwrap_or_else(|| panic!("expected inverse for v={v_raw:#x}"));
+            let expected = safegcd_inv_ct::<u64>(&v_raw, &m_raw)
+                .into_option()
+                .expect("u64 baseline");
+            let inv_nct: U64Nct = inv.forget_ct();
+            assert_eq!(
+                inv_nct,
+                U64Nct::from(expected),
+                "FixedUInt full-width v={v_raw:#x}: mismatch with u64 baseline"
+            );
         }
     }
 
