@@ -171,19 +171,18 @@ where
 /// Arithmetic right shift by 1 (sign-extending) over the extended
 /// representation: the extension word's low bit shifts into the top
 /// of `lo`, and the extension word itself shifts arithmetically.
+/// `top_bit_mask` is the loop-invariant `1 << (bits(T) - 1)`,
+/// precomputed by the caller.
 #[inline]
-fn se_shr1<T>(a: &SignedExt<T>, n_bits: usize) -> SignedExt<T>
+fn se_shr1<T>(a: &SignedExt<T>, top_bit_mask: &T) -> SignedExt<T>
 where
     T: Clone
         + ConditionallySelectable
-        + One
         + core::ops::Shr<usize, Output = T>
-        + core::ops::Shl<usize, Output = T>
         + core::ops::BitOr<Output = T>,
 {
     let logical = a.lo.clone() >> 1;
-    let top_bit_mask = T::one() << (n_bits - 1);
-    let with_hi_bit = logical.clone() | top_bit_mask;
+    let with_hi_bit = logical.clone() | top_bit_mask.clone();
     let hi_low_bit = Choice::from((a.hi & 1) as u8);
     SignedExt {
         lo: T::conditional_select(&logical, &with_hi_bit, hi_low_bit),
@@ -229,7 +228,8 @@ where
 }
 
 /// Modular halving: returns `y ∈ [0, m)` such that `2·y ≡ x mod m`.
-/// Precondition: `x ∈ [0, m)`, `m` is odd.
+/// Precondition: `x ∈ [0, m)`, `m` is odd; `m_half` is the
+/// loop-invariant `m >> 1`, precomputed by the caller.
 ///
 /// Via the standard branch-free trick:
 /// - if `x` even: result is `x >> 1`.
@@ -238,7 +238,7 @@ where
 ///   intermediate exceeds `m` — needs no carrier headroom over the
 ///   `x + m` sum.
 #[inline]
-fn half_mod_ct<T>(x: &T, m: &T) -> T
+fn half_mod_ct<T>(x: &T, m_half: &T) -> T
 where
     T: CiosRowOps
         + Clone
@@ -252,7 +252,7 @@ where
     let candidate_even = x.clone() >> 1;
     let candidate_odd = candidate_even
         .clone()
-        .wrapping_add(m.clone() >> 1)
+        .wrapping_add(m_half.clone())
         .wrapping_add(T::one());
     T::conditional_select(&candidate_even, &candidate_odd, x_odd)
 }
@@ -292,6 +292,10 @@ where
 {
     let n_bits = value.word_count() * core::mem::size_of::<T::Word>() * 8;
     let total_steps = divsteps_total(n_bits);
+    // Loop invariants for se_shr1 / half_mod_ct — hoisted so each
+    // divstep doesn't redo a full-width shift.
+    let top_bit_mask = T::one() << (n_bits - 1);
+    let m_half = modulus.clone() >> 1;
 
     let mut f = SignedExt {
         lo: modulus.clone(),
@@ -340,8 +344,8 @@ where
         let add_to_e = add_mod_ct(&e, &d, modulus);
         e = T::conditional_select(&e, &add_to_e, g_odd_now);
 
-        g = se_shr1(&g, n_bits);
-        e = half_mod_ct(&e, modulus);
+        g = se_shr1(&g, &top_bit_mask);
+        e = half_mod_ct(&e, &m_half);
     }
 
     // After total_steps divsteps, g == 0 and f == ±gcd. For the
