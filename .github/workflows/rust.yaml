@@ -32,6 +32,11 @@ jobs:
     - name: Check formatting
       if: matrix.rust == 'stable'
       run: cargo fmt --all -- --check
+    # The workspace-wide clippy/doc steps build ct-ctgrind, whose
+    # crabgrind dep compiles against Valgrind's C headers on Linux.
+    - name: Install Valgrind (crabgrind headers)
+      if: matrix.rust == 'stable'
+      run: sudo apt-get update && sudo apt-get install -y valgrind
     - name: Run clippy
       if: matrix.rust == 'stable'
       run: cargo clippy --workspace --all-targets -- -D warnings
