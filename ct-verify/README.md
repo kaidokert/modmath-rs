@@ -1,11 +1,16 @@
 # ct-verify
 
-Runtime taint verification for modmath's constant-time surface,
-instantiating the pattern from fixed-bigint's `ct-verify/` harness.
-This directory is the runtime-taint layer; a cross-target asm-grep
-layer comes later.
+Verification harnesses for modmath's constant-time surface,
+instantiating the pattern from fixed-bigint's `ct-verify/` harness:
+a runtime taint layer (Valgrind, host architectures) and a
+cross-target asm-grep layer (disassembly, embedded targets). Each
+catches what the other can't — taint analysis sees secret-derived
+loads and handles public-bounded loops by construction but only runs
+where Valgrind does; asm-grep runs on every cross target and catches
+data-dependent branches that only materialize in a particular ISA's
+lowering (no conditional select, no flags register).
 
-Two members:
+Three members:
 
 - **`ct-fixtures`** — one `#[no_mangle] pub extern "C"` symbol per
   (CT entry point, carrier) pair, `core::hint::black_box` at both ends
@@ -23,6 +28,19 @@ Two members:
   inspection can see. The driver reads Valgrind's error counter between
   fixtures to attribute violations, and decides pass/fail itself
   (positives must not trip, negatives must).
+- **`ct-driver`** — cross-builds the fixtures staticlib per target,
+  disassembles it with `llvm-objdump`, and fails on forbidden
+  conditional-control-transfer mnemonics in any fixture body or any
+  helper transitively reachable from one. Public-bounded loops
+  (per-limb arithmetic, CIOS rows over `word_count()`, safegcd's
+  `divsteps_total` steps) compile to branchful-but-CT-safe counter
+  loops that static pattern-matching can't classify; those helpers are
+  allowlisted per symbol in `ct-driver/src/target.rs` with the
+  source-semantic justification inline. The riscv32 extras list is
+  different in kind — it documents **known secret-dependent branches**
+  (`overflowing_add`'s u64 carry flag lowers to an equality-branch
+  chain on an ISA with no flags register) deferred to a library
+  follow-up; bare-u64 CT carriers on rv32 are unsupported until then.
 
 Which inputs are tainted mirrors each entry's documented secrecy
 contract, not a blanket "everything is secret": the wide-mul/REDC and
@@ -48,8 +66,18 @@ at baseline but SIGILLs inside Valgrind's translation when the binary
 is built with `-C target-feature=+lzcnt,+bmi1` (an emulation artifact
 — the CI x86_64 row runs those flags on real hardware).
 
-CI: `.github/workflows/ct-ctgrind.yml`, x86_64 + aarch64 rows, both
-hard-fail.
+The asm-grep gate runs anywhere `rustup` can install the target and
+the `llvm-tools-preview` component:
+
+```bash
+cargo run --release -p ct-driver -- --target thumbv7m-none-eabi
+cargo run --release -p ct-driver -- --list-targets
+```
+
+CI: `.github/workflows/ct-ctgrind.yml` (x86_64 + aarch64 taint rows)
+and `.github/workflows/ct-verify.yml` (seven-target asm-grep matrix,
+rustc pinned to 1.86 so codegen — and therefore the calibrated
+allowlist — stays deterministic). All hard-fail.
 
 ## Extending
 

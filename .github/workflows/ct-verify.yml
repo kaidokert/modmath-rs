@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: CT Verify
+
+on:
+    push:
+      branches:
+        - main
+        - 'feature/**'
+    pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  ct:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Priority 1: Cortex-M3/M4
+          - triple: thumbv7em-none-eabi
+            toolchain: "1.86"
+          - triple: thumbv7m-none-eabi
+            toolchain: "1.86"
+          # Priority 2: Cortex-M0
+          - triple: thumbv6m-none-eabi
+            toolchain: "1.86"
+          # Priority 3: 32-bit RISC-V
+          - triple: riscv32imc-unknown-none-elf
+            toolchain: "1.86"
+          - triple: riscv32imac-unknown-none-elf
+            toolchain: "1.86"
+          # Priority 5: aarch64
+          - triple: aarch64-unknown-linux-gnu
+            toolchain: "1.86"
+          # Priority 6: x86_64. +lzcnt,+bmi1 mirrors ct-ctgrind.yml:
+          # baseline-x86_64 lowers bit-count intrinsics to a
+          # `test/je/bsr` sequence whose `je` (handling bsr's
+          # undefined-on-zero case) is a real data-dependent branch in
+          # the std intrinsic. BMI1 is on Haswell+ (2013) and every
+          # GitHub Actions x86_64 runner.
+          - triple: x86_64-unknown-linux-gnu
+            toolchain: "1.86"
+            extra_rustflags: "-C target-feature=+lzcnt,+bmi1"
+          # AVR (priority 4 in the driver's target table) is not in the
+          # matrix yet — it needs nightly + build-std and has not been
+          # calibrated. Add it in a follow-up once its extras are known.
+    runs-on: ubuntu-latest
+    name: ${{ matrix.triple }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          targets: ${{ matrix.triple }}
+          components: llvm-tools-preview
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ct-verify-${{ matrix.triple }}
+
+      - name: Scope per-target RUSTFLAGS to the cross-build
+        # Cargo applies CARGO_TARGET_<TRIPLE>_RUSTFLAGS only when
+        # building for that target, so the flags reach the fixtures
+        # cross-build without leaking into the host ct-driver compile.
+        if: matrix.extra_rustflags != ''
+        run: |
+          name="CARGO_TARGET_$(echo '${{ matrix.triple }}' | tr 'a-z-' 'A-Z_')_RUSTFLAGS"
+          echo "$name=${{ matrix.extra_rustflags }}" >> "$GITHUB_ENV"
+
+      - name: Run ct-driver
+        run: cargo run --release -p ct-driver -- --target ${{ matrix.triple }} --json-out target/ct-report/${{ matrix.triple }}.json
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ct-report-${{ matrix.triple }}
+          path: target/ct-report/
+          retention-days: 30

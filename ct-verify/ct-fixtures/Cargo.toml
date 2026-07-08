@@ -6,11 +6,21 @@ rust-version = "1.86"
 publish = false
 description = "Inspection fixtures for the modmath CT-verify harness."
 
-# rlib is all the taint layer (ct-ctgrind) needs. The future asm-grep
-# layer adds staticlib + a no_std panic-handler feature; the fixture
-# bodies are written core-only so that flip stays mechanical.
+# staticlib for the asm-grep driver (embedded targets emit a .a we can
+# disassemble without a linker script or runtime); rlib for ct-ctgrind,
+# which links the same symbols as a normal Rust dependency.
 [lib]
-crate-type = ["rlib"]
+crate-type = ["staticlib", "rlib"]
+
+[features]
+default = []
+# no_std + a local #[panic_handler], required for the cross-built
+# staticlib (bare-metal targets have no std to supply one). Deliberately
+# NOT default: ct-ctgrind links this crate into a std binary where a
+# second panic handler would collide, and the asm-grep driver shells out
+# to its own `cargo build --features panic-handler`, so the two builds
+# never share a feature resolution.
+panic-handler = []
 
 [dependencies]
 modmath = { path = "../../modmath" }

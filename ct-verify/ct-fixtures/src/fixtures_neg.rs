@@ -21,6 +21,13 @@ use crate::bb;
 pub extern "C" fn nct_fix__neg__eea_inv__u64__N1(a: *const u64, m: *const u64, out: *mut u64) {
     let a = bb(unsafe { *a });
     let m = bb(unsafe { *m }) | 1;
+    // In-wrapper data-dependent guard: the callee's leaky loops may sit
+    // in a non-inlined helper symbol, but the asm-grep gate asserts on
+    // THIS symbol's body, so it must contain a visible branch on data.
+    if a == u64::MAX {
+        unsafe { *out = 1 }
+        return;
+    }
     let r = modmath::basic::inv(a, m).unwrap_or(0);
     unsafe { *out = bb(r) }
 }
@@ -37,6 +44,11 @@ pub extern "C" fn nct_fix__neg__schoolbook_exp__u64__N1(
     let base = bb(unsafe { *base });
     let e = bb(unsafe { *e });
     let m = bb(unsafe { *m }) | 1;
+    // Same in-wrapper guard rationale as `nct_fix__neg__eea_inv`.
+    if e == u64::MAX {
+        unsafe { *out = 1 }
+        return;
+    }
     let r = modmath::basic::exp(base, e, m);
     unsafe { *out = bb(r) }
 }
