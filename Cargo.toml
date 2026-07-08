@@ -1,4 +1,23 @@
 [workspace]
 resolver="2"
 
-members = ["modmath", "modmath-cios"]
+members = [
+    "modmath",
+    "modmath-cios",
+    "ct-verify/ct-fixtures",
+    "ct-verify/ct-ctgrind",
+]
+
+# Pinned release codegen for the ct-verify gate: the taint verifier must
+# inspect deployment-shaped code (fat LTO inlines every helper into its
+# call site, the way downstream release builds do), and deterministic
+# output means a toolchain bump that perturbs codegen shows up as an
+# explicit, reviewable delta rather than silent drift.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = "z"
+panic = "abort"
+debug = false
+overflow-checks = false
+incremental = false

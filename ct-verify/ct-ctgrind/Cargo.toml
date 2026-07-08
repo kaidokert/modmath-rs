@@ -1,0 +1,29 @@
+[package]
+name = "ct-ctgrind"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.86"
+publish = false
+description = "Valgrind taint-based CT verifier for modmath primitives."
+
+[[bin]]
+name = "ct-ctgrind"
+path = "src/main.rs"
+
+[dependencies]
+# Link the fixtures as a Rust rlib so this binary can call each
+# `extern "C"` symbol directly.
+ct-fixtures = { path = "../ct-fixtures" }
+
+# Distributed-slice collection for the fixture registry.
+inventory = "0.3"
+
+# Identifier concatenation in macros (for `run_<fixture_name>`).
+paste = "1.0"
+
+# Valgrind client-request wrapper, Linux-only (Valgrind itself doesn't
+# support macOS aarch64 or Windows). The driver compiles on every host
+# via stubs in `src/valgrind/stub.rs`, but only Linux can actually run
+# the gate under valgrind.
+[target.'cfg(target_os = "linux")'.dependencies]
+crabgrind = "0.1"
