@@ -98,7 +98,7 @@ pub const TARGETS: &[TargetSpec] = &[
         thumb_it_blocks: false,
         call_mnemonics: mnemonics::RISCV_CALL,
         allowed_helpers: HELPER_ALLOWLIST,
-        extra_allowed_helpers: RISCV32_EXTRA_HELPERS,
+        extra_allowed_helpers: &[],
         extra_cargo_args: &[],
     },
     TargetSpec {
@@ -110,7 +110,7 @@ pub const TARGETS: &[TargetSpec] = &[
         thumb_it_blocks: false,
         call_mnemonics: mnemonics::RISCV_CALL,
         allowed_helpers: HELPER_ALLOWLIST,
-        extra_allowed_helpers: RISCV32_EXTRA_HELPERS,
+        extra_allowed_helpers: &[],
         extra_cargo_args: &[],
     },
     // Priority 4: 8-bit AVR (nightly-only, needs build-std + target-cpu).
@@ -407,32 +407,6 @@ const THUMBV6M_EXTRA_HELPERS: &[&str] = &[
     r"^__clz[sd]i2$",
     r"^__udivmodsi4$",
     r"^__aeabi_l?ls[lr]$",
-];
-
-/// riscv32-specific extras — unlike everything in `HELPER_ALLOWLIST`,
-/// these are NOT public-loop classifications. They are **known
-/// secret-dependent branches**, documented here so the gate stays
-/// honest instead of silently green.
-///
-/// Root cause: `overflowing_add`'s carry flag on u64 carriers. rv32
-/// has no flags register, so LLVM lowers the 64-bit carry-out as an
-/// equality-branch chain (`beq hi', hi` tie-breaking the `sltu`) on
-/// values derived from the operands — which are secret in these
-/// functions' contracts. ARM (adds/adcs) and x86_64/aarch64 (flags)
-/// lower the same source branchlessly, so only rv32 is affected, and
-/// only the primitive-u64-carrier instantiations — the multi-limb
-/// rv32 deployment carrier (`FixedUInt<u32, N, Ct>`) does native
-/// 32-bit arithmetic and is unaffected.
-///
-/// Tracked follow-up: rewrite the wide-REDC carry discipline onto the
-/// `sum.ct_lt(&a)` idiom already used by safegcd's `se_add` and
-/// `Field::add` (pure arithmetic, branchless on every ISA), then
-/// delete this list. Until then, deploying a bare-u64 CT carrier on
-/// rv32 is unsupported.
-const RISCV32_EXTRA_HELPERS: &[&str] = &[
-    r"modmath10montgomery10basic_mont12wide_redc_ct",
-    r"modmath10montgomery10basic_mont13mod_double_ct",
-    r"\$LT\$u64\$u20\$as\$u20\$modmath_cios\.\.CiosRowOps\$GT\$",
 ];
 
 pub fn lookup(triple: &str) -> Option<&'static TargetSpec> {

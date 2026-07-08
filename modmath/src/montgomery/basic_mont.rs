@@ -430,17 +430,22 @@ where
 fn mod_double_ct<T>(val: T, modulus: T) -> T
 where
     T: Copy
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingAdd
         + const_num_traits::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeLess,
 {
-    let (doubled, overflow) = val.overflowing_add(val);
+    let doubled = val.wrapping_add(val);
+    // Wraparound ⇔ sum < operand. subtle's ct_lt is pure mask
+    // arithmetic on every ISA; overflowing_add's carry flag lowers to
+    // an equality-branch chain on targets without a flags register
+    // (riscv32).
+    let overflow = doubled.ct_lt(&val);
     let sub_result = doubled.wrapping_sub(modulus);
     let doubled_ge_modulus = !doubled.ct_lt(&modulus);
-    let needs_sub = Choice::from(overflow as u8) | doubled_ge_modulus;
+    let needs_sub = overflow | doubled_ge_modulus;
     T::conditional_select(&doubled, &sub_result, needs_sub)
 }
 
@@ -509,7 +514,8 @@ where
     T: Copy
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingAdd
+        + const_num_traits::CtIsZero
         + const_num_traits::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -553,7 +559,8 @@ where
     T: Copy
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingAdd
+        + const_num_traits::CtIsZero
         + const_num_traits::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -589,7 +596,8 @@ where
     T: Copy
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingAdd
+        + const_num_traits::CtIsZero
         + const_num_traits::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -631,27 +639,25 @@ where
 /// Same semantics — adds `carry1` to `result` and returns the combined
 /// extra-bit flag — but eliminates the value-dependent branches. The
 /// addition is always performed; the result is selected branchlessly via
-/// `subtle::ConditionallySelectable`. The boolean carry combination uses
-/// bitwise ops (`&`, `|`) on `subtle::Choice` rather than `&&` / `||` so
-/// the new carry computation does not short-circuit on operand value.
+/// `subtle::ConditionallySelectable`. Carries stay `Choice` end to end:
+/// bitwise `&` / `|` never short-circuit, and no `bool` materializes for
+/// the optimizer to re-branch on.
 ///
 /// Called by the CT REDC functions (`wide_redc_ct`, `strict_wide_redc_ct`).
-fn accumulate_high_half_carry_ct<T>(result: T, carry1: bool, carry2: bool) -> (T, bool)
+fn accumulate_high_half_carry_ct<T>(result: T, carry1: Choice, carry2: Choice) -> (T, Choice)
 where
     T: const_num_traits::One
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingAdd
+        + const_num_traits::CtIsZero
         + core::ops::Add<Output = T>
         + subtle::ConditionallySelectable,
 {
-    let c1 = Choice::from(carry1 as u8);
-    let c2 = Choice::from(carry2 as u8);
-    // Always compute the addition; branchlessly choose whether to keep it.
-    let (r2, carry3) = result.overflowing_add(T::one());
-    let c3 = Choice::from(carry3 as u8);
-    let chosen = T::conditional_select(&result, &r2, c1);
-    // new_carry = carry2 | (carry1 & carry3) — bitwise, no short-circuit.
-    let new_carry: bool = (c2 | (c1 & c3)).into();
-    (chosen, new_carry)
+    // Always compute the addition; branchlessly choose whether to keep
+    // it. `+1` wraps ⇔ the sum is zero — no overflow flag needed.
+    let r2 = result.wrapping_add(T::one());
+    let carry3 = r2.ct_is_zero();
+    let chosen = T::conditional_select(&result, &r2, carry1);
+    (chosen, carry2 | (carry1 & carry3))
 }
 
 /// REDC on a double-width input (t_lo, t_hi) — variable-time.
@@ -756,7 +762,8 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingAdd
+        + const_num_traits::CtIsZero
         + const_num_traits::WrappingMul
         + const_num_traits::WrappingSub
         + core::ops::Add<Output = T>
@@ -767,14 +774,19 @@ where
 {
     let m = t_lo.wrapping_mul(n_prime);
     let (m_lo, m_hi) = m.wide_mul(&modulus);
-    let (_discard_lo, carry1) = t_lo.overflowing_add(m_lo);
-    let (result, carry2) = t_hi.overflowing_add(m_hi);
+    // Carries via ct_lt (wraparound ⇔ sum < operand): overflowing_add's
+    // flag lowers to an equality-branch chain on targets without a
+    // flags register (riscv32).
+    let sum_lo = t_lo.wrapping_add(m_lo);
+    let carry1 = sum_lo.ct_lt(&t_lo);
+    let result = t_hi.wrapping_add(m_hi);
+    let carry2 = result.ct_lt(&t_hi);
     let (result, extra_bit) = accumulate_high_half_carry_ct(result, carry1, carry2);
 
     // Branchless final reduction: needs_sub = extra_bit | !(result < modulus)
     let sub_result = result.wrapping_sub(modulus);
     let result_lt_modulus = result.ct_lt(&modulus);
-    let needs_sub = Choice::from(extra_bit as u8) | !result_lt_modulus;
+    let needs_sub = extra_bit | !result_lt_modulus;
     T::conditional_select(&result, &sub_result, needs_sub)
 }
 
@@ -789,7 +801,8 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingAdd
+        + const_num_traits::CtIsZero
         + const_num_traits::WrappingMul
         + const_num_traits::WrappingSub
         + core::ops::Add<Output = T>
@@ -800,13 +813,16 @@ where
 {
     let m = (*t_lo).wrapping_mul(*n_prime);
     let (m_lo, m_hi) = m.wide_mul(modulus);
-    let (_discard_lo, carry1) = (*t_lo).overflowing_add(m_lo);
-    let (result, carry2) = (*t_hi).overflowing_add(m_hi);
+    // Carry idiom rationale in `wide_redc_ct`.
+    let sum_lo = (*t_lo).wrapping_add(m_lo);
+    let carry1 = sum_lo.ct_lt(t_lo);
+    let result = (*t_hi).wrapping_add(m_hi);
+    let carry2 = result.ct_lt(t_hi);
     let (result, extra_bit) = accumulate_high_half_carry_ct(result, carry1, carry2);
 
     let sub_result = result.wrapping_sub(*modulus);
     let result_lt_modulus = result.ct_lt(modulus);
-    let needs_sub = Choice::from(extra_bit as u8) | !result_lt_modulus;
+    let needs_sub = extra_bit | !result_lt_modulus;
     T::conditional_select(&result, &sub_result, needs_sub)
 }
 
@@ -843,7 +859,8 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingAdd
+        + const_num_traits::CtIsZero
         + const_num_traits::WrappingMul
         + const_num_traits::WrappingSub
         + core::ops::Add<Output = T>
@@ -890,7 +907,8 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingAdd
+        + const_num_traits::CtIsZero
         + const_num_traits::WrappingMul
         + const_num_traits::WrappingSub
         + core::ops::Add<Output = T>
@@ -948,15 +966,19 @@ where
     T: Copy
         + const_num_traits::One
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingAdd
+        + subtle::ConstantTimeLess
         + core::ops::Add<Output = T>
         + subtle::ConditionallySelectable,
 {
     let (m_lo, m_hi) = a.wide_mul(&b);
-    let (new_lo, carry1) = acc_lo.overflowing_add(m_lo);
-    let (sum_hi, _) = acc_hi.overflowing_add(m_hi);
-    let (r, _) = sum_hi.overflowing_add(T::one());
-    let new_hi = T::conditional_select(&sum_hi, &r, subtle::Choice::from(carry1 as u8));
+    // Carry idiom rationale in `wide_redc_ct`; the two adds whose
+    // flags were discarded are plain wrapping adds.
+    let new_lo = acc_lo.wrapping_add(m_lo);
+    let carry1 = new_lo.ct_lt(&acc_lo);
+    let sum_hi = acc_hi.wrapping_add(m_hi);
+    let r = sum_hi.wrapping_add(T::one());
+    let new_hi = T::conditional_select(&sum_hi, &r, carry1);
     (new_lo, new_hi)
 }
 
@@ -994,15 +1016,18 @@ where
     T: Copy
         + const_num_traits::One
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::WrappingAdd
+        + subtle::ConstantTimeLess
         + core::ops::Add<Output = T>
         + subtle::ConditionallySelectable,
 {
     let (m_lo, m_hi) = a.wide_mul(b);
-    let (new_lo, carry1) = (*acc_lo).overflowing_add(m_lo);
-    let (sum_hi, _) = (*acc_hi).overflowing_add(m_hi);
-    let (r, _) = sum_hi.overflowing_add(T::one());
-    let new_hi = T::conditional_select(&sum_hi, &r, subtle::Choice::from(carry1 as u8));
+    // Carry idiom rationale in `wide_redc_ct`.
+    let new_lo = (*acc_lo).wrapping_add(m_lo);
+    let carry1 = new_lo.ct_lt(acc_lo);
+    let sum_hi = (*acc_hi).wrapping_add(m_hi);
+    let r = sum_hi.wrapping_add(T::one());
+    let new_hi = T::conditional_select(&sum_hi, &r, carry1);
     (new_lo, new_hi)
 }
 
@@ -1299,9 +1324,9 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::WrappingMul
         + const_num_traits::WrappingAdd
+        + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::WrappingSub
         + const_num_traits::CtIsZero
         + Parity
@@ -1359,9 +1384,9 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::WrappingMul
         + const_num_traits::WrappingAdd
+        + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::WrappingSub
         + const_num_traits::CtIsZero
         + Parity
@@ -2285,7 +2310,12 @@ mod tests {
             for &carry1 in &[false, true] {
                 for &carry2 in &[false, true] {
                     let nct = accumulate_high_half_carry(result, carry1, carry2);
-                    let ct = accumulate_high_half_carry_ct(result, carry1, carry2);
+                    let ct = accumulate_high_half_carry_ct(
+                        result,
+                        Choice::from(carry1 as u8),
+                        Choice::from(carry2 as u8),
+                    );
+                    let ct = (ct.0, bool::from(ct.1));
                     assert_eq!(
                         nct, ct,
                         "mismatch at result={result} carry1={carry1} carry2={carry2}"

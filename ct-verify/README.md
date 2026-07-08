@@ -36,11 +36,11 @@ Three members:
   `divsteps_total` steps) compile to branchful-but-CT-safe counter
   loops that static pattern-matching can't classify; those helpers are
   allowlisted per symbol in `ct-driver/src/target.rs` with the
-  source-semantic justification inline. The riscv32 extras list is
-  different in kind — it documents **known secret-dependent branches**
-  (`overflowing_add`'s u64 carry flag lowers to an equality-branch
-  chain on an ISA with no flags register) deferred to a library
-  follow-up; bare-u64 CT carriers on rv32 are unsupported until then.
+  source-semantic justification inline. Carry detection throughout the
+  CT wide-REDC path uses the `sum.ct_lt(&a)` idiom rather than
+  `overflowing_add` — the overflow flag's materialization lowers to
+  equality-branch chains on ISAs without a flags register (riscv32),
+  which is how this gate caught the original findings there.
 
 Which inputs are tainted mirrors each entry's documented secrecy
 contract, not a blanket "everything is secret": the wide-mul/REDC and
