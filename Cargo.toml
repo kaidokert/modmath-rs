@@ -6,6 +6,7 @@ members = [
     "modmath-cios",
     "ct-verify/ct-fixtures",
     "ct-verify/ct-ctgrind",
+    "ct-verify/ct-driver",
 ]
 
 # Bare `cargo build` (and the CI cross-compiles to thumb targets) should

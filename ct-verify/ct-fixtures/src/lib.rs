@@ -39,6 +39,7 @@
 //! check inside (`Odd::new_ct` / `try_new_odd_ct`) branches on a defined
 //! bit and the rest of the modulus stays tainted.
 
+#![cfg_attr(feature = "panic-handler", no_std)]
 #![allow(non_snake_case)]
 // The raw-pointer ABI is the harness contract; the only callers are the
 // generated ct-ctgrind wrappers, which always pass valid buffers. Marking
@@ -56,6 +57,14 @@ mod fixtures_neg;
 /// from the link line and the `extern "C"` fixture symbols come back
 /// undefined.
 pub fn link_anchor() {}
+
+// Only under the `panic-handler` feature (cross-built staticlib): std
+// consumers (ct-ctgrind) supply their own and the two would collide.
+#[cfg(feature = "panic-handler")]
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
 
 /// The load-bearing opacifier. See the module docs.
 #[inline(always)]

@@ -103,12 +103,16 @@ where
 /// Constant-time `delta > 0` for the i64 state variable.
 #[inline]
 fn ct_i64_positive(delta: i64) -> Choice {
-    let delta_u = delta as u64;
-    // nonzero = ((x | -x) >> 63) — top bit set iff x != 0
-    let nonzero_top = (delta_u | delta_u.wrapping_neg()) >> 63;
-    // sign_bit_clear = 1 iff x's high bit is 0 (i.e. x >= 0 as i64)
-    let sign_bit_clear = (!delta_u) >> 63;
-    Choice::from(((nonzero_top & sign_bit_clear) & 1) as u8)
+    // delta > 0  ⟺  delta - 1 >= 0  ⟺  sign bit of (delta - 1) clear.
+    // A single sign-bit extraction lowers to one shift of the high
+    // word on every target. The composite form (`nonzero AND
+    // nonnegative`) is canonicalized by LLVM into a full 64-bit
+    // `icmp sgt`, which ISAs without conditional select (thumbv6m)
+    // materialize as a branch on the secret-trajectory delta. delta is
+    // bounded by ±(divsteps + 1), so the subtraction cannot wrap.
+    let sign_clear = (!(delta.wrapping_sub(1) as u64)) >> 63;
+    // Opacified so a later LLVM pass can't re-derive the comparison.
+    Choice::from(core::hint::black_box(sign_clear) as u8)
 }
 
 /// Two's-complement signed value spanning `T` plus one extension word.
