@@ -1,0 +1,28 @@
+[package]
+name = "panic-free-audit"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.86"
+publish = false
+description = "Linker-DCE audit: confirm modmath's CT surface synthesizes no panic symbols."
+
+[lib]
+# staticlib so a cross-target build produces a `.a` that llvm-nm can
+# read without needing a linker script or runtime. Same shape as
+# `ct-verify/ct-fixtures`.
+crate-type = ["staticlib"]
+
+[features]
+default = []
+# See lib.rs — enabled by check.sh for the cross-built staticlib.
+panic-handler = []
+
+[dependencies]
+modmath = { path = "../../modmath" }
+# Registry, not path — same trait-identity rationale as ct-fixtures.
+fixed-bigint = { version = "0.4", default-features = false, features = ["cios"] }
+const-num-traits = { version = "0.1.1", default-features = false, features = ["ct"] }
+subtle = { version = "2.6", default-features = false }
+
+# Workspace `[profile.release]` (lto=fat, codegen-units=1, opt-level=z,
+# panic=abort) is what makes DCE worth measuring; do not override here.

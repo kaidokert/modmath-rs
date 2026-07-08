@@ -297,8 +297,13 @@ where
     let n_bits = value.word_count() * core::mem::size_of::<T::Word>() * 8;
     let total_steps = divsteps_total(n_bits);
     // Loop invariants for se_shr1 / half_mod_ct — hoisted so each
-    // divstep doesn't redo a full-width shift.
-    let top_bit_mask = T::one() << (n_bits - 1);
+    // divstep doesn't redo a full-width shift. The mask is MAX − (MAX
+    // >> 1) rather than `one << (n_bits − 1)`: a runtime shift amount
+    // defeats const-folding through multi-limb Shl impls, keeping
+    // their index bounds-check panic path alive post-LTO (flagged by
+    // the panic-free audit); a constant-amount shift folds clean.
+    let max = T::zero().wrapping_sub(T::one());
+    let top_bit_mask = max.wrapping_sub(max.clone() >> 1);
     let m_half = modulus.clone() >> 1;
 
     let mut f = SignedExt {

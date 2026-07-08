@@ -88,3 +88,37 @@ jobs:
           name: ct-report-${{ matrix.triple }}
           path: target/ct-report/
           retention-days: 30
+
+  # A reachable panic in CT code is both a DoS edge and a timing oracle
+  # (the formatting path's cost depends on the values being formatted).
+  # Two representative ISAs; the property is codegen-level, not
+  # per-target.
+  panic-audit:
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        triple:
+          - thumbv7m-none-eabi
+          - riscv32imc-unknown-none-elf
+    runs-on: ubuntu-latest
+    name: panic-audit ${{ matrix.triple }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86"
+          targets: ${{ matrix.triple }}
+          components: llvm-tools-preview
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: panic-audit-${{ matrix.triple }}
+
+      - name: Run panic-free audit
+        run: ./ct-verify/panic-free-audit/check.sh ${{ matrix.triple }}
