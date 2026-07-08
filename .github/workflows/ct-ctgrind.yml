@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: CT Ctgrind
+
+on:
+    push:
+      branches:
+        - main
+        - 'feature/**'
+    pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  ctgrind:
+    # Valgrind runs 10-100x slower than native; a fixture stuck in a
+    # loop should fail the job, not burn the 6h Actions default.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # x86_64 gets +lzcnt (BMI1) so bit-count intrinsics lower to
+          # single unconditional instructions instead of the baseline
+          # `test/je/bsr` sequence, whose `je` (handling bsr's
+          # undefined-on-zero case) is a data-dependent branch inside
+          # the std intrinsic that no library-side fix can remove. BMI1
+          # is on Haswell+ (2013) and every GitHub Actions x86_64
+          # runner. aarch64 has unconditional CLZ in the base ISA.
+          - runner: ubuntu-latest
+            arch: x86_64-linux
+            target: x86_64-unknown-linux-gnu
+            rustflags: "-C target-feature=+lzcnt,+bmi1"
+          - runner: ubuntu-24.04-arm
+            arch: aarch64-linux
+            target: aarch64-unknown-linux-gnu
+            rustflags: ""
+    name: ${{ matrix.arch }} ctgrind
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86"
+          targets: ${{ matrix.target }}
+
+      - name: Install Valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ct-ctgrind-${{ matrix.arch }}
+
+      - name: Build ct-ctgrind
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo build --release -p ct-ctgrind
+
+      - name: Run under Valgrind
+        # --error-exitcode=0 hands exit control back to the binary, which
+        # decides pass/fail from per-fixture error-counter deltas. -q hides
+        # Valgrind's own preamble; per-error reports still print.
+        # --error-limit=no keeps the counter honest — memcheck's default
+        # caps would freeze it and turn later fixtures into false passes.
+        run: valgrind --tool=memcheck --error-limit=no --error-exitcode=0 -q target/release/ct-ctgrind

@@ -1,4 +1,31 @@
 [workspace]
 resolver="2"
 
-members = ["modmath", "modmath-cios"]
+members = [
+    "modmath",
+    "modmath-cios",
+    "ct-verify/ct-fixtures",
+    "ct-verify/ct-ctgrind",
+]
+
+# Bare `cargo build` (and the CI cross-compiles to thumb targets) should
+# build the library crates only — the ct-verify harness is host-side std
+# tooling. Workspace-wide commands (`--workspace`, `-p ct-ctgrind`) still
+# reach it explicitly.
+default-members = ["modmath", "modmath-cios"]
+
+# Pinned release codegen for the ct-verify gate: the taint verifier must
+# inspect deployment-shaped code (fat LTO inlines every helper into its
+# call site, the way downstream release builds do), and deterministic
+# output means a toolchain bump that perturbs codegen shows up as an
+# explicit, reviewable delta rather than silent drift.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = "z"
+panic = "abort"
+# Line tables (not full DWARF) don't perturb codegen and let Valgrind
+# resolve taint violations to source lines instead of bare symbols.
+debug = "line-tables-only"
+overflow-checks = false
+incremental = false
