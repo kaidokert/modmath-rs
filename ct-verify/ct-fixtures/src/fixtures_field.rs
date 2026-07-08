@@ -21,7 +21,7 @@ use modmath::Field;
 
 type Fb256 = FixedUInt<u32, 8, Ct>;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__field_inv_safegcd__u64__N1(m: *const u64, v: *const u64) -> u8 {
     let m = bb(unsafe { *m }) | 1;
     let v = bb(unsafe { *v });
@@ -31,7 +31,7 @@ pub extern "C" fn ct_fix__field_inv_safegcd__u64__N1(m: *const u64, v: *const u6
     bb(inv.is_some().unwrap_u8())
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__field_inv_safegcd__fb32__N8(
     m: *const [u32; 8],
     v: *const [u32; 8],
@@ -47,7 +47,7 @@ pub extern "C" fn ct_fix__field_inv_safegcd__fb32__N8(
 
 /// The RSA-blinding-shaped flow: secret modulus precompute → reduce →
 /// CT ladder exp → CT inverse → back to raw. One fixture, every stage.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__field_blind_path__fb32__N8(
     m: *const [u32; 8],
     x: *const [u32; 8],
@@ -69,7 +69,7 @@ pub extern "C" fn ct_fix__field_blind_path__fb32__N8(
 
 /// Ladder-support primitives: `Residue::cswap` on a tainted choice plus
 /// `Residue::ct_eq` on the swapped values.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__field_cswap_eq__fb32__N8(
     m: *const [u32; 8],
     a: *const [u32; 8],

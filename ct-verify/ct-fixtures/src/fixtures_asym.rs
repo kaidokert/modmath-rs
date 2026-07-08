@@ -31,7 +31,7 @@ const M256: [u32; 8] = [
 
 /// Public modulus, secret value — the plain-RSA blinding shape (modulus
 /// is the public N; the blinding factor is secret).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__ASYM__field_inv_safegcd_public_m__u64__N1(v: *const u64) -> u8 {
     let v = bb(unsafe { *v });
     let f = Field::<u64, Ct>::try_new_odd_ct(M64).unwrap();
@@ -42,7 +42,7 @@ pub extern "C" fn ct_fix__ASYM__field_inv_safegcd_public_m__u64__N1(v: *const u6
 
 /// Public modulus and base, secret exponent — the classic ladder-leak
 /// shape (fixed-base exponentiation with a private exponent).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__ASYM__field_exp_secret_e__fb32__N8(
     e: *const [u32; 8],
     out: *mut [u32; 8],
@@ -57,7 +57,7 @@ pub extern "C" fn ct_fix__ASYM__field_exp_secret_e__fb32__N8(
 /// Constant residues, secret swap flag. Exercises the
 /// `conditional_swap` path with everything except the flag visible to
 /// the optimizer.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__ASYM__field_cswap_choice__fb32__N8(
     choice: *const u8,
     out: *mut [u32; 8],

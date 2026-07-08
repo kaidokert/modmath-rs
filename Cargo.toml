@@ -8,6 +8,12 @@ members = [
     "ct-verify/ct-ctgrind",
 ]
 
+# Bare `cargo build` (and the CI cross-compiles to thumb targets) should
+# build the library crates only — the ct-verify harness is host-side std
+# tooling. Workspace-wide commands (`--workspace`, `-p ct-ctgrind`) still
+# reach it explicitly.
+default-members = ["modmath", "modmath-cios"]
+
 # Pinned release codegen for the ct-verify gate: the taint verifier must
 # inspect deployment-shaped code (fat LTO inlines every helper into its
 # call site, the way downstream release builds do), and deterministic

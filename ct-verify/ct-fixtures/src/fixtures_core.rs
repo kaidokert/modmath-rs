@@ -16,7 +16,7 @@ use modmath::basic::montgomery::wide::ct as wide_ct;
 
 type Fb256 = FixedUInt<u32, 8, Ct>;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__wide_mont_mul__u64__N1(
     a: *const u64,
     b: *const u64,
@@ -32,7 +32,7 @@ pub extern "C" fn ct_fix__wide_mont_mul__u64__N1(
     unsafe { *out = bb(r) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__wide_redc__u64__N1(
     t_lo: *const u64,
     t_hi: *const u64,
@@ -48,7 +48,7 @@ pub extern "C" fn ct_fix__wide_redc__u64__N1(
     unsafe { *out = bb(r) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__cios_mont_mul__u64__N1(
     a: *const u64,
     b: *const u64,
@@ -64,7 +64,7 @@ pub extern "C" fn ct_fix__cios_mont_mul__u64__N1(
     unsafe { *out = bb(r) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__cios_mont_mul__fb32__N8(
     a: *const [u32; 8],
     b: *const [u32; 8],
@@ -82,7 +82,7 @@ pub extern "C" fn ct_fix__cios_mont_mul__fb32__N8(
     unsafe { *out = bb(*r.words()) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__mod_exp_pr_odd__u64__N1(
     base: *const u64,
     e: *const u64,
@@ -98,7 +98,7 @@ pub extern "C" fn ct_fix__mod_exp_pr_odd__u64__N1(
     unsafe { *out = bb(r) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__mod_exp_pr_odd__fb32__N8(
     base: *const [u32; 8],
     e: *const [u32; 8],

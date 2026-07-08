@@ -16,7 +16,7 @@ use core::hint::black_box;
 
 macro_rules! quad_u64 {
     ($name:ident) => {
-        extern "C" {
+        unsafe extern "C" {
             fn $name(a: *const u64, b: *const u64, m: *const u64, np: *const u64, out: *mut u64);
         }
         ctgrind_fixture!($name, {
@@ -39,7 +39,7 @@ quad_u64!(ct_fix__cios_mont_mul__u64__N1);
 
 macro_rules! tri_u64 {
     ($name:ident) => {
-        extern "C" {
+        unsafe extern "C" {
             fn $name(a: *const u64, b: *const u64, c: *const u64, out: *mut u64);
         }
         ctgrind_fixture!($name, {
@@ -61,7 +61,7 @@ macro_rules! tri_u64 {
 // modulus magnitude). Tainting the modulus here flags that precompute,
 // which the contract explicitly permits; secret-modulus exponentiation
 // is covered by the `Field::try_new_odd_ct`-based fixtures instead.
-extern "C" {
+unsafe extern "C" {
     fn ct_fix__mod_exp_pr_odd__u64__N1(
         base: *const u64,
         e: *const u64,
@@ -79,7 +79,7 @@ ctgrind_fixture!(ct_fix__mod_exp_pr_odd__u64__N1, {
     let _ = black_box(out);
 });
 
-extern "C" {
+unsafe extern "C" {
     fn ct_fix__field_inv_safegcd__u64__N1(m: *const u64, v: *const u64) -> u8;
 }
 ctgrind_fixture!(ct_fix__field_inv_safegcd__u64__N1, {
@@ -97,7 +97,7 @@ ctgrind_fixture!(ct_fix__field_inv_safegcd__u64__N1, {
 
 type W8 = [u32; 8];
 
-extern "C" {
+unsafe extern "C" {
     fn ct_fix__cios_mont_mul__fb32__N8(
         a: *const W8,
         b: *const W8,
@@ -118,7 +118,7 @@ ctgrind_fixture!(ct_fix__cios_mont_mul__fb32__N8, {
     let _ = black_box(out);
 });
 
-extern "C" {
+unsafe extern "C" {
     fn ct_fix__mod_exp_pr_odd__fb32__N8(base: *const W8, e: *const W8, m: *const W8, out: *mut W8);
 }
 // Modulus untainted — same public-modulus contract as the u64 variant
@@ -137,7 +137,7 @@ ctgrind_fixture!(ct_fix__mod_exp_pr_odd__fb32__N8, {
 // Field typestate flows.
 // ============================================================================
 
-extern "C" {
+unsafe extern "C" {
     fn ct_fix__field_inv_safegcd__fb32__N8(m: *const W8, v: *const W8) -> u8;
 }
 ctgrind_fixture!(ct_fix__field_inv_safegcd__fb32__N8, {
@@ -149,7 +149,7 @@ ctgrind_fixture!(ct_fix__field_inv_safegcd__fb32__N8, {
     let _ = black_box(r);
 });
 
-extern "C" {
+unsafe extern "C" {
     fn ct_fix__field_blind_path__fb32__N8(
         m: *const W8,
         x: *const W8,
@@ -170,7 +170,7 @@ ctgrind_fixture!(ct_fix__field_blind_path__fb32__N8, {
     let _ = black_box(r);
 });
 
-extern "C" {
+unsafe extern "C" {
     fn ct_fix__field_cswap_eq__fb32__N8(
         m: *const W8,
         a: *const W8,
@@ -199,7 +199,7 @@ ctgrind_fixture!(ct_fix__field_cswap_eq__fb32__N8, {
 // operands are constants on the symbol side.
 // ============================================================================
 
-extern "C" {
+unsafe extern "C" {
     fn ct_fix__ASYM__field_inv_safegcd_public_m__u64__N1(v: *const u64) -> u8;
 }
 ctgrind_fixture!(ct_fix__ASYM__field_inv_safegcd_public_m__u64__N1, {
@@ -210,7 +210,7 @@ ctgrind_fixture!(ct_fix__ASYM__field_inv_safegcd_public_m__u64__N1, {
     let _ = black_box(r);
 });
 
-extern "C" {
+unsafe extern "C" {
     fn ct_fix__ASYM__field_exp_secret_e__fb32__N8(e: *const W8, out: *mut W8);
 }
 ctgrind_fixture!(ct_fix__ASYM__field_exp_secret_e__fb32__N8, {
@@ -222,7 +222,7 @@ ctgrind_fixture!(ct_fix__ASYM__field_exp_secret_e__fb32__N8, {
     let _ = black_box(out);
 });
 
-extern "C" {
+unsafe extern "C" {
     fn ct_fix__ASYM__field_cswap_choice__fb32__N8(choice: *const u8, out: *mut W8);
 }
 ctgrind_fixture!(ct_fix__ASYM__field_cswap_choice__fb32__N8, {
@@ -238,7 +238,7 @@ ctgrind_fixture!(ct_fix__ASYM__field_cswap_choice__fb32__N8, {
 // Negative controls.
 // ============================================================================
 
-extern "C" {
+unsafe extern "C" {
     fn nct_fix__neg__eea_inv__u64__N1(a: *const u64, m: *const u64, out: *mut u64);
 }
 ctgrind_fixture!(nct_fix__neg__eea_inv__u64__N1, {
@@ -253,7 +253,7 @@ ctgrind_fixture!(nct_fix__neg__eea_inv__u64__N1, {
 
 tri_u64!(nct_fix__neg__schoolbook_exp__u64__N1);
 
-extern "C" {
+unsafe extern "C" {
     fn nct_fix__neg__table_lookup__u64__N1(a: *const u64, out: *mut u64);
 }
 ctgrind_fixture!(nct_fix__neg__table_lookup__u64__N1, {
