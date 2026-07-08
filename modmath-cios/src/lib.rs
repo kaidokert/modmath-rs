@@ -91,9 +91,16 @@ macro_rules! impl_cios_row_ops_primitive {
                 let product = (scalar as $wide) * (*multiplicand as $wide);
                 let total = (*acc as $wide) + product;
                 let total_hi = total >> $bits;
-                let (sum, carry) = total_hi.overflowing_add(acc_hi as $wide);
+                // No carry handling: by the operand types, product is at
+                // most (2^b-1)^2, so total <= 2^2b - 2^b and total_hi <=
+                // 2^b - 1; adding acc_hi (<= 2^b - 1) stays below 2^(b+1),
+                // which cannot wrap the $wide type. The overflowing_add
+                // this replaces guarded an impossible case, and its carry
+                // flag lowered to a data-dependent branch on targets
+                // without a flags register (riscv32).
+                let sum = total_hi + (acc_hi as $wide);
                 *acc = sum as $narrow;
-                ((sum >> $bits) as $narrow) + if carry { 1 } else { 0 }
+                (sum >> $bits) as $narrow
             }
         }
     };
