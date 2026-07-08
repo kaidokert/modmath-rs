@@ -10,7 +10,7 @@ where Valgrind does; asm-grep runs on every cross target and catches
 data-dependent branches that only materialize in a particular ISA's
 lowering (no conditional select, no flags register).
 
-Three members:
+Four members:
 
 - **`ct-fixtures`** — one `#[no_mangle] pub extern "C"` symbol per
   (CT entry point, carrier) pair, `core::hint::black_box` at both ends
@@ -41,6 +41,15 @@ Three members:
   `overflowing_add` — the overflow flag's materialization lowers to
   equality-branch chains on ISAs without a flags register (riscv32),
   which is how this gate caught the original findings there.
+- **`panic-free-audit`** — `#[no_mangle]` wrappers over the CT surface
+  shaped like a deployed consumer: no `unwrap`, `Odd::new_unchecked` at
+  the trust boundary, `CtOption` results observed through `black_box`
+  instead of extracted. `check.sh` cross-builds the staticlib and
+  asserts no `core::panicking` machinery was synthesized — for CT code
+  a reachable panic is both a DoS edge and a timing oracle. Its first
+  run caught a live one: safegcd's runtime-amount `one << (n_bits − 1)`
+  kept the multi-limb shift impl's bounds-check panic alive through
+  LTO.
 
 Which inputs are tainted mirrors each entry's documented secrecy
 contract, not a blanket "everything is secret": the wide-mul/REDC and
