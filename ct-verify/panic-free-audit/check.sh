@@ -13,14 +13,16 @@ set -eu
 TARGET="${1:-thumbv7m-none-eabi}"
 HOST="$(rustc -vV | sed -n 's/^host: //p')"
 NM="$(rustc --print sysroot)/lib/rustlib/${HOST}/bin/llvm-nm"
-ARCHIVE="target/${TARGET}/release/libpanic_free_audit.a"
+TARGET_DIR="${CARGO_TARGET_DIR:-target}"
+ARCHIVE="${TARGET_DIR}/${TARGET}/release/libpanic_free_audit.a"
 
-cargo build --release -p panic-free-audit --features panic-handler --target "$TARGET"
-
+# Tooling check before the build — cargo is the expensive step.
 if [ ! -x "$NM" ]; then
     echo "error: llvm-nm not found at $NM (install the llvm-tools-preview component)" >&2
     exit 2
 fi
+
+cargo build --release -p panic-free-audit --features panic-handler --target "$TARGET"
 
 FOUND="$("$NM" "$ARCHIVE" | grep -E 'core9panicking|panic_fmt|unwrap_failed|expect_failed|panic_bounds_check|slice_(start|end)_index' || true)"
 if [ -n "$FOUND" ]; then
