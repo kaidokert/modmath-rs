@@ -359,7 +359,7 @@ fn llvm_objdump_path() -> Result<PathBuf, String> {
                 .join("rustlib")
                 .join(&host)
                 .join("bin")
-                .join("llvm-objdump");
+                .join(format!("llvm-objdump{}", std::env::consts::EXE_SUFFIX));
             if candidate.exists() {
                 return Ok(candidate);
             }
@@ -377,7 +377,6 @@ fn run_objdump(spec: &TargetSpec, archive: &Path) -> Result<String, String> {
     let mut cmd = Command::new(&tool);
     cmd.arg("--disassemble")
         .arg("--no-show-raw-insn")
-        .arg("--no-leading-addr")
         // `-r` interleaves relocation entries with the disassembly. The
         // reachability walker reads these to resolve `bl` / `call` /
         // `jal` targets — in a static archive they're unresolved at
