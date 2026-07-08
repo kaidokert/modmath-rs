@@ -12,7 +12,7 @@
 #       -e CARGO_TARGET_DIR=/work/target/docker \
 #       ct-ctgrind-dev \
 #       bash -c "cargo build --release -p ct-ctgrind && \
-#                valgrind --tool=memcheck --error-exitcode=0 -q \
+#                valgrind --tool=memcheck --error-limit=no --error-exitcode=0 -q \
 #                  target/docker/release/ct-ctgrind"
 #
 # Matches the CI image (ubuntu-latest = 24.04) so Valgrind versions and

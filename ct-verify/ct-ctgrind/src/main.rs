@@ -6,10 +6,13 @@
 //! bytes. The driver reads Valgrind's error counter between fixtures to
 //! attribute violations.
 //!
-//! Run as: `valgrind --tool=memcheck --error-exitcode=0 ct-ctgrind`.
+//! Run as: `valgrind --tool=memcheck --error-limit=no --error-exitcode=0 ct-ctgrind`.
 //! `--error-exitcode=0` is important — we want Valgrind to NOT set the
 //! process exit code, because we decide pass/fail ourselves based on
-//! which fixtures (positive or negative) tripped.
+//! which fixtures (positive or negative) tripped. `--error-limit=no` is
+//! equally load-bearing: memcheck stops collecting after 1,000 distinct
+//! error contexts (or 10M total), and a saturated counter would make
+//! every later fixture read as clean — false passes.
 
 use std::process::ExitCode;
 
@@ -40,7 +43,7 @@ fn main() -> ExitCode {
     if !valgrind::is_under_valgrind() {
         eprintln!(
             "error: ct-ctgrind must be run under valgrind \
-             (e.g. `valgrind --tool=memcheck --error-exitcode=0 ct-ctgrind`)"
+             (e.g. `valgrind --tool=memcheck --error-limit=no --error-exitcode=0 ct-ctgrind`)"
         );
         return ExitCode::from(2);
     }
@@ -51,7 +54,12 @@ fn main() -> ExitCode {
     let mut neg_no_trip: Vec<&'static str> = Vec::new();
     let mut unclassified: Vec<&'static str> = Vec::new();
 
-    for fixture in inventory::iter::<Fixture>() {
+    // inventory's iteration order is link-dependent; sort so reports
+    // are comparable across runs and platforms.
+    let mut fixtures: Vec<&Fixture> = inventory::iter::<Fixture>().collect();
+    fixtures.sort_by_key(|f| f.name);
+
+    for fixture in fixtures {
         let before = valgrind::count_errors();
         (fixture.run)();
         let after = valgrind::count_errors();

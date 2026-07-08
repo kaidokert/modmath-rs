@@ -36,9 +36,9 @@ rustdoc first and encode exactly the secrecy it promises.
 
 On a Linux host:
 
-```
+```bash
 cargo build --release -p ct-ctgrind
-valgrind --tool=memcheck --error-exitcode=0 -q target/release/ct-ctgrind
+valgrind --tool=memcheck --error-limit=no --error-exitcode=0 -q target/release/ct-ctgrind
 ```
 
 On macOS (no Valgrind), use the Docker image — see

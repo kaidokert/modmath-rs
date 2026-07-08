@@ -24,6 +24,8 @@ lto = "fat"
 codegen-units = 1
 opt-level = "z"
 panic = "abort"
-debug = false
+# Line tables (not full DWARF) don't perturb codegen and let Valgrind
+# resolve taint violations to source lines instead of bare symbols.
+debug = "line-tables-only"
 overflow-checks = false
 incremental = false

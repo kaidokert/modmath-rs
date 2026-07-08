@@ -12,8 +12,14 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
 jobs:
   ctgrind:
+    # Valgrind runs 10-100x slower than native; a fixture stuck in a
+    # loop should fail the job, not burn the 6h Actions default.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -63,4 +69,6 @@ jobs:
         # --error-exitcode=0 hands exit control back to the binary, which
         # decides pass/fail from per-fixture error-counter deltas. -q hides
         # Valgrind's own preamble; per-error reports still print.
-        run: valgrind --tool=memcheck --error-exitcode=0 -q target/release/ct-ctgrind
+        # --error-limit=no keeps the counter honest — memcheck's default
+        # caps would freeze it and turn later fixtures into false passes.
+        run: valgrind --tool=memcheck --error-limit=no --error-exitcode=0 -q target/release/ct-ctgrind
