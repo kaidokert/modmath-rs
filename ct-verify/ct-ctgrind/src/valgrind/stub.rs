@@ -1,5 +1,4 @@
-//! Non-Linux stubs. Lets cargo build succeed; actual verification is
-//! Linux-only because Valgrind doesn't run elsewhere.
+//! Non-Linux no-op stubs — see the parent module for the rationale.
 
 pub fn is_under_valgrind() -> bool {
     false

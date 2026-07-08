@@ -1,10 +1,9 @@
 # ct-verify
 
 Runtime taint verification for modmath's constant-time surface,
-instantiating the pattern from fixed-bigint's `ct-verify/` harness
-(see `notes/CONSTANT_TIME_HARDENING_PLAN.md` for the full roadmap —
-this directory is its first phase; the cross-target asm-grep layer
-comes later).
+instantiating the pattern from fixed-bigint's `ct-verify/` harness.
+This directory is the runtime-taint layer; a cross-target asm-grep
+layer comes later.
 
 Two members:
 

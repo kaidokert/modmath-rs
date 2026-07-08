@@ -33,9 +33,9 @@ pub(crate) use ctgrind_fixture;
 // ============================================================================
 
 pub fn taint_val<T>(v: &T) {
-    crate::valgrind::mark_undefined(v as *const T as *const u8, ::core::mem::size_of::<T>());
+    crate::valgrind::mark_undefined(v as *const T as *const u8, size_of::<T>());
 }
 
 pub fn untaint_val<T>(v: &T) {
-    crate::valgrind::mark_defined(v as *const T as *const u8, ::core::mem::size_of::<T>());
+    crate::valgrind::mark_defined(v as *const T as *const u8, size_of::<T>());
 }

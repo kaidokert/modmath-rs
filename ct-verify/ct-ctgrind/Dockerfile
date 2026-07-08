@@ -1,7 +1,10 @@
 # Dev image for iterating on ct-ctgrind locally.
 #
-# Build once (add --platform linux/amd64 to match the x86_64 CI row;
-# the native arm64 build matches the aarch64 row):
+# Build once (the native arm64 build matches the aarch64 CI row; add
+# --platform linux/amd64 for the x86_64 leg — note that row also sets
+# RUSTFLAGS="-C target-feature=+lzcnt,+bmi1", which SIGILLs inside
+# Valgrind under emulation, so an emulated amd64 run only covers the
+# baseline ISA):
 #   docker build -t ct-ctgrind-dev -f ct-verify/ct-ctgrind/Dockerfile .
 #
 # Then run from the repo root:

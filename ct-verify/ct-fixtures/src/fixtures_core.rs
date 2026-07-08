@@ -92,7 +92,7 @@ pub extern "C" fn ct_fix__mod_exp_pr_odd__u64__N1(
     let base = bb(unsafe { *base });
     let e = bb(unsafe { *e });
     let m = bb(unsafe { *m }) | 1;
-    // SAFETY: low bit forced above; the proof is honest.
+    // SAFETY: low bit forced above.
     let m = unsafe { modmath::Odd::new_unchecked(m) };
     let r = mont_ct_pr::mod_exp_odd(base, e, m);
     unsafe { *out = bb(r) }
@@ -109,7 +109,7 @@ pub extern "C" fn ct_fix__mod_exp_pr_odd__fb32__N8(
     let e = Fb256::from(bb(unsafe { *e }));
     let mut mw = bb(unsafe { *m });
     mw[0] |= 1;
-    // SAFETY: low bit forced above; the proof is honest.
+    // SAFETY: low bit forced above.
     let m = unsafe { modmath::Odd::new_unchecked(Fb256::from(mw)) };
     let r = mont_ct_pr::mod_exp_odd(base, e, m);
     unsafe { *out = bb(*r.words()) }

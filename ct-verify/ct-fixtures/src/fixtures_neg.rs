@@ -25,7 +25,8 @@ pub extern "C" fn nct_fix__neg__eea_inv__u64__N1(a: *const u64, m: *const u64, o
     unsafe { *out = bb(r) }
 }
 
-/// Schoolbook square-and-multiply: branches on each exponent bit.
+/// Schoolbook square-and-multiply: loop length and per-bit work depend
+/// on the exponent.
 #[unsafe(no_mangle)]
 pub extern "C" fn nct_fix__neg__schoolbook_exp__u64__N1(
     base: *const u64,

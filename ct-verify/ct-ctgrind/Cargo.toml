@@ -21,9 +21,6 @@ inventory = "0.3"
 # Identifier concatenation in macros (for `run_<fixture_name>`).
 paste = "1.0"
 
-# Valgrind client-request wrapper, Linux-only (Valgrind itself doesn't
-# support macOS aarch64 or Windows). The driver compiles on every host
-# via stubs in `src/valgrind/stub.rs`, but only Linux can actually run
-# the gate under valgrind.
+# Valgrind client requests; Linux-only — see `src/valgrind.rs`.
 [target.'cfg(target_os = "linux")'.dependencies]
 crabgrind = "0.1"

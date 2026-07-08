@@ -34,9 +34,7 @@ fn is_negative(name: &str) -> bool {
 }
 
 fn main() -> ExitCode {
-    // Force ct-fixtures' rlib to be linked. Without a Rust-level
-    // reference rustc drops it from the link line, and the
-    // extern "C" fixture symbols come back undefined.
+    // Force the fixtures rlib onto the link line (see `link_anchor`).
     ct_fixtures::link_anchor();
 
     if !valgrind::is_under_valgrind() {
