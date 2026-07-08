@@ -275,7 +275,7 @@ where
     /// [`new_odd`]: Self::new_odd
     pub fn new_odd_ct(modulus: Odd<T>) -> Self
     where
-        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess + const_num_traits::CtIsZero,
     {
         let modulus = modulus.get();
         let w = type_bit_width::<T>();
@@ -635,7 +635,10 @@ where
     /// [`CtParity`]: const_num_traits::CtParity
     pub fn try_new_odd_ct(modulus: T) -> subtle::CtOption<Self>
     where
-        T: const_num_traits::CtParity + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+        T: const_num_traits::CtParity
+            + const_num_traits::CtIsZero
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeLess,
     {
         // Mask the parity check (no branch on the secret modulus). The
         // precompute below uses the CT path ([`Self::new_odd_ct`]) so
@@ -656,7 +659,10 @@ where
     /// Convert a raw value to Montgomery form. Constant-time finalize.
     pub fn reduce(&self, raw: &T) -> Residue<'_, T, Ct>
     where
-        T: WideMul + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+        T: WideMul
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeLess
+            + const_num_traits::CtIsZero,
     {
         let mont = wide_montgomery_mul_ct(*raw, self.r2_mod_n, self.modulus, self.n_prime);
         Residue {
@@ -670,7 +676,10 @@ where
     #[allow(clippy::wrong_self_convention)]
     pub fn into_raw(&self, r: &Residue<'_, T, Ct>) -> T
     where
-        T: WideMul + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+        T: WideMul
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeLess
+            + const_num_traits::CtIsZero,
     {
         wide_redc_ct(r.mont, T::zero(), self.modulus, self.n_prime)
     }
@@ -858,7 +867,7 @@ where
     /// See the free-function for the `N ≤ R/q` bound contract.
     pub fn mul_acc(&self, acc: (T, T), a: &Residue<'_, T, Ct>, b: &Residue<'_, T, Ct>) -> (T, T)
     where
-        T: WideMul + subtle::ConditionallySelectable,
+        T: WideMul + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
     {
         wide_montgomery_mul_acc_ct(acc.0, acc.1, a.mont, b.mont)
     }
@@ -867,7 +876,10 @@ where
     /// [`Residue`].
     pub fn wide_redc(&self, acc: (T, T)) -> Residue<'_, T, Ct>
     where
-        T: WideMul + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+        T: WideMul
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeLess
+            + const_num_traits::CtIsZero,
     {
         let mont = wide_redc_ct(acc.0, acc.1, self.modulus, self.n_prime);
         Residue {
