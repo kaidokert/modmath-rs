@@ -89,6 +89,17 @@ pub mod pre_reduced {
 /// hasn't published one (the CIOS path is the canonical CT-mul entry
 /// point — see
 /// [`cios_montgomery_mul_ct`](crate::montgomery::cios::cios_montgomery_mul_ct)).
+///
+/// # Operator contract
+///
+/// CT entry points never invoke plain `+` / `-` / `*` on the carrier:
+/// every overflow-relevant operation goes through an explicitly-named
+/// trait (`WrappingAdd`/`WrappingSub`/`WrappingMul`, `BorrowingSub`,
+/// `CtIsZero`, subtle's comparisons), so a backend whose `core::ops`
+/// impls panic on overflow is safe here. Where a `core::ops` bound
+/// does appear in a CT where-clause, it is the `Output = T` pin that
+/// const-num-traits' named ops are defined against — a type-level
+/// requirement, not a call.
 pub mod ct {
     /// Pre-reduced CT variants. Precondition: `base < modulus`.
     pub mod pre_reduced {

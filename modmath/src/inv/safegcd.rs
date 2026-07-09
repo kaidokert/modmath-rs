@@ -290,7 +290,6 @@ where
         + WrappingAdd<Output = T>
         + WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + core::ops::Shl<usize, Output = T>
         + core::ops::BitOr<Output = T>,
     T::Word: CtParity,
 {
