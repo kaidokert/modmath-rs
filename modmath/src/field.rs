@@ -277,7 +277,7 @@ where
     /// [`new_odd`]: Self::new_odd
     pub fn new_odd_ct(modulus: Odd<T>) -> Self
     where
-        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess + const_num_traits::CtIsZero,
+        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
     {
         let modulus = modulus.get();
         let w = type_bit_width::<T>();
@@ -637,10 +637,7 @@ where
     /// [`CtParity`]: const_num_traits::CtParity
     pub fn try_new_odd_ct(modulus: T) -> subtle::CtOption<Self>
     where
-        T: const_num_traits::CtParity
-            + const_num_traits::CtIsZero
-            + subtle::ConditionallySelectable
-            + subtle::ConstantTimeLess,
+        T: const_num_traits::CtParity + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
     {
         // Mask the parity check (no branch on the secret modulus). The
         // precompute below uses the CT path ([`Self::new_odd_ct`]) so
@@ -757,7 +754,6 @@ where
         T: CiosMontMulCt
             + const_num_traits::CtIsZero
             + subtle::ConditionallySelectable
-            + subtle::ConstantTimeEq
             + core::ops::Shr<usize, Output = T>
             + core::ops::BitAnd<Output = T>,
     {
@@ -912,7 +908,6 @@ where
         T: CiosMontMulCt
             + const_num_traits::CtIsZero
             + subtle::ConditionallySelectable
-            + subtle::ConstantTimeEq
             + core::ops::Shr<usize, Output = T>
             + core::ops::BitAnd<Output = T>,
     {
@@ -945,14 +940,12 @@ where
     /// [`inv_fermat`]: Self::inv_fermat
     pub fn inv_safegcd_ct(&self, a: &Residue<'_, T, Ct>) -> subtle::CtOption<Residue<'_, T, Ct>>
     where
-        T: CiosMontMulCt
-            + WideMul
+        T: WideMul
             + subtle::ConditionallySelectable
             + subtle::ConstantTimeLess
             + const_num_traits::CtIsZero
             + modmath_cios::CiosRowOps
             + core::ops::Shr<usize, Output = T>
-            + core::ops::Shl<usize, Output = T>
             + core::ops::BitOr<Output = T>,
         <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
     {

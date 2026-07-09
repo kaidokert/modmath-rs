@@ -82,12 +82,12 @@ where
 /// CIOS Montgomery multiplication — constant-time finalize.
 ///
 /// Same algorithm as [`cios_montgomery_mul`] but performs the final
-/// conditional subtraction branchlessly via `subtle::ConditionallySelectable`
-/// and `subtle::ConstantTimeEq`, removing the operand-magnitude side-channel.
+/// conditional subtraction branchlessly via `subtle::ConditionallySelectable`,
+/// removing the operand-magnitude side-channel.
 ///
-/// `acc_hi` is a `T::Word`; we use `ConstantTimeEq` on the word for the
-/// "high half nonzero" test. The "low half ≥ modulus" test is free — the
-/// borrow flag from `borrowing_sub` already encodes `acc < modulus`.
+/// `acc_hi` is a `T::Word`; its `CtIsZero` provides the "high half
+/// nonzero" test. The "low half ≥ modulus" test is free — the borrow
+/// flag from `borrowing_sub` already encodes `acc < modulus`.
 pub fn cios_montgomery_mul_ct<T>(a: &T, b: &T, modulus: &T, n_prime_0: T::Word) -> T
 where
     T: CiosRowOps
@@ -102,7 +102,6 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd
         + core::ops::Add<Output = T::Word>
         + core::ops::Mul<Output = T::Word>
-        + subtle::ConstantTimeEq
         + subtle::ConditionallySelectable,
 {
     let n = a.word_count();
@@ -194,7 +193,6 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd
         + core::ops::Add<Output = T::Word>
         + core::ops::Mul<Output = T::Word>
-        + subtle::ConstantTimeEq
         + subtle::ConditionallySelectable,
 {
     #[inline]

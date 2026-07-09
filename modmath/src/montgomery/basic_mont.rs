@@ -515,7 +515,6 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::WrappingAdd
-        + const_num_traits::CtIsZero
         + const_num_traits::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -560,12 +559,10 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::WrappingAdd
-        + const_num_traits::CtIsZero
         + const_num_traits::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeEq
         + subtle::ConstantTimeLess,
 {
     mod_exp2_ct(T::one(), modulus, w)
@@ -597,12 +594,10 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::WrappingAdd
-        + const_num_traits::CtIsZero
         + const_num_traits::WrappingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeEq
         + subtle::ConstantTimeLess,
 {
     mod_exp2_ct(r_mod_n, modulus, w)
@@ -759,7 +754,6 @@ where
 pub fn wide_redc_ct<T>(t_lo: T, t_hi: T, modulus: T, n_prime: T) -> T
 where
     T: Copy
-        + const_num_traits::Zero
         + const_num_traits::One
         + WideMul
         + const_num_traits::WrappingAdd
@@ -798,7 +792,6 @@ where
 pub fn strict_wide_redc_ct<T>(t_lo: &T, t_hi: &T, modulus: &T, n_prime: &T) -> T
 where
     T: Copy
-        + const_num_traits::Zero
         + const_num_traits::One
         + WideMul
         + const_num_traits::WrappingAdd
@@ -856,7 +849,6 @@ where
 pub fn wide_montgomery_mul_ct<T>(a_mont: T, b_mont: T, modulus: T, n_prime: T) -> T
 where
     T: Copy
-        + const_num_traits::Zero
         + const_num_traits::One
         + WideMul
         + const_num_traits::WrappingAdd
@@ -904,7 +896,6 @@ where
 pub fn strict_wide_montgomery_mul_ct<T>(a_mont: &T, b_mont: &T, modulus: &T, n_prime: &T) -> T
 where
     T: Copy
-        + const_num_traits::Zero
         + const_num_traits::One
         + WideMul
         + const_num_traits::WrappingAdd
@@ -955,10 +946,11 @@ where
 
 /// Wide multiply-accumulate — constant-time carry propagation.
 ///
-/// Same shape as [`wide_montgomery_mul_acc`] but routes the carry
-/// combination through `accumulate_high_half_carry_ct` so the
-/// per-term cost has no value-dependent branches. Use in CT-sensitive
-/// paths; pair with [`wide_redc_ct`] for the final reduction.
+/// Same shape as [`wide_montgomery_mul_acc`] but the carry select is
+/// branchless (`ct_lt`-derived `Choice` into `conditional_select`), so
+/// the per-term cost has no value-dependent branches. Use in
+/// CT-sensitive paths; pair with [`wide_redc_ct`] for the final
+/// reduction.
 ///
 /// Same bound as [`wide_montgomery_mul_acc`] — caller-verified `N ≤ R/q`.
 pub fn wide_montgomery_mul_acc_ct<T>(acc_lo: T, acc_hi: T, a: T, b: T) -> (T, T)
@@ -1331,14 +1323,12 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd
         + const_num_traits::WrappingSub
         + const_num_traits::CtIsZero
-        + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::BitAnd<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeEq
         + subtle::ConstantTimeLess,
 {
     let modulus = modulus.get();
@@ -1398,7 +1388,6 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::BitAnd<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeEq
         + subtle::ConstantTimeLess,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_pr_odd_ct(base, exponent, m))
