@@ -280,6 +280,9 @@ where
     strict_mod_mul_pr(a.rem_nonzero(m), &b_mod, &m_raw)
 }
 
+/// # Modular Multiplication (Strict)
+/// Most constrained version that works with references. Reduces both
+/// operands, then multiplies via repeated modular doubling.
 pub fn strict_mod_mul<T>(mut a: T, b: &T, m: &T) -> T
 where
     T: Clone

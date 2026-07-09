@@ -1073,6 +1073,8 @@ where
     basic_montgomery_mod_mul_pr_odd(reduce_mod(a, m), reduce_mod(b, m), modulus)
 }
 
+/// Returns None if modulus is even or zero. Thin wrapper around
+/// [`basic_montgomery_mod_mul_odd`].
 pub fn basic_montgomery_mod_mul<T>(a: T, b: T, modulus: T) -> Option<T>
 where
     T: Copy

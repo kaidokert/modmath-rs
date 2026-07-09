@@ -6,9 +6,9 @@
 [![Coverage Status](https://coveralls.io/repos/github/kaidokert/modmath-rs/badge.svg?branch=main)](https://coveralls.io/github/kaidokert/modmath-rs?branch=main)
 
 
-Yet another mod math implementation, but written for _traits_. All functions
-are free functions that are constrainted by `core::ops::` and `num_traits::`
-traits.
+Yet another mod math implementation, but written for _traits_. Everything
+is constrained by `core::ops::` and
+[`const-num-traits`](https://crates.io/crates/const-num-traits) traits.
 
 Implements:
 - Unsigned modular addition and subtraction
@@ -17,6 +17,8 @@ Implements:
 - Unsigned modular inverse
 - Unsigned modular Montgomery multiply
 - Unsigned modular Montgomery exponentiation
+- Constant-time variants of the Montgomery and inverse paths, behind a
+  `Ct` typestate
 
 The code isn't intended to be fast or efficient, just as generic as possible
 to work with multiple implementations.

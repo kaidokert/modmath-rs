@@ -70,6 +70,8 @@ pub trait MontStorage: zeroize::Zeroize {}
 #[cfg(feature = "zeroize")]
 impl<T: zeroize::Zeroize> MontStorage for T {}
 
+/// Bound on the value stored in a [`Residue`]. With the `zeroize`
+/// feature this requires `T: Zeroize`; otherwise it's vacuous.
 #[cfg(not(feature = "zeroize"))]
 pub trait MontStorage {}
 #[cfg(not(feature = "zeroize"))]
