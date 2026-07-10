@@ -671,7 +671,8 @@ where
 /// register-passes either way; the by-ref form matters for non-`Copy`
 /// bigint backends where each value pass would clone.
 ///
-/// Drops the `Copy` bound — usable with backends that don't impl it.
+/// Takes operands by reference; `T: Copy` is still required (the body
+/// deref-copies into the word-level kernel).
 pub fn strict_wide_redc<T>(t_lo: &T, t_hi: &T, modulus: &T, n_prime: &T) -> T
 where
     T: Copy
@@ -739,8 +740,8 @@ where
 /// REDC on a double-width input — constant-time finalize, reference-based inputs.
 ///
 /// Same algorithm as [`wide_redc_ct`] but takes all operands by reference,
-/// avoiding the per-call value copy. See [`strict_wide_redc`] for the
-/// rationale on dropping `Copy`.
+/// avoiding the per-call value copy. `T: Copy` is still required — see
+/// [`strict_wide_redc`].
 pub fn strict_wide_redc_ct<T>(t_lo: &T, t_hi: &T, modulus: &T, n_prime: &T) -> T
 where
     T: Copy
