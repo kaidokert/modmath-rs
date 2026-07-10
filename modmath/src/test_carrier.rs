@@ -50,18 +50,21 @@ impl const_num_traits::Parity for &NcU64 {
 }
 
 impl const_num_traits::ops::wrapping::WrappingAdd for NcU64 {
+    type Output = NcU64;
     fn wrapping_add(self, v: Self) -> Self {
         NcU64(self.0.wrapping_add(v.0))
     }
 }
 
 impl const_num_traits::ops::wrapping::WrappingSub for NcU64 {
+    type Output = NcU64;
     fn wrapping_sub(self, v: Self) -> Self {
         NcU64(self.0.wrapping_sub(v.0))
     }
 }
 
 impl const_num_traits::ops::overflowing::OverflowingAdd for NcU64 {
+    type Output = NcU64;
     fn overflowing_add(self, v: Self) -> (Self, bool) {
         let (r, o) = self.0.overflowing_add(v.0);
         (NcU64(r), o)
@@ -69,6 +72,7 @@ impl const_num_traits::ops::overflowing::OverflowingAdd for NcU64 {
 }
 
 impl const_num_traits::ops::overflowing::OverflowingSub for NcU64 {
+    type Output = NcU64;
     fn overflowing_sub(self, v: Self) -> (Self, bool) {
         let (r, o) = self.0.overflowing_sub(v.0);
         (NcU64(r), o)
