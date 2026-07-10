@@ -20,7 +20,7 @@ panic-handler = []
 [dependencies]
 modmath = { path = "../../modmath" }
 # Registry, not path — same trait-identity rationale as ct-fixtures.
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.5.0-alpha.3", default-features = false, features = ["cios"] }
+fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.5.0-alpha.4", default-features = false, features = ["cios"] }
 const-num-traits = { git = "https://github.com/kaidokert/num-traits.git", tag = "v0.2.0-alpha.1", default-features = false, features = ["ct"] }
 subtle = { version = "2.6", default-features = false }
 

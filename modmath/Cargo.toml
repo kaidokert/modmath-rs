@@ -27,7 +27,7 @@ modmath-cios = { version = "0.1" }
 # so nothing leaks to consumers. The v0.5.0-alpha.3 tag was re-pointed
 # to fixed-bigint's version-revert commit, so the tagged manifest reads
 # 0.5.0 again; stale local caches need `git fetch --tags --force`.
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.5.0-alpha.3", default-features = false, features = ["cios"] }
+fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.5.0-alpha.4", default-features = false, features = ["cios"] }
 # Third-party bigint backends (num-bigint, bnum, crypto-bigint, ibig and
 # their `_patched` forks) are temporarily disabled while modmath migrates
 # to `const-num-traits`. Re-enable once those backends grow
