@@ -16,18 +16,19 @@ keywords = ["numerics", "bignum"]
 c0nst = { version = "0.2", optional = true }
 subtle = { version = "2.6", default-features = false }
 zeroize = { version = "1", default-features = false, optional = true }
-const-num-traits = { git = "https://github.com/kaidokert/num-traits.git", tag = "v0.2.0-alpha.1", default-features = false, features = ["ct"] }
+const-num-traits = { version = "0.2", default-features = false, features = ["ct"] }
 # Leaf crate + registry-only (no path) so `CiosRowOps` has exactly one
 # identity everywhere — modmath, its test binaries, and fixed-bigint's
 # dev-dep all resolve the same copy.
 modmath-cios = { version = "0.1" }
 
 [dev-dependencies]
-# Git tag until fixed-bigint 0.5 publishes to crates.io. Dev-dep only,
-# so nothing leaks to consumers. The v0.5.0-alpha.3 tag was re-pointed
-# to fixed-bigint's version-revert commit, so the tagged manifest reads
-# 0.5.0 again; stale local caches need `git fetch --tags --force`.
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.5.0-alpha.4", default-features = false, features = ["cios"] }
+# Git branch until fixed-bigint 0.5 publishes to crates.io (its alpha.4
+# tag still pins const-num-traits by git tag, which would split the
+# trait identity against our registry 0.2 dep; the branch tip carries
+# the registry flip). Dev-dep only, so nothing leaks to consumers.
+# Move to the next fixed-bigint tag, then the registry version.
+fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", branch = "experiment/const-num-traits-0.2", default-features = false, features = ["cios"] }
 # Third-party bigint backends (num-bigint, bnum, crypto-bigint, ibig and
 # their `_patched` forks) are temporarily disabled while modmath migrates
 # to `const-num-traits`. Re-enable once those backends grow
