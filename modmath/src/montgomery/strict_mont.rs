@@ -16,11 +16,7 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T>,
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>,
@@ -64,19 +60,12 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Div<&'a T, Output = T>
+    for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::AddAssign<&'a T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
+        + core::ops::Add<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Sub<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<T, Output = T>
         + core::ops::Add<&'a T, Output = T>,
@@ -110,17 +99,11 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T>,
-    for<'a> &'a T: core::ops::Add<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
+    for<'a> &'a T: core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>
-        + core::ops::BitAnd<Output = T>,
+        + core::ops::Rem<&'a T, Output = T>,
 {
     // Hensel's lifting for N' computation when R = 2^k
     // Start with base case: find N' such that modulus * N' ≡ -1 (mod 2)
@@ -184,24 +167,19 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Div<&'a T, Output = T>
+    for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::AddAssign<&'a T>,
+        + core::ops::Add<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<T, Output = T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::BitAnd<Output = T>,
+        + core::ops::Add<&'a T, Output = T>,
 {
     strict_compute_montgomery_params_with_method(
         modulus,
@@ -224,24 +202,19 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Div<&'a T, Output = T>
+    for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::AddAssign<&'a T>,
+        + core::ops::Add<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<T, Output = T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::BitAnd<Output = T>,
+        + core::ops::Add<&'a T, Output = T>,
 {
     // Step 1: Find R = 2^k where R > modulus
     let mut r = T::one();
@@ -291,16 +264,13 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::RemAssign<&'a T>
         + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::BitAnd<Output = T>,
     for<'a> &'a T: crate::parity::Parity,
@@ -324,13 +294,10 @@ where
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd,
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>,
     for<'a> T: core::ops::Mul<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::BitAnd<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Mul<&'a T, Output = T> + core::ops::BitAnd<&'a T, Output = T>,
 {
     // Montgomery reduction algorithm:
     // Input: a_mont (Montgomery form), N (modulus), N', r_bits
@@ -376,10 +343,8 @@ where
         + PartialOrd
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
@@ -405,20 +370,17 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::AddAssign<&'a T>,
+        + core::ops::Add<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -471,20 +433,17 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::AddAssign<&'a T>,
+        + core::ops::Add<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -514,21 +473,18 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::AddAssign<&'a T>,
+        + core::ops::Add<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -595,21 +551,18 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Add<&'a T, Output = T>
-        + core::ops::AddAssign<&'a T>,
+        + core::ops::Add<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>

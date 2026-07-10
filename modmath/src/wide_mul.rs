@@ -9,10 +9,7 @@ pub trait WideMul {
 
 impl<T> WideMul for T
 where
-    T: Copy
-        + const_num_traits::Zero
-        + core::ops::Mul<Output = T>
-        + const_num_traits::CarryingMul<Unsigned = T>,
+    T: Copy + const_num_traits::Zero + const_num_traits::CarryingMul<Unsigned = T, Output = T>,
 {
     fn wide_mul(&self, rhs: &Self) -> (Self, Self) {
         const_num_traits::CarryingMul::carrying_mul(*self, *rhs, T::zero())

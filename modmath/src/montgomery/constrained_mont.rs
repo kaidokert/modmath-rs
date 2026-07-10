@@ -19,14 +19,10 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
+    for<'a> T: core::ops::Mul<&'a T, Output = T>,
 {
     // We need to find N' where modulus * N' ≡ R - 1 (mod R)
     let target = r.clone().wrapping_sub(T::one()); // This is -1 mod R
@@ -56,8 +52,7 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>,
@@ -90,13 +85,11 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shl<usize, Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
+    for<'a> T: core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     // Hensel's lifting for N' computation when R = 2^k
@@ -142,8 +135,8 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
@@ -151,8 +144,7 @@ where
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::RemAssign<&'a T>,
+        + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T>
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Rem<&'a T, Output = T>,
@@ -198,18 +190,16 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
-        + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::RemAssign<&'a T>,
+        + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T>
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Rem<&'a T, Output = T>,
@@ -224,10 +214,8 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialOrd
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
@@ -247,10 +235,8 @@ where
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>,
     for<'a> T: core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::BitAnd<&'a T, Output = T>,
 {
@@ -306,12 +292,9 @@ where
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + crate::NonCt
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
+        + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
     for<'a> &'a T: crate::parity::Parity,
@@ -338,8 +321,8 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
@@ -379,8 +362,8 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
@@ -416,8 +399,8 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
@@ -480,8 +463,8 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>

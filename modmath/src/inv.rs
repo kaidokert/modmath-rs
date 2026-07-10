@@ -34,10 +34,8 @@ where
         + core::ops::Sub<Output = T>
         + core::cmp::PartialOrd,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
-        + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Add<&'a T, Output = T>
-        + core::ops::AddAssign<&'a T>
         + core::cmp::PartialOrd,
     for<'a> &'a T: core::ops::Div<&'a T, Output = T> + core::ops::Sub<T, Output = T>,
 {

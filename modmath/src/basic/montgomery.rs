@@ -92,14 +92,14 @@ pub mod pre_reduced {
 ///
 /// # Operator contract
 ///
-/// CT entry points never invoke plain `+` / `-` / `*` on the carrier:
+/// CT entry points never invoke plain `+` / `-` / `*` on the carrier,
+/// and since const-num-traits 0.2 they no longer *bound* them either:
 /// every overflow-relevant operation goes through an explicitly-named
 /// trait (`WrappingAdd`/`WrappingSub`/`WrappingMul`, `BorrowingSub`,
-/// `CtIsZero`, subtle's comparisons), so a backend whose `core::ops`
-/// impls panic on overflow is safe here. Where a `core::ops` bound
-/// does appear in a CT where-clause, it is the `Output = T` pin that
-/// const-num-traits' named ops are defined against — a type-level
-/// requirement, not a call.
+/// `CtIsZero`, subtle's comparisons), each carrying its own `Output`.
+/// A backend can satisfy the entire CT surface without implementing
+/// `core::ops` arithmetic at all — panicking or mode-dispatched
+/// operator impls elsewhere in the carrier are irrelevant here.
 pub mod ct {
     /// Pre-reduced CT variants. Precondition: `base < modulus`.
     pub mod pre_reduced {

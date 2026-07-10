@@ -29,13 +29,12 @@ use subtle::{Choice, ConditionallySelectable};
 /// docs for the cost breakdown.
 pub fn cios_montgomery_mul<T>(a: &T, b: &T, modulus: &T, n_prime_0: T::Word) -> T
 where
-    T: CiosRowOps + PartialOrd + BorrowingSub + core::ops::Sub<Output = T> + Copy,
+    T: CiosRowOps + PartialOrd + BorrowingSub<Output = T> + Copy,
     T::Word: const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::WrappingMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + core::ops::Add<Output = T::Word>
-        + core::ops::Mul<Output = T::Word>,
+        + const_num_traits::WrappingMul<Output = T::Word>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T::Word>
+        + core::ops::Add<Output = T::Word>,
 {
     debug_assert!(a < modulus, "CIOS input a must be in [0, modulus)");
     debug_assert!(b < modulus, "CIOS input b must be in [0, modulus)");
@@ -90,18 +89,13 @@ where
 /// flag from `borrowing_sub` already encodes `acc < modulus`.
 pub fn cios_montgomery_mul_ct<T>(a: &T, b: &T, modulus: &T, n_prime_0: T::Word) -> T
 where
-    T: CiosRowOps
-        + BorrowingSub
-        + core::ops::Sub<Output = T>
-        + subtle::ConditionallySelectable
-        + Copy,
+    T: CiosRowOps + BorrowingSub<Output = T> + subtle::ConditionallySelectable + Copy,
     T::Word: const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::WrappingMul
+        + const_num_traits::WrappingMul<Output = T::Word>
         + const_num_traits::CtIsZero
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T::Word>
         + core::ops::Add<Output = T::Word>
-        + core::ops::Mul<Output = T::Word>
         + subtle::ConditionallySelectable,
 {
     let n = a.word_count();
@@ -145,21 +139,18 @@ where
 /// with the required `Word` bounds. Higher-level code (e.g. `MontgomeryCtx`)
 /// can bound on this trait instead of requiring knowledge of `MulAccOps::Word`
 /// or the CIOS call signature. For CT-sensitive paths, see [`CiosMontMulCt`].
-pub trait CiosMontMul:
-    CiosRowOps + PartialOrd + BorrowingSub + core::ops::Sub<Output = Self> + Copy
-{
+pub trait CiosMontMul: CiosRowOps + PartialOrd + BorrowingSub<Output = Self> + Copy {
     fn cios_mont_mul(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Self;
 }
 
 impl<T> CiosMontMul for T
 where
-    T: CiosRowOps + PartialOrd + BorrowingSub + core::ops::Sub<Output = T> + Copy,
+    T: CiosRowOps + PartialOrd + BorrowingSub<Output = T> + Copy,
     T::Word: const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::WrappingMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + core::ops::Add<Output = T::Word>
-        + core::ops::Mul<Output = T::Word>,
+        + const_num_traits::WrappingMul<Output = T::Word>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T::Word>
+        + core::ops::Add<Output = T::Word>,
 {
     #[inline]
     fn cios_mont_mul(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Self {
@@ -174,25 +165,20 @@ where
 /// required `Word` bounds (including `ConstantTimeEq`). Calls
 /// [`cios_montgomery_mul_ct`] under the hood.
 pub trait CiosMontMulCt:
-    CiosRowOps + BorrowingSub + core::ops::Sub<Output = Self> + subtle::ConditionallySelectable + Copy
+    CiosRowOps + BorrowingSub<Output = Self> + subtle::ConditionallySelectable + Copy
 {
     fn cios_mont_mul_ct(a: &Self, b: &Self, modulus: &Self, n_prime: &Self) -> Self;
 }
 
 impl<T> CiosMontMulCt for T
 where
-    T: CiosRowOps
-        + BorrowingSub
-        + core::ops::Sub<Output = T>
-        + subtle::ConditionallySelectable
-        + Copy,
+    T: CiosRowOps + BorrowingSub<Output = T> + subtle::ConditionallySelectable + Copy,
     T::Word: const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::WrappingMul
+        + const_num_traits::WrappingMul<Output = T::Word>
         + const_num_traits::CtIsZero
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T::Word>
         + core::ops::Add<Output = T::Word>
-        + core::ops::Mul<Output = T::Word>
         + subtle::ConditionallySelectable,
 {
     #[inline]
