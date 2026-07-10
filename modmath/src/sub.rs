@@ -9,9 +9,9 @@ c0nst::c0nst! {
     where
         T: [c0nst] core::cmp::PartialOrd
             + Copy
-            + [c0nst] OverflowingAdd
+            + [c0nst] OverflowingAdd<Output = T>
             + [c0nst] core::ops::Add<Output = T>
-            + [c0nst] OverflowingSub
+            + [c0nst] OverflowingSub<Output = T>
             + [c0nst] core::ops::Sub<Output = T>
             + [c0nst] core::ops::Rem<Output = T>,
     {
@@ -32,8 +32,8 @@ pub fn basic_mod_sub<T>(a: T, b: T, m: T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Rem<Output = T>
@@ -49,8 +49,8 @@ where
         + Copy
         + const_num_traits::HasNonZero
         + const_num_traits::DivNonZero<Output = T>
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
@@ -65,8 +65,8 @@ pub fn basic_mod_sub_pr<T>(a: T, b: T, m: T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
@@ -87,8 +87,8 @@ pub fn constrained_mod_sub<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
@@ -106,8 +106,8 @@ where
         + Clone
         + const_num_traits::HasNonZero
         + const_num_traits::DivNonZero<Output = T>
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
@@ -123,8 +123,8 @@ pub fn constrained_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
@@ -145,8 +145,8 @@ pub fn strict_mod_sub<T>(mut a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
@@ -165,8 +165,8 @@ where
         + Clone
         + const_num_traits::HasNonZero
         + const_num_traits::DivNonZero<Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
@@ -182,8 +182,8 @@ pub fn strict_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,

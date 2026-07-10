@@ -16,8 +16,8 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>,
@@ -64,8 +64,8 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>,
     for<'a> T: core::ops::RemAssign<&'a T>
@@ -110,8 +110,8 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
@@ -184,8 +184,8 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
@@ -224,8 +224,8 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
@@ -291,8 +291,8 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
@@ -326,7 +326,7 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd,
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>,
     for<'a> T: core::ops::Mul<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
@@ -376,8 +376,8 @@ where
         + PartialOrd
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
@@ -407,8 +407,8 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt
@@ -473,8 +473,8 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt
@@ -517,8 +517,8 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
@@ -598,8 +598,8 @@ where
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::ops::overflowing::OverflowingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,

@@ -27,6 +27,6 @@ modmath = { path = "../../modmath" }
 # Registry, not path — matches modmath's own dep so the CiosRowOps
 # trait identity stays single (a path copy of fixed-bigint would pull
 # a second modmath-cios and split it).
-fixed-bigint = { version = "0.4", default-features = false, features = ["cios"] }
-const-num-traits = { version = "0.1.1", default-features = false, features = ["ct"] }
+fixed-bigint = { path = "../../../fixed-bigint-rs", default-features = false, features = ["cios"] }
+const-num-traits = { git = "https://github.com/kaidokert/num-traits.git", tag = "v0.2.0-alpha.1", default-features = false, features = ["ct"] }
 subtle = { version = "2.6", default-features = false }

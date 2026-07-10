@@ -243,8 +243,8 @@ where
         + Copy
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
@@ -263,8 +263,8 @@ where
         + Copy
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
@@ -344,8 +344,8 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::BitAnd<Output = T>
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::parity::Parity
@@ -378,8 +378,8 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::BitAnd<Output = T>
-        + const_num_traits::ops::wrapping::WrappingAdd
-        + const_num_traits::ops::wrapping::WrappingSub
+        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::parity::Parity
@@ -408,8 +408,8 @@ fn mod_double<T>(val: T, modulus: T) -> T
 where
     T: Copy
         + PartialOrd
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>,
 {
@@ -430,10 +430,8 @@ where
 fn mod_double_ct<T>(val: T, modulus: T) -> T
 where
     T: Copy
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeLess,
 {
@@ -458,9 +456,9 @@ where
     T: Copy
         + const_num_traits::One
         + const_num_traits::Zero
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingSub
-        + const_num_traits::WrappingAdd
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>,
@@ -488,8 +486,8 @@ where
         + PartialOrd
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>,
 {
@@ -514,10 +512,8 @@ where
     T: Copy
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeEq
         + subtle::ConstantTimeLess,
@@ -542,8 +538,8 @@ where
         + PartialOrd
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>,
 {
@@ -558,10 +554,8 @@ where
     T: Copy
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeLess,
 {
@@ -578,8 +572,8 @@ where
         + PartialOrd
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>,
 {
@@ -593,10 +587,8 @@ where
     T: Copy
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeLess,
 {
@@ -618,7 +610,7 @@ where
 fn accumulate_high_half_carry<T>(result: T, carry1: bool, carry2: bool) -> (T, bool)
 where
     T: const_num_traits::One
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + core::ops::Add<Output = T>,
 {
     if carry1 {
@@ -642,9 +634,8 @@ where
 fn accumulate_high_half_carry_ct<T>(result: T, carry1: Choice, carry2: Choice) -> (T, Choice)
 where
     T: const_num_traits::One
-        + const_num_traits::WrappingAdd
+        + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::CtIsZero
-        + core::ops::Add<Output = T>
         + subtle::ConditionallySelectable,
 {
     // Always compute the addition; branchlessly choose whether to keep
@@ -677,9 +668,9 @@ where
         + const_num_traits::One
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>,
@@ -720,9 +711,9 @@ where
         + const_num_traits::One
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>,
@@ -756,13 +747,10 @@ where
     T: Copy
         + const_num_traits::One
         + WideMul
-        + const_num_traits::WrappingAdd
+        + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::CtIsZero
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeLess,
 {
@@ -794,13 +782,10 @@ where
     T: Copy
         + const_num_traits::One
         + WideMul
-        + const_num_traits::WrappingAdd
+        + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::CtIsZero
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeLess,
 {
@@ -831,9 +816,9 @@ where
         + const_num_traits::One
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>,
@@ -851,13 +836,10 @@ where
     T: Copy
         + const_num_traits::One
         + WideMul
-        + const_num_traits::WrappingAdd
+        + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::CtIsZero
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeLess,
 {
@@ -877,9 +859,9 @@ where
         + const_num_traits::One
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>,
@@ -898,13 +880,10 @@ where
     T: Copy
         + const_num_traits::One
         + WideMul
-        + const_num_traits::WrappingAdd
+        + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::CtIsZero
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingSub
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeLess,
 {
@@ -928,7 +907,7 @@ where
     T: Copy
         + const_num_traits::One
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + core::ops::Add<Output = T>,
 {
     let (m_lo, m_hi) = a.wide_mul(&b);
@@ -958,9 +937,8 @@ where
     T: Copy
         + const_num_traits::One
         + WideMul
-        + const_num_traits::WrappingAdd
+        + const_num_traits::WrappingAdd<Output = T>
         + subtle::ConstantTimeLess
-        + core::ops::Add<Output = T>
         + subtle::ConditionallySelectable,
 {
     let (m_lo, m_hi) = a.wide_mul(&b);
@@ -984,7 +962,7 @@ where
     T: Copy
         + const_num_traits::One
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + core::ops::Add<Output = T>,
 {
     let (m_lo, m_hi) = a.wide_mul(b);
@@ -1008,9 +986,8 @@ where
     T: Copy
         + const_num_traits::One
         + WideMul
-        + const_num_traits::WrappingAdd
+        + const_num_traits::WrappingAdd<Output = T>
         + subtle::ConstantTimeLess
-        + core::ops::Add<Output = T>
         + subtle::ConditionallySelectable,
 {
     let (m_lo, m_hi) = a.wide_mul(b);
@@ -1052,10 +1029,10 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>
@@ -1075,10 +1052,10 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -1106,10 +1083,10 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>,
@@ -1148,10 +1125,10 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -1170,10 +1147,10 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -1200,10 +1177,10 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -1225,10 +1202,10 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -1275,10 +1252,10 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -1318,10 +1295,10 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + const_num_traits::CtIsZero
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
@@ -1376,10 +1353,10 @@ where
         + PartialEq
         + PartialOrd
         + WideMul
-        + const_num_traits::WrappingMul
-        + const_num_traits::WrappingAdd
-        + const_num_traits::ops::overflowing::OverflowingAdd
-        + const_num_traits::WrappingSub
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
         + const_num_traits::CtIsZero
         + Parity
         + core::ops::Add<Output = T>
