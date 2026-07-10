@@ -213,18 +213,11 @@ impl<T, P: Personality> Field<T, P> {
 impl<T, P: Personality> Field<T, P>
 where
     T: Copy
-        + PartialEq
-        + PartialOrd
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
-        + Parity
         + MontStorage,
 {
     /// Construct a new `Field` from an already-proven-odd modulus.
@@ -241,7 +234,10 @@ where
     /// so this also discharges the modulus-nonzero check that [`new`] does.
     ///
     /// [`new`]: Self::new
-    pub fn new_odd(modulus: Odd<T>) -> Self {
+    pub fn new_odd(modulus: Odd<T>) -> Self
+    where
+        T: PartialEq + PartialOrd + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>,
+    {
         let modulus = modulus.get();
         let w = type_bit_width::<T>();
         let n_prime = compute_n_prime_newton(modulus, w);
@@ -302,7 +298,13 @@ where
     /// `Option<Self>` the caller must `.unwrap()`.
     ///
     /// [`new_odd`]: Self::new_odd
-    pub fn new(modulus: T) -> Option<Self> {
+    pub fn new(modulus: T) -> Option<Self>
+    where
+        T: PartialEq
+            + PartialOrd
+            + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+            + Parity,
+    {
         Odd::new(modulus).map(Self::new_odd)
     }
 
@@ -364,9 +366,6 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + Parity
         + crate::NonCt
         + MontStorage,
@@ -536,7 +535,11 @@ where
     /// paths. Returns `None` when `a` is not coprime to modulus.
     pub fn inv_eea(&self, a: &Residue<'_, T, Nct>) -> Option<Residue<'_, T, Nct>>
     where
-        T: WideMul + core::ops::Div<Output = T> + core::ops::Sub<Output = T>,
+        T: WideMul
+            + core::ops::Div<Output = T>
+            + core::ops::Add<Output = T>
+            + core::ops::Sub<Output = T>
+            + core::ops::Mul<Output = T>,
     {
         if a.mont == T::zero() {
             return None;
@@ -594,17 +597,11 @@ impl<T> Field<T, Ct>
 where
     T: Copy
         + PartialEq
-        + PartialOrd
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
-        + Parity
         + MontStorage,
 {
     /// Construct a `Field<T, Ct>` from a **secret** modulus without a

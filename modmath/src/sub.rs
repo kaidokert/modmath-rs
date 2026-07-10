@@ -10,9 +10,7 @@ c0nst::c0nst! {
         T: [c0nst] core::cmp::PartialOrd
             + Copy
             + [c0nst] OverflowingAdd<Output = T>
-            + [c0nst] core::ops::Add<Output = T>
             + [c0nst] OverflowingSub<Output = T>
-            + [c0nst] core::ops::Sub<Output = T>
             + [c0nst] core::ops::Rem<Output = T>,
     {
         let a = a % m;
@@ -34,8 +32,6 @@ where
         + Copy
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Rem<Output = T>
         + crate::NonCt,
 {
@@ -51,8 +47,6 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
@@ -67,8 +61,6 @@ where
         + Copy
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + crate::NonCt,
 {
     let diff = a.wrapping_sub(b);
@@ -89,8 +81,6 @@ where
         + Clone
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + crate::NonCt,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
@@ -108,8 +98,6 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
@@ -125,8 +113,6 @@ where
         + Clone
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + crate::NonCt,
 {
     let diff = a.clone().wrapping_sub(b.clone());
@@ -147,8 +133,6 @@ where
         + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + crate::NonCt,
     for<'b> T: core::ops::RemAssign<&'b T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
@@ -167,8 +151,6 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + crate::NonCt,
 {
     let m_raw = T::nonzero_get(m);
@@ -184,8 +166,6 @@ where
         + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + crate::NonCt,
 {
     let (diff, overflow) = a.overflowing_sub(b.clone());

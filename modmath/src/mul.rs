@@ -15,9 +15,7 @@ c0nst::c0nst! {
             + [c0nst] One
             + [c0nst] core::ops::BitAnd<Output = T>
             + [c0nst] OverflowingAdd<Output = T>
-            + [c0nst] core::ops::Add<Output = T>
             + [c0nst] OverflowingSub<Output = T>
-            + [c0nst] core::ops::Sub<Output = T>
             + [c0nst] core::ops::Shr<usize, Output = T>
             + [c0nst] core::ops::Rem<Output = T>,
     {
@@ -63,8 +61,6 @@ where
         + crate::parity::Parity
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Rem<Output = T>
         + crate::NonCt,
@@ -105,8 +101,6 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
 {
@@ -129,8 +123,6 @@ where
         + crate::parity::Parity
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
 {
@@ -174,8 +166,6 @@ where
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
@@ -198,8 +188,6 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
     for<'a> &'a T: crate::parity::Parity,
@@ -220,8 +208,6 @@ where
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
     for<'a> &'a T: crate::parity::Parity,
@@ -269,8 +255,6 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
     for<'a> &'a T: crate::parity::Parity,
@@ -291,8 +275,6 @@ where
         + PartialOrd
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>,
@@ -315,8 +297,6 @@ where
         + PartialOrd
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt,
     for<'a> &'a T: crate::parity::Parity,
