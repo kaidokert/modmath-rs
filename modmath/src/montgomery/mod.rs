@@ -794,9 +794,9 @@ mod backend_montgomery_tests {
     montgomery_test_module!(
         bnum_patched,
         bnum_patched::types::U256,
-        strict: off, // fork gap: OverflowingAdd/Sub not implemented
-        constrained: off, // fork gap: OverflowingAdd/Sub not implemented
-        basic: off, // fork gap: OverflowingAdd/Sub not implemented
+        strict: on,
+        constrained: on,
+        basic: on,
     );
 
     //     montgomery_test_module!(
@@ -810,9 +810,9 @@ mod backend_montgomery_tests {
     montgomery_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: off, // fork gap: OverflowingAdd/Sub not implemented
-        constrained: off, // fork gap: OverflowingAdd/Sub not implemented
-        basic: off, // fork gap: OverflowingAdd/Sub not implemented
+        strict: off, // fork gap: reference-op impls (&T op T / &T op &T) missing
+        constrained: off, // fork gap: reference-op impls (&T op T / &T op &T) missing
+        basic: on,
     );
 
     //     montgomery_test_module!(
