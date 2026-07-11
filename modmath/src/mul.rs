@@ -613,15 +613,15 @@ macro_rules! mul_test_module {
                     crate::maybe_test!($basic, assert_eq!(super::basic_mod_mul(a, b, m), result));
 
                     let a_val = 12345u32;
-                    let a = U256::from(a_val);
-                    let b = U256::from(6789u32);
-                    let m = U256::from(10000u32);
-                    let result = U256::from(205u32);
+                    let a: U256 = a_val.try_into().unwrap();
+                    let b: U256 = 6789u32.try_into().unwrap();
+                    let m: U256 = 10000u32.try_into().unwrap();
+                    let result: U256 = 205u32.try_into().unwrap();
 
                     crate::maybe_test!($strict, assert_eq!(super::strict_mod_mul(a, &b, &m), result));
-                    let a = U256::from(a_val);
+                    let a: U256 = a_val.try_into().unwrap();
                     crate::maybe_test!($constrained, assert_eq!(super::constrained_mod_mul(a, &b, &m), result));
-                    let a = U256::from(a_val);
+                    let a: U256 = a_val.try_into().unwrap();
                     crate::maybe_test!($basic, assert_eq!(super::basic_mod_mul(a, b, m), result));
                 }
             }
@@ -643,15 +643,13 @@ mod bnum_mul_tests {
     //         basic: on,
     //     );
 
-    // fork gap: the macro setup needs From<u32>, which the const-8
-    // fork doesn't implement yet — re-enable when it lands.
-    // mul_test_module!(
-    //         bnum_patched,
-    //         bnum_patched::types::U256,
-    //         strict: on,
-    //         constrained: on,
-    //         basic: on,
-    //     );
+    mul_test_module!(
+        bnum_patched,
+        bnum_patched::types::U256,
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
 
     //     mul_test_module!(
     //         crypto_bigint,
@@ -664,8 +662,8 @@ mod bnum_mul_tests {
     mul_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: off, // fork gap: reference-op impls (&T op &T) missing
-        constrained: off, // fork gap: RemAssign<&T> missing
+        strict: on,
+        constrained: on,
         basic: on,
     );
 

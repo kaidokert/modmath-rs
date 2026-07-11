@@ -579,8 +579,8 @@ macro_rules! exp_test_module {
                     let a_val = 123u8;
                     let a = U256::from(a_val);
                     let b = U256::from(45u8);
-                    let m = U256::from(1000u16);
-                    let result = U256::from(43u16);
+                    let m: U256 = 1000u16.try_into().unwrap();
+                    let result: U256 = 43u16.try_into().unwrap();
 
                     crate::maybe_test!($strict, assert_eq!(super::strict_mod_exp(a, &b, &m), result));
                     let a = U256::from(a_val);
@@ -607,15 +607,13 @@ mod bnum_exp_tests {
     //         basic: on,
     //     );
 
-    // fork gap: the macro setup needs From<u16>/From<u32>, which the const-8
-    // fork doesn't implement yet — re-enable when it lands.
-    // exp_test_module!(
-    //         bnum_patched,
-    //         bnum_patched::types::U256,
-    //         strict: off, // fork gap: OverflowingAdd/Sub not implemented
-    //         constrained: off, // fork gap: OverflowingAdd/Sub not implemented
-    //         basic: off, // fork gap: OverflowingAdd/Sub not implemented
-    //     );
+    exp_test_module!(
+        bnum_patched,
+        bnum_patched::types::U256,
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
 
     //     exp_test_module!(
     //         crypto_bigint,
@@ -628,8 +626,8 @@ mod bnum_exp_tests {
     exp_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: off, // fork gap: reference-op impls (&T op &T) missing; OverflowingSub
-        constrained: off, // fork gap: RemAssign<&T> missing
+        strict: on,
+        constrained: on,
         basic: on,
     );
 
