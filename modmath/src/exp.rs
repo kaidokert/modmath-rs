@@ -607,12 +607,14 @@ mod bnum_exp_tests {
     //         basic: on,
     //     );
 
-    //     exp_test_module!(
+    // fork gap: the macro setup needs From<u16>/From<u32>, which the const-8
+    // fork doesn't implement yet — re-enable when it lands.
+    // exp_test_module!(
     //         bnum_patched,
     //         bnum_patched::types::U256,
-    //         strict: on,
-    //         constrained: on,
-    //         basic: on,
+    //         strict: off, // fork gap: OverflowingAdd/Sub not implemented
+    //         constrained: off, // fork gap: OverflowingAdd/Sub not implemented
+    //         basic: off, // fork gap: OverflowingAdd/Sub not implemented
     //     );
 
     //     exp_test_module!(
@@ -623,13 +625,13 @@ mod bnum_exp_tests {
     //         basic: off, // RemAssign is not implemented
     //     );
 
-    //     exp_test_module!(
-    //         crypto_bigint_patched,
-    //         crypto_bigint_patched::U256,
-    //         strict: on,
-    //         constrained: on,
-    //         basic: on,
-    //     );
+    exp_test_module!(
+        crypto_bigint_patched,
+        crypto_bigint_patched::U256,
+        strict: off, // fork gap: OverflowingAdd/Sub not implemented
+        constrained: off, // fork gap: OverflowingAdd/Sub not implemented
+        basic: off, // fork gap: OverflowingAdd/Sub not implemented
+    );
 
     //     exp_test_module!(
     //         num_bigint,

@@ -643,7 +643,9 @@ mod bnum_mul_tests {
     //         basic: on,
     //     );
 
-    //     mul_test_module!(
+    // fork gap: the macro setup needs From<u32>, which the const-8
+    // fork doesn't implement yet — re-enable when it lands.
+    // mul_test_module!(
     //         bnum_patched,
     //         bnum_patched::types::U256,
     //         strict: on,
@@ -659,13 +661,13 @@ mod bnum_mul_tests {
     //         basic: on,
     //     );
 
-    //     mul_test_module!(
-    //         crypto_bigint_patched,
-    //         crypto_bigint_patched::U256,
-    //         strict: on,
-    //         constrained: on,
-    //         basic: on,
-    //     );
+    mul_test_module!(
+        crypto_bigint_patched,
+        crypto_bigint_patched::U256,
+        strict: off, // fork gap: reference-op impls (&T op &T) missing
+        constrained: off, // fork gap: RemAssign<&T> missing
+        basic: on,
+    );
 
     //     mul_test_module!(
     //         num_bigint,

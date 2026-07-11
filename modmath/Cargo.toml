@@ -24,16 +24,15 @@ modmath-cios = { version = "0.1" }
 
 [dev-dependencies]
 fixed-bigint = { version = "0.5", default-features = false, features = ["cios"] }
-# Third-party bigint backends (num-bigint, bnum, crypto-bigint, ibig and
-# their `_patched` forks) are temporarily disabled while modmath migrates
-# to `const-num-traits`. Re-enable once those backends grow
-# `const-num-traits` impls (or an adapter shim).
+# Third-party bigint backends. The `_patched` kaidokert forks carry
+# const-num-traits 0.2 + modmath-cios impls (proven end-to-end in the
+# krabitls backend-swap experiments), so their test matrices are live
+# again. Upstream (unforked) crates and num-bigint/ibig stay disabled:
+# no const-num-traits impls upstream; ibig is blocked architecturally.
+bnum_patched = { package = "bnum", git = "https://github.com/kaidokert/bnum.git", tag = "v0.14.4-const-8", default-features = false }
+crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.7.5-const-8", default-features = false }
 # num-bigint = { package = "num-bigint", version = "0.4"}
 # num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git" , tag = "v0.4.6_patch" }
-# bnum = { version = "0.12", features = ["numtraits"] }
-# bnum_patched = { package = "bnum",features = ["numtraits"]  , git = "https://github.com/kaidokert/bnum.git", tag = "v0.12.1_patch" }
-# crypto-bigint = "0.6"
-# crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git" , tag = "v0.6.1_rsa_patch_1" }
 # ibig = "0.3"
 # ibig_patched = { package = "ibig", git = "https://github.com/kaidokert/ibig-rs.git" , tag = "v0.3.6_patch" }
 paste = "1"
