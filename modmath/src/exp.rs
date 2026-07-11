@@ -628,9 +628,9 @@ mod bnum_exp_tests {
     exp_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: off, // fork gap: OverflowingAdd/Sub not implemented
-        constrained: off, // fork gap: OverflowingAdd/Sub not implemented
-        basic: off, // fork gap: OverflowingAdd/Sub not implemented
+        strict: off, // fork gap: reference-op impls (&T op &T) missing; OverflowingSub
+        constrained: off, // fork gap: RemAssign<&T> missing
+        basic: on,
     );
 
     //     exp_test_module!(

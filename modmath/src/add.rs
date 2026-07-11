@@ -380,9 +380,9 @@ mod bnum_add_tests {
     add_test_module!(
         bnum_patched,
         bnum_patched::types::U256,
-        strict: off, // fork gap: OverflowingAdd/Sub not implemented
-        constrained: off, // fork gap: OverflowingAdd/Sub not implemented
-        basic: off, // fork gap: OverflowingAdd/Sub not implemented
+        strict: off, // fork gap: OverflowingSub (the strict entries detect borrow via overflowing ops)
+        constrained: on,
+        basic: on,
     );
 
     //     add_test_module!(
@@ -396,9 +396,9 @@ mod bnum_add_tests {
     add_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: off, // fork gap: OverflowingAdd/Sub not implemented
-        constrained: off, // fork gap: OverflowingAdd/Sub not implemented
-        basic: off, // fork gap: OverflowingAdd/Sub not implemented
+        strict: off, // fork gap: reference-op impls (&T op &T) missing; OverflowingSub
+        constrained: off, // fork gap: RemAssign<&T> missing
+        basic: on,
     );
 
     //     add_test_module!(
