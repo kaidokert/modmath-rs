@@ -25,6 +25,12 @@ function inverse(a, n)
 /// # Modular Inverse (Strict)
 /// Most constrained version that works with references. Requires
 /// reference-based operations for division and subtraction.
+///
+/// # Panics
+///
+/// Panics if `T` is too narrow to hold the extended-GCD intermediates
+/// (checked coefficient arithmetic overflows) — a carrier-precondition
+/// violation, distinct from the `None` return for a non-invertible input.
 pub fn strict_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
     // Checked `Signed` coefficient adds (see `basic_mod_inv`); the raw `T`
@@ -78,6 +84,12 @@ where
 /// # Modular Inverse (Constrained)
 /// Version that works with references. Requires Clone and
 /// reference-based operations.
+///
+/// # Panics
+///
+/// Panics if `T` is too narrow to hold the extended-GCD intermediates
+/// (checked coefficient arithmetic overflows) — a carrier-precondition
+/// violation, distinct from the `None` return for a non-invertible input.
 pub fn constrained_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
     // Checked magnitude ops on the `Signed` coefficients (see
@@ -125,6 +137,12 @@ where
 
 /// # Modular Inverse (Basic)
 /// Simple version that operates on values and copies them.
+///
+/// # Panics
+///
+/// Panics if `T` is too narrow to hold the extended-GCD intermediates
+/// (checked coefficient arithmetic overflows) — a carrier-precondition
+/// violation, distinct from the `None` return for a non-invertible input.
 pub fn basic_mod_inv<T>(a: T, modulus: T) -> Option<T>
 where
     // `Signed<T>` uses checked mul/add, not plain `*`/`+` whose overflow on

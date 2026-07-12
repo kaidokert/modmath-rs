@@ -274,6 +274,25 @@ mod tests {
     }
 
     #[test]
+    fn nc_u64_checked_add() {
+        use const_num_traits::CheckedAdd;
+        assert_eq!(NcU64(2).checked_add(NcU64(3)), Some(NcU64(5)));
+        assert_eq!(
+            NcU64(u64::MAX - 1).checked_add(NcU64(1)),
+            Some(NcU64(u64::MAX))
+        );
+        assert_eq!(NcU64(u64::MAX).checked_add(NcU64(1)), None);
+    }
+
+    #[test]
+    fn nc_u64_checked_mul() {
+        use const_num_traits::CheckedMul;
+        assert_eq!(NcU64(6).checked_mul(NcU64(7)), Some(NcU64(42)));
+        assert_eq!(NcU64(u64::MAX).checked_mul(NcU64(1)), Some(NcU64(u64::MAX)));
+        assert_eq!(NcU64(u64::MAX).checked_mul(NcU64(2)), None);
+    }
+
+    #[test]
     fn montgomery_strict_matches_u64() {
         use crate::montgomery::strict_mont::{
             strict_montgomery_mod_exp, strict_montgomery_mod_mul,

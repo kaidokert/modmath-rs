@@ -533,6 +533,13 @@ where
     /// Works for any odd modulus (composite is fine). Variable-time —
     /// do not call with secret inputs; use [`Self::inv_fermat`] for CT
     /// paths. Returns `None` when `a` is not coprime to modulus.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the carrier `T` is too narrow to hold the extended-GCD
+    /// intermediates (checked coefficient arithmetic overflows). This is
+    /// a carrier-precondition violation, distinct from the `None` return
+    /// for a non-coprime input.
     pub fn inv_eea(&self, a: &Residue<'_, T, Nct>) -> Option<Residue<'_, T, Nct>>
     where
         T: WideMul
