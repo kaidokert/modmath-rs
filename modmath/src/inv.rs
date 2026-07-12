@@ -375,8 +375,8 @@ mod bnum_inv_tests {
         heapless_bigint,
         fixed_bigint::FixedUInt,
         type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
-        strict: off, // fork+design: EEA products fit numerically (<= modulus) but HeaplessBigInt's overflow check is shape-based (len+len>CAP) and it never trims, so shape outgrows CAP; modmath's Signed<T> uses plain core::ops::Mul, whose overflow behavior is unspecified
-        constrained: off, // fork+design: EEA products fit numerically (<= modulus) but HeaplessBigInt's overflow check is shape-based (len+len>CAP) and it never trims, so shape outgrows CAP; modmath's Signed<T> uses plain core::ops::Mul, whose overflow behavior is unspecified
-        basic: off, // fork+design: EEA products fit numerically (<= modulus) but HeaplessBigInt's overflow check is shape-based (len+len>CAP) and it never trims, so shape outgrows CAP; modmath's Signed<T> uses plain core::ops::Mul, whose overflow behavior is unspecified
+        strict: off, // raw r-sequence uses plain Mul (shape-panics on HeaplessBigInt); only basic is fully on the checked Signed path
+        constrained: off, // raw r-sequence uses plain Mul (shape-panics on HeaplessBigInt); only basic is fully on the checked Signed path
+        basic: on,
     );
 }

@@ -683,9 +683,9 @@ mod bnum_exp_tests {
         heapless_bigint,
         fixed_bigint::FixedUInt,
         type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
-        strict: off, // fork: ShrAssign<usize> missing (exp ladder does exp >>= 1)
-        constrained: off, // fork: ShrAssign<usize> missing (exp ladder does exp >>= 1)
-        basic: off, // fork: ShrAssign<usize> missing (exp ladder does exp >>= 1)
+        strict: on,
+        constrained: on,
+        basic: on,
     );
 }
 
