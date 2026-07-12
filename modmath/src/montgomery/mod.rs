@@ -810,8 +810,8 @@ mod backend_montgomery_tests {
     montgomery_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: off, // fork gap: reference-op impls (&T op T / &T op &T) missing
-        constrained: off, // fork gap: reference-op impls (&T op T / &T op &T) missing
+        strict: off, // fork gap: Montgomery n-prime path needs more &T reference ops than inv
+        constrained: off, // fork gap: Montgomery n-prime path needs more &T reference ops than inv
         basic: on,
     );
 

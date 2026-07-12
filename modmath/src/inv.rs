@@ -280,8 +280,8 @@ mod bnum_inv_tests {
     inv_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: off, // fork gap: reference-op impls (&T op T / &T op &T) missing
-        constrained: off, // fork gap: reference-op impls (&T op T / &T op &T) missing
+        strict: on,
+        constrained: on,
         basic: on,
     );
 
