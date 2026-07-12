@@ -876,13 +876,17 @@ mod backend_montgomery_tests {
         heapless_bigint,
         fixed_bigint::FixedUInt,
         type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
-        // Off pending a fixed-bigint correctness bug, not a modmath gap: the
-        // R>N REDC now compiles and runs on HeaplessBigInt (checked mul, no
-        // shape-panic), but strict_montgomery_mod_mul(7,5,13) returns 1 where
-        // the identical-width FixedUInt<u8,4> returns the correct 9. Round-trip
-        // to/from_montgomery passes, so a len-sensitive carrier op miscomputes
-        // in the multiply chain. (The param-computation test also verifies via
-        // plain `*` on the carrier, which HeaplessBigInt shape-panics on.)
+        // Off, but the R>N path itself is correct on HeaplessBigInt: strict
+        // and constrained montgomery_mod_mul(7,5,13) both give 9 (verified).
+        // Two things still block a green row, both modmath/test-side:
+        //   1. basic_montgomery_mod_mul routes through wide-REDC (R = 2^W),
+        //      and `type_bit_width::<T>() = size_of::<T>() * 8` reads 48 for
+        //      HeaplessBigInt (the `len: u16` field inflates size_of past the
+        //      32-bit value width), so it builds a bogus R and reduces wrong.
+        //      A runtime-length carrier needs a value-bit-width source other
+        //      than size_of before wide-REDC can support it.
+        //   2. test_montgomery_parameter_computation verifies via plain `*`/`%`
+        //      on the carrier, which HeaplessBigInt shape-panics on.
         strict: off,
         constrained: off,
         basic: off,
