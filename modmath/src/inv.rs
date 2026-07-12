@@ -27,10 +27,8 @@ function inverse(a, n)
 /// reference-based operations for division and subtraction.
 pub fn strict_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
-    // `Signed<T>`'s value magnitude ops are checked (see `basic_mod_inv`);
-    // `CheckedAdd` covers the sign-tracked coefficient adds. The raw `T`
-    // r-sequence uses reference `Mul<&T>` (unbounded-carrier flavor), left
-    // plain — products bounded by the modulus, heap carriers don't overflow.
+    // Checked `Signed` coefficient adds (see `basic_mod_inv`); the raw `T`
+    // r-sequence keeps reference `Mul<&T>` (heap carriers don't overflow).
     T: const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -82,11 +80,9 @@ where
 /// reference-based operations.
 pub fn constrained_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
-    // `Signed<T>`'s magnitude ops are checked (see `basic_mod_inv`), so
-    // the `CheckedAdd`/`CheckedMul` bounds cover the sign-tracked
-    // coefficients. The raw `T` r-sequence (`new_r * quotient`) stays on
-    // plain `Mul` — its products are bounded by the modulus, and this
-    // flavor's intended carriers are arbitrary-precision (non-overflowing).
+    // Checked magnitude ops on the `Signed` coefficients (see
+    // `basic_mod_inv`); the raw `T` r-sequence keeps plain `Mul` (heap
+    // carriers don't overflow).
     T: const_num_traits::Zero
         + core::ops::Mul<Output = T>
         + const_num_traits::One
@@ -131,15 +127,11 @@ where
 /// Simple version that operates on values and copies them.
 pub fn basic_mod_inv<T>(a: T, modulus: T) -> Option<T>
 where
-    // `Signed<T>` uses checked multiply/add on the magnitudes. The EEA
-    // coefficient products are bounded by ≈modulus/2, so on a value
-    // carrier sized for the modulus they always fit — the point of the
-    // checked ops is not a live overflow but to stop *relying* on plain
-    // `*`/`+`, whose overflow behavior on `T` is implementation-defined.
-    // A carrier that reports overflow on shape rather than value (a
-    // runtime-length bignum) then surfaces as a deterministic panic with
-    // a clear message, never a silently-wrong inverse. `Sub` stays plain —
-    // `Signed` only ever subtracts smaller from larger.
+    // `Signed<T>` uses checked mul/add, not plain `*`/`+` whose overflow on
+    // `T` is implementation-defined. Products fit any carrier sized for the
+    // modulus, so this guards no live overflow — it refuses to rely on
+    // unspecified behavior, turning a too-narrow carrier into a clear panic
+    // rather than a wrong inverse. `Sub` stays plain (smaller from larger).
     T: const_num_traits::Zero
         + const_num_traits::One
         + Copy

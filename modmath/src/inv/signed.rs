@@ -1,13 +1,10 @@
 use const_num_traits::{CheckedAdd, CheckedMul};
 use core::cmp::Ordering;
 
-/// Panic message when a `Signed<T>` magnitude op exceeds the carrier
-/// width. A precondition violation — the carrier is too narrow for the
-/// modular-inverse intermediates (bounded by ~2·modulus) — surfaced as a
-/// loud, deterministic panic, never a silently-wrong inverse. The checked
-/// ops replace plain `*`/`+`, whose overflow behavior on `T` is
-/// implementation-defined (wrap, panic, or a length-shaped overflow on a
-/// fixed-capacity carrier).
+/// Overflow in a `Signed<T>` magnitude op means the carrier is too narrow
+/// for the modular-inverse intermediates. The checked ops make that a
+/// deterministic panic instead of relying on plain `*`/`+`, whose overflow
+/// on `T` is implementation-defined.
 const OVERFLOW_MSG: &str = "Signed<T>: carrier too narrow for modular-inverse intermediates";
 
 /// Partial signed implementation for modular inverse calculations
@@ -229,9 +226,8 @@ where
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self.negative, rhs.negative) {
-            // Same-sign: magnitudes add and can exceed the carrier. Mixed
-            // sign takes the larger-minus-smaller branch, which cannot
-            // underflow, so `Sub` stays plain.
+            // Same-sign magnitudes add and can exceed the carrier; mixed
+            // sign is larger-minus-smaller, which can't underflow (plain `Sub`).
             (false, false) => Self::new_unchecked(
                 self.value.checked_add(rhs.value).expect(OVERFLOW_MSG),
                 false,
