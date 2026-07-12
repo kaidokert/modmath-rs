@@ -876,6 +876,13 @@ mod backend_montgomery_tests {
         heapless_bigint,
         fixed_bigint::FixedUInt,
         type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
+        // Off pending a fixed-bigint correctness bug, not a modmath gap: the
+        // R>N REDC now compiles and runs on HeaplessBigInt (checked mul, no
+        // shape-panic), but strict_montgomery_mod_mul(7,5,13) returns 1 where
+        // the identical-width FixedUInt<u8,4> returns the correct 9. Round-trip
+        // to/from_montgomery passes, so a len-sensitive carrier op miscomputes
+        // in the multiply chain. (The param-computation test also verifies via
+        // plain `*` on the carrier, which HeaplessBigInt shape-panics on.)
         strict: off,
         constrained: off,
         basic: off,
