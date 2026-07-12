@@ -58,6 +58,7 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Add<Output = T>
@@ -164,6 +165,7 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -199,6 +201,7 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -367,6 +370,7 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -430,6 +434,7 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -470,6 +475,7 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -548,6 +554,7 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>

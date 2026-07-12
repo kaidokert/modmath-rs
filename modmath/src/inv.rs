@@ -27,9 +27,14 @@ function inverse(a, n)
 /// reference-based operations for division and subtraction.
 pub fn strict_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
+    // `Signed<T>`'s value magnitude ops are checked (see `basic_mod_inv`);
+    // `CheckedAdd` covers the sign-tracked coefficient adds. The raw `T`
+    // r-sequence uses reference `Mul<&T>` (unbounded-carrier flavor), left
+    // plain — products bounded by the modulus, heap carriers don't overflow.
     T: const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
+        + const_num_traits::CheckedAdd<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::cmp::PartialOrd,
@@ -78,14 +83,21 @@ where
 /// reference-based operations.
 pub fn constrained_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
+    // `Signed<T>`'s magnitude ops are checked (see `basic_mod_inv`), so
+    // the `CheckedAdd`/`CheckedMul` bounds cover the sign-tracked
+    // coefficients. The raw `T` r-sequence (`new_r * quotient`) stays on
+    // plain `Mul` — its products are bounded by the modulus, and this
+    // flavor's intended carriers are arbitrary-precision (non-overflowing).
     T: const_num_traits::Zero
         + const_num_traits::One
         + Clone
         + PartialEq
         + core::cmp::PartialOrd
+        + const_num_traits::CheckedAdd<Output = T>
         + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>,
+        + core::ops::Mul<Output = T>
+        + const_num_traits::CheckedMul<Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T> + core::ops::Div<&'a T, Output = T>,
 {
@@ -121,14 +133,23 @@ where
 /// Simple version that operates on values and copies them.
 pub fn basic_mod_inv<T>(a: T, modulus: T) -> Option<T>
 where
+    // `Signed<T>` uses checked multiply/add on the magnitudes. The EEA
+    // coefficient products are bounded by ≈modulus/2, so on a value
+    // carrier sized for the modulus they always fit — the point of the
+    // checked ops is not a live overflow but to stop *relying* on plain
+    // `*`/`+`, whose overflow behavior on `T` is implementation-defined.
+    // A carrier that reports overflow on shape rather than value (a
+    // runtime-length bignum) then surfaces as a deterministic panic with
+    // a clear message, never a silently-wrong inverse. `Sub` stays plain —
+    // `Signed` only ever subtracts smaller from larger.
     T: const_num_traits::Zero
         + const_num_traits::One
         + Copy
         + PartialEq
         + core::ops::Div<Output = T>
-        + core::ops::Add<Output = T>
+        + const_num_traits::CheckedAdd<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + core::cmp::PartialOrd,
 {
     let mut t = Signed::new(T::zero(), false);
@@ -264,9 +285,9 @@ mod bnum_inv_tests {
     inv_test_module!(
         bnum_patched,
         bnum_patched::types::U256,
-        strict: on,
-        constrained: on,
-        basic: on,
+        strict: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
+        constrained: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
+        basic: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
     );
 
     //     inv_test_module!(
@@ -280,9 +301,9 @@ mod bnum_inv_tests {
     inv_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: on,
-        constrained: on,
-        basic: on,
+        strict: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
+        constrained: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
+        basic: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
     );
 
     //     inv_test_module!(

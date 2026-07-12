@@ -49,6 +49,20 @@ impl const_num_traits::Parity for &NcU64 {
     }
 }
 
+impl const_num_traits::CheckedAdd for NcU64 {
+    type Output = NcU64;
+    fn checked_add(self, v: Self) -> Option<Self> {
+        self.0.checked_add(v.0).map(NcU64)
+    }
+}
+
+impl const_num_traits::CheckedMul for NcU64 {
+    type Output = NcU64;
+    fn checked_mul(self, v: Self) -> Option<Self> {
+        self.0.checked_mul(v.0).map(NcU64)
+    }
+}
+
 impl const_num_traits::ops::wrapping::WrappingAdd for NcU64 {
     type Output = NcU64;
     fn wrapping_add(self, v: Self) -> Self {

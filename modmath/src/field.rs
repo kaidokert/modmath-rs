@@ -537,9 +537,9 @@ where
     where
         T: WideMul
             + core::ops::Div<Output = T>
-            + core::ops::Add<Output = T>
+            + const_num_traits::CheckedAdd<Output = T>
             + core::ops::Sub<Output = T>
-            + core::ops::Mul<Output = T>,
+            + const_num_traits::CheckedMul<Output = T>,
     {
         if a.mont == T::zero() {
             return None;

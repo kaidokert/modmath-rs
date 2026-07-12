@@ -50,6 +50,8 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
@@ -133,6 +135,8 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
@@ -188,6 +192,8 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
@@ -319,6 +325,8 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
@@ -360,6 +368,8 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
@@ -397,6 +407,8 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
@@ -461,6 +473,8 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>

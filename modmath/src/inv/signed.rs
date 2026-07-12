@@ -1,4 +1,14 @@
+use const_num_traits::{CheckedAdd, CheckedMul};
 use core::cmp::Ordering;
+
+/// Panic message when a `Signed<T>` magnitude op exceeds the carrier
+/// width. A precondition violation — the carrier is too narrow for the
+/// modular-inverse intermediates (bounded by ~2·modulus) — surfaced as a
+/// loud, deterministic panic, never a silently-wrong inverse. The checked
+/// ops replace plain `*`/`+`, whose overflow behavior on `T` is
+/// implementation-defined (wrap, panic, or a length-shaped overflow on a
+/// fixed-capacity carrier).
+const OVERFLOW_MSG: &str = "Signed<T>: carrier too narrow for modular-inverse intermediates";
 
 /// Partial signed implementation for modular inverse calculations
 ///
@@ -213,14 +223,22 @@ where
 
 impl<T> core::ops::Add for Signed<T>
 where
-    T: core::ops::Add<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
+    T: CheckedAdd<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
 {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self.negative, rhs.negative) {
-            (false, false) => Self::new_unchecked(self.value + rhs.value, false),
-            (true, true) => Self::new_unchecked(self.value + rhs.value, true),
+            // Same-sign: magnitudes add and can exceed the carrier. Mixed
+            // sign takes the larger-minus-smaller branch, which cannot
+            // underflow, so `Sub` stays plain.
+            (false, false) => Self::new_unchecked(
+                self.value.checked_add(rhs.value).expect(OVERFLOW_MSG),
+                false,
+            ),
+            (true, true) => {
+                Self::new_unchecked(self.value.checked_add(rhs.value).expect(OVERFLOW_MSG), true)
+            }
             (false, true) | (true, false) => {
                 if self.value >= rhs.value {
                     Self::new_unchecked(self.value - rhs.value, self.negative)
@@ -234,7 +252,7 @@ where
 
 impl<T> core::ops::Sub for Signed<T>
 where
-    T: core::ops::Add<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
+    T: CheckedAdd<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
 {
     type Output = Self;
 
@@ -252,13 +270,13 @@ where
 /// a non-negative magnitude. Using signed types will break this assumption.
 impl<T> core::ops::Mul for Signed<T>
 where
-    T: core::ops::Mul<Output = T>,
+    T: CheckedMul<Output = T>,
 {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self::Output {
         Self {
-            value: self.value * other.value,
+            value: self.value.checked_mul(other.value).expect(OVERFLOW_MSG),
             negative: self.negative != other.negative,
         }
     }
@@ -271,13 +289,13 @@ where
 /// represent a non-negative value to maintain correctness.
 impl<T> core::ops::Mul<T> for Signed<T>
 where
-    T: core::ops::Mul<Output = T>,
+    T: CheckedMul<Output = T>,
 {
     type Output = Self;
 
     fn mul(self, other: T) -> Self::Output {
         Self {
-            value: self.value * other,
+            value: self.value.checked_mul(other).expect(OVERFLOW_MSG),
             negative: self.negative,
         }
     }
