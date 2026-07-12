@@ -42,7 +42,7 @@ where
     let n = a.word_count();
     let zero = <T::Word as Zero>::zero();
     let one = <T::Word as One>::one();
-    let mut acc = T::default();
+    let mut acc = modulus.cios_accumulator();
     let mut acc_hi = zero;
     let mut acc_hi2 = zero;
 
@@ -101,7 +101,7 @@ where
     let n = a.word_count();
     let zero = <T::Word as Zero>::zero();
     let one = <T::Word as One>::one();
-    let mut acc = T::default();
+    let mut acc = modulus.cios_accumulator();
     let mut acc_hi = zero;
     let mut acc_hi2 = zero;
 
