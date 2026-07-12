@@ -5,7 +5,8 @@ use core::cmp::Ordering;
 /// for the modular-inverse intermediates. The checked ops make that a
 /// deterministic panic instead of relying on plain `*`/`+`, whose overflow
 /// on `T` is implementation-defined.
-const OVERFLOW_MSG: &str = "Signed<T>: carrier too narrow for modular-inverse intermediates";
+pub(super) const OVERFLOW_MSG: &str =
+    "Signed<T>: carrier too narrow for modular-inverse intermediates";
 
 /// Partial signed implementation for modular inverse calculations
 ///
@@ -297,25 +298,6 @@ where
     }
 }
 
-/// Multiplication of Signed<T> with a reference to an unsigned value &T.
-///
-/// # Requirements
-/// Both `T` and `other` must be unsigned types. The `other` parameter should
-/// represent a non-negative value to maintain correctness.
-impl<'a, T> core::ops::Mul<&'a T> for Signed<T>
-where
-    T: core::ops::Mul<&'a T, Output = T> + 'a,
-{
-    type Output = Self;
-
-    fn mul(self, other: &'a T) -> Self::Output {
-        Self {
-            value: self.value * other,
-            negative: self.negative,
-        }
-    }
-}
-
 impl<T> core::ops::Div for Signed<T>
 where
     T: core::ops::Div<Output = T>,
@@ -331,9 +313,8 @@ where
 }
 
 #[cfg(test)]
-// op_ref allowed: the by-ref arms deliberately exercise the `Add<&T>` /
-// `Mul<&T>` impls; "fixing" `a * &b` to `a * b` would switch which impl
-// is under test.
+// op_ref allowed: the by-ref arms deliberately exercise the `Add<&T>`
+// impls; "fixing" `a + &b` to `a + b` would switch which impl is under test.
 #[allow(clippy::op_ref)]
 mod signed_tests {
     use super::Signed;
@@ -770,18 +751,6 @@ mod signed_tests {
         let a = Signed::new(3u32, true); // -3
         let result = a * 5u32; // -3 * 5 = -15
         assert_eq!(result.value, 15u32);
-        assert!(result.negative);
-
-        // Test Mul<&T> - positive Signed * &T
-        let a = Signed::new(8u32, false); // +8
-        let result = a * &3u32; // +8 * 3 = +24
-        assert_eq!(result.value, 24u32);
-        assert!(!result.negative);
-
-        // Test Mul<&T> - negative Signed * &T
-        let a = Signed::new(9u32, true); // -9
-        let result = a * &2u32; // -9 * 2 = -18
-        assert_eq!(result.value, 18u32);
         assert!(result.negative);
     }
 

@@ -33,16 +33,17 @@ function inverse(a, n)
 /// violation, distinct from the `None` return for a non-invertible input.
 pub fn strict_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
-    // Checked `Signed` coefficient adds (see `basic_mod_inv`); the raw `T`
-    // r-sequence keeps reference `Mul<&T>` (heap carriers don't overflow).
+    // Checked mul/add throughout (see `basic_mod_inv`): both the `Signed`
+    // coefficients and the raw `T` r-sequence refuse to rely on `*`'s
+    // implementation-defined overflow.
     T: const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
         + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + core::ops::Sub<Output = T>
         + core::cmp::PartialOrd,
-    for<'a> T: core::ops::Mul<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
+    for<'a> T: core::ops::Sub<&'a T, Output = T>
         + core::ops::Add<&'a T, Output = T>
         + core::cmp::PartialOrd,
     for<'a> &'a T: core::ops::Div<&'a T, Output = T> + core::ops::Sub<T, Output = T>,
@@ -55,15 +56,19 @@ where
 
     while new_r != T::zero() {
         let quotient = &r / &new_r;
+        // strict avoids a `Clone` bound: duplicate `quotient` via the same
+        // reference-add trick used for `r`/`t`, so each coefficient update can
+        // consume an owned copy through the checked multiply.
+        let quotient2 = T::zero() + &quotient;
 
         // clone
         let tmp_t = Signed::new(T::zero(), false) + &new_t;
-        new_t = t - new_t * &quotient;
+        new_t = t - new_t * quotient;
         t = tmp_t;
 
         // clone
         let tmp_r = T::zero() + &new_r;
-        new_r = r - new_r * &quotient;
+        new_r = r - new_r.checked_mul(quotient2).expect(signed::OVERFLOW_MSG);
         r = tmp_r;
     }
 
@@ -92,11 +97,10 @@ where
 /// violation, distinct from the `None` return for a non-invertible input.
 pub fn constrained_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
-    // Checked magnitude ops on the `Signed` coefficients (see
-    // `basic_mod_inv`); the raw `T` r-sequence keeps plain `Mul` (heap
-    // carriers don't overflow).
+    // Checked mul/add throughout (see `basic_mod_inv`): both the `Signed`
+    // coefficients and the raw `T` r-sequence refuse to rely on `*`'s
+    // implementation-defined overflow.
     T: const_num_traits::Zero
-        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + Clone
         + PartialEq
@@ -120,7 +124,7 @@ where
         t = tmp_t;
 
         let tmp_r = new_r.clone();
-        new_r = r - new_r * quotient;
+        new_r = r - new_r.checked_mul(quotient).expect(signed::OVERFLOW_MSG);
         r = tmp_r;
     }
 

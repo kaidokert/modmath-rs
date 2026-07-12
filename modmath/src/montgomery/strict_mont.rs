@@ -59,6 +59,7 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Sub<Output = T>,
@@ -165,6 +166,7 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -200,6 +202,7 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -368,6 +371,7 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -431,6 +435,7 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -471,6 +476,7 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -549,6 +555,7 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
