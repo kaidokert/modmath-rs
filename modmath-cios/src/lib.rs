@@ -31,17 +31,19 @@ pub trait CiosRowOps: Default + Sized {
 
     fn word_count(&self) -> usize;
 
-    /// A zero value wide enough to accumulate a full CIOS product —
-    /// i.e. `word_count()` limbs of storage, all zero.
+    /// A zero value wide enough to accumulate a full CIOS product
+    /// against `self` — i.e. at least `self.word_count()` limbs of
+    /// storage, all zero.
     ///
-    /// For a fixed-width carrier this is just `Self::default()`, which
-    /// the default body returns. A runtime-width carrier (whose
-    /// `Default` is the mathematical zero at logical length 0) must
-    /// override this to hand back a capacity-wide zero, or the driver's
-    /// accumulator overruns. Kept distinct from `Default` so such a
-    /// carrier isn't forced to make its `Default` a surprising
-    /// full-capacity value.
-    fn cios_accumulator() -> Self {
+    /// Takes `&self` (the driver passes an operand, typically the
+    /// modulus) so a carrier whose width is a runtime property — not a
+    /// const generic — can size the accumulator from it. A fixed-width
+    /// carrier ignores `self` and returns `Self::default()`, which the
+    /// default body does; its `Default` is already a full-width zero.
+    /// A runtime-width carrier (whose `Default` is the mathematical
+    /// zero at logical length 0) overrides this to hand back a
+    /// full-width zero, keeping a sensible `Default`.
+    fn cios_accumulator(&self) -> Self {
         Self::default()
     }
 
@@ -216,9 +218,9 @@ mod tests {
         // The default body hands back `Self::default()`; the primitive
         // carriers must not diverge from it (a runtime-width carrier is
         // the only implementor expected to override).
-        assert_eq!(<u8 as CiosRowOps>::cios_accumulator(), u8::default());
-        assert_eq!(<u16 as CiosRowOps>::cios_accumulator(), u16::default());
-        assert_eq!(<u32 as CiosRowOps>::cios_accumulator(), u32::default());
-        assert_eq!(<u64 as CiosRowOps>::cios_accumulator(), u64::default());
+        assert_eq!(0u8.cios_accumulator(), u8::default());
+        assert_eq!(0u16.cios_accumulator(), u16::default());
+        assert_eq!(0u32.cios_accumulator(), u32::default());
+        assert_eq!(0u64.cios_accumulator(), u64::default());
     }
 }
