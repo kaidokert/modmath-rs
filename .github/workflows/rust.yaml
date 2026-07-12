@@ -48,7 +48,11 @@ jobs:
     - name: Build
       working-directory: modmath
       run: cargo build
+    # The MSRV row proves the library builds on 1.86; tests pull the
+    # backend-matrix dev-deps (git forks of bnum / crypto-bigint), whose
+    # MSRV is newer and doesn't constrain modmath's consumers.
     - name: Run tests
+      if: matrix.rust != '1.86'
       working-directory: modmath
       run: cargo test --verbose
     # fixed-bigint/nightly on the CLI: the dev-dep needs its own

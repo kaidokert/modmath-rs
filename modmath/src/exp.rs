@@ -579,8 +579,8 @@ macro_rules! exp_test_module {
                     let a_val = 123u8;
                     let a = U256::from(a_val);
                     let b = U256::from(45u8);
-                    let m = U256::from(1000u16);
-                    let result = U256::from(43u16);
+                    let m: U256 = 1000u16.try_into().unwrap();
+                    let result: U256 = 43u16.try_into().unwrap();
 
                     crate::maybe_test!($strict, assert_eq!(super::strict_mod_exp(a, &b, &m), result));
                     let a = U256::from(a_val);
@@ -607,13 +607,13 @@ mod bnum_exp_tests {
     //         basic: on,
     //     );
 
-    //     exp_test_module!(
-    //         bnum_patched,
-    //         bnum_patched::types::U256,
-    //         strict: on,
-    //         constrained: on,
-    //         basic: on,
-    //     );
+    exp_test_module!(
+        bnum_patched,
+        bnum_patched::types::U256,
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
 
     //     exp_test_module!(
     //         crypto_bigint,
@@ -623,13 +623,13 @@ mod bnum_exp_tests {
     //         basic: off, // RemAssign is not implemented
     //     );
 
-    //     exp_test_module!(
-    //         crypto_bigint_patched,
-    //         crypto_bigint_patched::U256,
-    //         strict: on,
-    //         constrained: on,
-    //         basic: on,
-    //     );
+    exp_test_module!(
+        crypto_bigint_patched,
+        crypto_bigint_patched::U256,
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
 
     //     exp_test_module!(
     //         num_bigint,

@@ -377,13 +377,13 @@ mod bnum_add_tests {
     //         basic: on,
     //     );
 
-    //     add_test_module!(
-    //         bnum_patched,
-    //         bnum_patched::types::U256,
-    //         strict: on,
-    //         constrained: on,
-    //         basic: on,
-    //     );
+    add_test_module!(
+        bnum_patched,
+        bnum_patched::types::U256,
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
 
     //     add_test_module!(
     //         crypto_bigint,
@@ -393,13 +393,13 @@ mod bnum_add_tests {
     //         basic: on,
     //     );
 
-    //     add_test_module!(
-    //         crypto_bigint_patched,
-    //         crypto_bigint_patched::U256,
-    //         strict: on,
-    //         constrained: on,
-    //         basic: on,
-    //     );
+    add_test_module!(
+        crypto_bigint_patched,
+        crypto_bigint_patched::U256,
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
 
     //     add_test_module!(
     //         num_bigint,

@@ -261,13 +261,13 @@ mod bnum_inv_tests {
     //         basic: on,
     //     );
 
-    //     inv_test_module!(
-    //         bnum_patched,
-    //         bnum_patched::types::U256,
-    //         strict: on,
-    //         constrained: on,
-    //         basic: on,
-    //     );
+    inv_test_module!(
+        bnum_patched,
+        bnum_patched::types::U256,
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
 
     //     inv_test_module!(
     //         crypto_bigint,
@@ -277,13 +277,13 @@ mod bnum_inv_tests {
     //         basic: on,
     //     );
 
-    //     inv_test_module!(
-    //         crypto_bigint_patched,
-    //         crypto_bigint_patched::U256,
-    //         strict: on,
-    //         constrained: on,
-    //         basic: on,
-    //     );
+    inv_test_module!(
+        crypto_bigint_patched,
+        crypto_bigint_patched::U256,
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
 
     //     inv_test_module!(
     //         num_bigint,

@@ -791,13 +791,13 @@ mod backend_montgomery_tests {
     //         basic: off, // basic_montgomery_mod_mul/exp now requires WideMul + OverflowingAdd
     //     );
 
-    //     montgomery_test_module!(
-    //         bnum_patched,
-    //         bnum_patched::types::U256,
-    //         strict: off,
-    //         constrained: on,
-    //         basic: off, // WideMul requires CarryingMul, not implemented for bnum
-    //     );
+    montgomery_test_module!(
+        bnum_patched,
+        bnum_patched::types::U256,
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
 
     //     montgomery_test_module!(
     //         crypto_bigint,
@@ -807,13 +807,13 @@ mod backend_montgomery_tests {
     //         basic: off, // RemAssign and other traits missing
     //     );
 
-    //     montgomery_test_module!(
-    //         crypto_bigint_patched,
-    //         crypto_bigint_patched::U256,
-    //         strict: off,
-    //         constrained: on,
-    //         basic: off, // WideMul requires CarryingMul, not implemented for crypto-bigint
-    //     );
+    montgomery_test_module!(
+        crypto_bigint_patched,
+        crypto_bigint_patched::U256,
+        strict: off, // fork gap: Montgomery n-prime path needs more &T reference ops than inv
+        constrained: off, // fork gap: Montgomery n-prime path needs more &T reference ops than inv
+        basic: on,
+    );
 
     //     montgomery_test_module!(
     //         num_bigint,
