@@ -27,7 +27,7 @@ modmath-cios = { version = "0.1" }
 # capacity, runtime length) behind heapless-runtime-len. Pulled as a
 # git tag to add it to the backend test matrix. Move back to a plain
 # registry version when done experimenting.
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.6.0-alpha.6", default-features = false, features = ["cios", "heapless-runtime-len"] }
+fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.6.0-alpha.7", default-features = false, features = ["cios", "heapless-runtime-len"] }
 # Third-party bigint backends. The `_patched` kaidokert forks carry
 # const-num-traits 0.2 + modmath-cios impls (proven end-to-end in the
 # krabitls backend-swap experiments), so their test matrices are live

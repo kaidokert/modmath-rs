@@ -876,8 +876,8 @@ mod backend_montgomery_tests {
         heapless_bigint,
         fixed_bigint::FixedUInt,
         type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
-        strict: off, // fork: from_montgomery needs BitAnd (&T & &T mask)
-        constrained: off, // fork: from_montgomery needs BitAnd (&T & &T mask)
-        basic: off, // fork: from_montgomery needs BitAnd (&T & &T mask)
+        strict: off,
+        constrained: off,
+        basic: off,
     );
 }
