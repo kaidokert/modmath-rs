@@ -35,7 +35,6 @@ where
         + const_num_traits::One
         + PartialEq
         + const_num_traits::CheckedAdd<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::cmp::PartialOrd,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
@@ -89,14 +88,13 @@ where
     // plain `Mul` — its products are bounded by the modulus, and this
     // flavor's intended carriers are arbitrary-precision (non-overflowing).
     T: const_num_traits::Zero
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + Clone
         + PartialEq
         + core::cmp::PartialOrd
         + const_num_traits::CheckedAdd<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + const_num_traits::CheckedMul<Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T> + core::ops::Div<&'a T, Output = T>,

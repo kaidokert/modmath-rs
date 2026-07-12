@@ -61,7 +61,6 @@ where
         + const_num_traits::CheckedAdd<Output = T>
         + PartialEq
         + PartialOrd
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -170,7 +169,6 @@ where
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
@@ -206,7 +204,6 @@ where
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
@@ -377,7 +374,6 @@ where
         + core::ops::Shr<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
@@ -441,7 +437,6 @@ where
         + core::ops::Shr<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt
         + for<'a> core::ops::Rem<&'a T, Output = T>,
@@ -483,7 +478,6 @@ where
         + core::ops::ShrAssign<usize>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>
@@ -562,7 +556,6 @@ where
         + core::ops::ShrAssign<usize>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T>

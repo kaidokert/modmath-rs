@@ -37,11 +37,11 @@ fn compute_n_prime_trial_search<T>(modulus: T, r: T) -> Option<T>
 where
     T: Copy
         + const_num_traits::One
+        + core::ops::Add<Output = T>
+        + core::ops::Mul<Output = T>
         + PartialEq
         + PartialOrd
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Rem<Output = T>,
 {
     // We need to find N' where modulus * N' ≡ R - 1 (mod R)
@@ -77,9 +77,7 @@ where
         + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Div<Output = T>,
 {
     // We need to solve: modulus * N' ≡ -1 (mod R)
@@ -108,11 +106,11 @@ fn compute_n_prime_hensels_lifting<T>(modulus: T, r: T, r_bits: usize) -> Option
 where
     T: Copy
         + const_num_traits::Zero
+        + core::ops::Add<Output = T>
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + PartialEq
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Rem<Output = T>
         + core::ops::Shl<usize, Output = T>,
 {
@@ -173,6 +171,7 @@ pub fn basic_compute_montgomery_params_with_method<T>(
 where
     T: Copy
         + const_num_traits::Zero
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -181,7 +180,6 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Div<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Rem<Output = T>
         + core::ops::Add<Output = T>,
 {
@@ -221,6 +219,7 @@ pub fn basic_compute_montgomery_params<T>(modulus: T) -> Option<(T, T, T, usize)
 where
     T: Copy
         + const_num_traits::Zero
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -229,7 +228,6 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Div<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Rem<Output = T>
         + core::ops::Add<Output = T>,
 {
@@ -281,9 +279,9 @@ pub fn basic_from_montgomery<T>(a_mont: T, modulus: T, n_prime: T, r_bits: usize
 where
     T: Copy
         + const_num_traits::One
-        + PartialOrd
-        + core::ops::Mul<Output = T>
         + core::ops::Add<Output = T>
+        + core::ops::Mul<Output = T>
+        + PartialOrd
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>
@@ -330,10 +328,10 @@ pub fn basic_montgomery_mul<T>(a_mont: T, b_mont: T, modulus: T, n_prime: T, r_b
 where
     T: Copy
         + const_num_traits::Zero
+        + core::ops::Add<Output = T>
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + PartialOrd
-        + core::ops::Mul<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Rem<Output = T>
         + core::ops::Shr<usize, Output = T>
@@ -363,10 +361,10 @@ pub fn basic_montgomery_mul_pr<T>(a_mont: T, b_mont: T, modulus: T, n_prime: T, 
 where
     T: Copy
         + const_num_traits::Zero
+        + core::ops::Add<Output = T>
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + PartialOrd
-        + core::ops::Mul<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>

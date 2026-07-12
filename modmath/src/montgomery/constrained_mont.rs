@@ -55,7 +55,6 @@ where
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Mul<Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
@@ -134,6 +133,7 @@ pub fn constrained_compute_montgomery_params_with_method<T>(
 where
     T: Clone
         + const_num_traits::Zero
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -141,9 +141,7 @@ where
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T>
@@ -191,6 +189,7 @@ pub fn constrained_compute_montgomery_params<T>(modulus: &T) -> Option<(T, T, T,
 where
     T: Clone
         + const_num_traits::Zero
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -198,9 +197,7 @@ where
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T>
@@ -324,6 +321,7 @@ pub fn constrained_montgomery_mod_mul_with_method<T>(
 where
     T: Clone
         + const_num_traits::Zero
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -331,9 +329,7 @@ where
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt
@@ -367,6 +363,7 @@ pub fn constrained_montgomery_mod_mul<T>(a: T, b: &T, modulus: &T) -> Option<T>
 where
     T: Clone
         + const_num_traits::Zero
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -374,9 +371,7 @@ where
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt
@@ -406,6 +401,7 @@ pub fn constrained_montgomery_mod_exp_with_method<T>(
 where
     T: Clone
         + const_num_traits::Zero
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -413,9 +409,7 @@ where
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
@@ -472,6 +466,7 @@ pub fn constrained_montgomery_mod_exp<T>(base: T, exponent: &T, modulus: &T) -> 
 where
     T: Clone
         + const_num_traits::Zero
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -479,9 +474,7 @@ where
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
