@@ -31,6 +31,20 @@ pub trait CiosRowOps: Default + Sized {
 
     fn word_count(&self) -> usize;
 
+    /// A zero value wide enough to accumulate a full CIOS product —
+    /// i.e. `word_count()` limbs of storage, all zero.
+    ///
+    /// For a fixed-width carrier this is just `Self::default()`, which
+    /// the default body returns. A runtime-width carrier (whose
+    /// `Default` is the mathematical zero at logical length 0) must
+    /// override this to hand back a capacity-wide zero, or the driver's
+    /// accumulator overruns. Kept distinct from `Default` so such a
+    /// carrier isn't forced to make its `Default` a surprising
+    /// full-capacity value.
+    fn cios_accumulator() -> Self {
+        Self::default()
+    }
+
     /// Infallible. Caller guarantees `i < self.word_count()` and `i`
     /// is public.
     fn word(&self, i: usize) -> Self::Word;
@@ -196,4 +210,15 @@ mod tests {
         u64_phase2,
         u64
     );
+
+    #[test]
+    fn default_accumulator_matches_default_for_primitives() {
+        // The default body hands back `Self::default()`; the primitive
+        // carriers must not diverge from it (a runtime-width carrier is
+        // the only implementor expected to override).
+        assert_eq!(<u8 as CiosRowOps>::cios_accumulator(), u8::default());
+        assert_eq!(<u16 as CiosRowOps>::cios_accumulator(), u16::default());
+        assert_eq!(<u32 as CiosRowOps>::cios_accumulator(), u32::default());
+        assert_eq!(<u64 as CiosRowOps>::cios_accumulator(), u64::default());
+    }
 }
