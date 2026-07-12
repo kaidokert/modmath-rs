@@ -714,6 +714,15 @@ mod bnum_mul_tests {
         constrained: on,
         basic: on,
     );
+
+    mul_test_module!(
+        heapless_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u32, 4>;
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
 }
 
 #[cfg(test)]

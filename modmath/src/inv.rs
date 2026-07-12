@@ -370,4 +370,13 @@ mod bnum_inv_tests {
         constrained: on,
         basic: on,
     );
+
+    inv_test_module!(
+        heapless_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
+        strict: off, // fork: value Mul panics on overflow; EEA Signed intermediates exceed the modulus
+        constrained: off, // fork: value Mul panics on overflow; EEA Signed intermediates exceed the modulus
+        basic: off, // fork: value Mul panics on overflow; EEA Signed intermediates exceed the modulus
+    );
 }

@@ -450,6 +450,15 @@ mod bnum_add_tests {
         constrained: on,
         basic: on,
     );
+
+    add_test_module!(
+        heapless_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u32, 4>;
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
 }
 
 #[cfg(test)]

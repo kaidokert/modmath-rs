@@ -871,4 +871,13 @@ mod backend_montgomery_tests {
         constrained: on,
         basic: on,
     );
+
+    montgomery_test_module!(
+        heapless_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
+        strict: off, // fork: WrappingMul + CarryingMul missing (WideMul + wide-REDC)
+        constrained: off, // fork: WrappingMul + CarryingMul missing (WideMul + wide-REDC)
+        basic: off, // fork: WrappingMul + CarryingMul missing (WideMul + wide-REDC)
+    );
 }
