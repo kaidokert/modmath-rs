@@ -794,9 +794,9 @@ mod backend_montgomery_tests {
     montgomery_test_module!(
         bnum_patched,
         bnum_patched::types::U256,
-        strict: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
-        constrained: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
-        basic: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
+        strict: on,
+        constrained: on,
+        basic: on,
     );
 
     //     montgomery_test_module!(
@@ -810,9 +810,9 @@ mod backend_montgomery_tests {
     montgomery_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
-        constrained: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
-        basic: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
+        strict: off, // fork: n-prime path needs more &T reference ops (&T op T / &T op &T)
+        constrained: off, // fork: n-prime path needs more &T reference ops (&T op T / &T op &T)
+        basic: on,
     );
 
     //     montgomery_test_module!(

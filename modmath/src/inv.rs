@@ -285,9 +285,9 @@ mod bnum_inv_tests {
     inv_test_module!(
         bnum_patched,
         bnum_patched::types::U256,
-        strict: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
-        constrained: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
-        basic: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
+        strict: on,
+        constrained: on,
+        basic: on,
     );
 
     //     inv_test_module!(
@@ -301,9 +301,9 @@ mod bnum_inv_tests {
     inv_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
-        constrained: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
-        basic: off, // needs CheckedAdd/CheckedMul (Signed EEA migrated off unspecified core::ops::Mul)
+        strict: on,
+        constrained: on,
+        basic: on,
     );
 
     //     inv_test_module!(
