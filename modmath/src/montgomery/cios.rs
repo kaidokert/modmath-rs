@@ -438,4 +438,41 @@ mod tests {
 
     /// Trait CiosMontMulCt is usable as a bound without constraining T::Word.
     fn _assert_ct_trait_bound<T: CiosMontMulCt>() {}
+
+    /// `CiosRowOps` on fixed-bigint's `HeaplessBigInt` (fixed capacity,
+    /// runtime length) — the runtime-width carrier the `cios_accumulator`
+    /// override exists for. It cannot run the full CIOS driver here (no
+    /// `BorrowingSub` yet, so the final conditional subtraction has no
+    /// impl), so this exercises the trait surface directly: the
+    /// accumulator is sized from the operand's runtime `len`, not a
+    /// compile-time width, and the row kernel computes the right partial
+    /// product.
+    #[test]
+    fn heapless_cios_row_ops() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u32, 4, const_num_traits::Nct>;
+
+        // Two used limbs inside a capacity-4 carrier.
+        let mult = H::from_limbs([7u32, 3, 0, 0], 2);
+
+        // The accumulator sizes to the operand's runtime len (2), which
+        // is the whole point of the `&self` accumulator override — a
+        // no-arg `Default` would give word_count 0 and break the driver.
+        let mut acc = <H as CiosRowOps>::cios_accumulator(&mult);
+        assert_eq!(<H as CiosRowOps>::word_count(&acc), 2);
+
+        // acc += 5 * [7, 3]  ->  [35, 15], no carry out.
+        let carry = <H as CiosRowOps>::mul_acc_row(5, &mult, &mut acc, 0);
+        assert_eq!(carry, 0);
+        assert_eq!(<H as CiosRowOps>::word(&acc, 0), 35);
+        assert_eq!(<H as CiosRowOps>::word(&acc, 1), 15);
+
+        // Carry-out path: MAX * MAX = (2^32-1)^2 -> low word 1, high word
+        // 2^32-2 carried out of the single limb.
+        let one_limb = H::from_limbs([u32::MAX, 0, 0, 0], 1);
+        let mut acc1 = <H as CiosRowOps>::cios_accumulator(&one_limb);
+        let carry1 = <H as CiosRowOps>::mul_acc_row(u32::MAX, &one_limb, &mut acc1, 0);
+        assert_eq!(<H as CiosRowOps>::word(&acc1, 0), 1);
+        assert_eq!(carry1, u32::MAX - 1);
+    }
 }
