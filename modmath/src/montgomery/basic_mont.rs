@@ -38,7 +38,7 @@ where
     T: Copy
         + const_num_traits::One
         + core::ops::Add<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Sub<Output = T>
@@ -52,7 +52,12 @@ where
     // O(log R) alternatives for larger moduli.
     let mut n_prime = T::one();
     loop {
-        if (modulus * n_prime) % r == target {
+        if modulus
+            .checked_mul(n_prime)
+            .expect(crate::montgomery::OVERFLOW_MSG)
+            % r
+            == target
+        {
             return Some(n_prime);
         }
         n_prime = n_prime + T::one();
@@ -107,7 +112,7 @@ where
     T: Copy
         + const_num_traits::Zero
         + core::ops::Add<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + const_num_traits::One
         + PartialEq
         + core::ops::Sub<Output = T>
@@ -135,7 +140,11 @@ where
         //     x_new = x - x - 1/modulus  (but we work mod powers of 2)
 
         let target_mod = T::one() << k; // 2^k
-        let check_val = (modulus * n_prime + T::one()) % target_mod;
+        let check_val = (modulus
+            .checked_mul(n_prime)
+            .expect(crate::montgomery::OVERFLOW_MSG)
+            + T::one())
+            % target_mod;
 
         if check_val != T::zero() {
             // Need to adjust n_prime
@@ -149,7 +158,10 @@ where
     }
 
     // Final check and adjustment to ensure modulus * N' ≡ -1 (mod R)
-    let final_check = (modulus * n_prime) % r;
+    let final_check = modulus
+        .checked_mul(n_prime)
+        .expect(crate::montgomery::OVERFLOW_MSG)
+        % r;
     let target = r - T::one(); // -1 mod R
 
     if final_check != target {
@@ -280,7 +292,7 @@ where
     T: Copy
         + const_num_traits::One
         + core::ops::Add<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialOrd
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
@@ -306,13 +318,20 @@ where
     let mask = (T::one() << r_bits) - T::one(); // mask = 2^r_bits - 1
 
     // Step 1: m = ((a_mont & mask) * N') & mask
-    let m = ((a_mont & mask) * n_prime) & mask;
+    let m = (a_mont & mask)
+        .checked_mul(n_prime)
+        .expect(crate::montgomery::OVERFLOW_MSG)
+        & mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
-    // WARNING: m * N can overflow for large moduli (m < R, N < R, so
-    // m*N can reach R^2). Use wide_redc(a_mont, T::zero(), modulus, n_prime)
-    // for overflow-free reduction.
-    let t = (a_mont + m * modulus) >> r_bits;
+    // m * N reaches up to R² (m < R, N < R); checked_mul turns a
+    // carrier-too-narrow product into a panic rather than a wrapped, wrong
+    // reduction. Use wide_redc(a_mont, T::zero(), modulus, n_prime) for
+    // overflow-free reduction.
+    let t = (a_mont
+        + m.checked_mul(modulus)
+            .expect(crate::montgomery::OVERFLOW_MSG))
+        >> r_bits;
 
     // Step 3: Final reduction
     if t >= modulus { t - modulus } else { t }
@@ -329,7 +348,7 @@ where
     T: Copy
         + const_num_traits::Zero
         + core::ops::Add<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + const_num_traits::One
         + PartialOrd
         + core::ops::Sub<Output = T>
@@ -362,7 +381,7 @@ where
     T: Copy
         + const_num_traits::Zero
         + core::ops::Add<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + const_num_traits::One
         + PartialOrd
         + core::ops::Sub<Output = T>

@@ -16,10 +16,9 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
+        + const_num_traits::CheckedMul<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
 {
     // We need to find N' where modulus * N' ≡ R - 1 (mod R)
     let target = r - &T::one(); // This is -1 mod R
@@ -30,8 +29,10 @@ where
     let mut n_prime = T::one();
     loop {
         // Check if (modulus * n_prime) % r == target
-        // Use references to avoid copying large integers
-        let product = modulus * &n_prime;
+        let product = modulus
+            .clone()
+            .checked_mul(n_prime.clone())
+            .expect(crate::montgomery::OVERFLOW_MSG);
         let remainder = &product % r;
         if remainder == target {
             return Some(n_prime);
@@ -63,9 +64,7 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Sub<Output = T>,
-    for<'a> T: core::ops::Mul<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Add<&'a T, Output = T>,
+    for<'a> T: core::ops::Sub<&'a T, Output = T> + core::ops::Add<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<T, Output = T>
@@ -99,12 +98,11 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
+        + const_num_traits::CheckedMul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Sub<&'a T, Output = T> + core::ops::Rem<&'a T, Output = T>,
 {
     // Hensel's lifting for N' computation when R = 2^k
     // Start with base case: find N' such that modulus * N' ≡ -1 (mod 2)
@@ -122,7 +120,10 @@ where
         // This is the core of Hensel lifting: extending solutions modulo increasing powers
 
         let target_mod = T::one() << k; // 2^k
-        let temp_prod = modulus * &n_prime;
+        let temp_prod = modulus
+            .clone()
+            .checked_mul(n_prime.clone())
+            .expect(crate::montgomery::OVERFLOW_MSG);
         let (temp_sum, _overflow) = temp_prod.overflowing_add(T::one());
         let check_val = &temp_sum % &target_mod;
 
@@ -143,7 +144,11 @@ where
 
     // Verification: ensure the computed N' satisfies modulus * N' ≡ -1 (mod R)
     // This check validates the mathematical correctness of our Hensel lifting
-    let final_check = (modulus * &n_prime) % r;
+    let final_prod = modulus
+        .clone()
+        .checked_mul(n_prime.clone())
+        .expect(crate::montgomery::OVERFLOW_MSG);
+    let final_check = &final_prod % r;
     let target = r - &T::one(); // -1 mod R
 
     if final_check != target {
@@ -264,6 +269,7 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialOrd
+        + const_num_traits::CheckedMul<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>
@@ -299,8 +305,9 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::Sub<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>,
-    for<'a> T: core::ops::Mul<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Mul<&'a T, Output = T> + core::ops::BitAnd<&'a T, Output = T>,
+    T: const_num_traits::CheckedMul<Output = T>,
+    for<'a> T: core::ops::Sub<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::BitAnd<&'a T, Output = T>,
 {
     // Montgomery reduction algorithm:
     // Input: a_mont (Montgomery form), N (modulus), N', r_bits
@@ -324,13 +331,18 @@ where
     // Step 1: m = ((a_mont & mask) * N') & mask
     // Only use low r_bits of a_mont, then mask result to low r_bits
     let a_low = &a_mont & &mask;
-    let product = &a_low * n_prime;
+    let product = a_low
+        .checked_mul(n_prime.clone())
+        .expect(crate::montgomery::OVERFLOW_MSG);
     let m = &product & &mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
-    // Warning: m * N can overflow for large moduli (m < R, N < R, so m*N
-    // can reach R²). For overflow-free reduction, use wide-REDC.
-    let m_times_n = &m * modulus;
+    // m * N reaches up to R² (m < R, N < R); checked_mul turns a
+    // carrier-too-narrow product into a panic rather than a wrapped, wrong
+    // reduction. For overflow-free reduction, use wide-REDC.
+    let m_times_n = m
+        .checked_mul(modulus.clone())
+        .expect(crate::montgomery::OVERFLOW_MSG);
     let (sum, _overflow) = a_mont.overflowing_add(m_times_n);
     let t = sum >> r_bits; // Divide by R = 2^r_bits using bit shift
 

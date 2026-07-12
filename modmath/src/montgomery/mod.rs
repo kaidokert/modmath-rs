@@ -24,6 +24,13 @@ pub(crate) mod strict_mont;
 
 pub mod cios;
 
+/// The R>N schoolbook REDC forms a full-width `m * N` (up to R²) product; if
+/// the carrier can't hold it the reduction would silently wrap into a wrong
+/// result, so the checked multiplies panic instead. Sized moduli should route
+/// through wide-REDC / CIOS, which never forms this intermediate.
+pub(crate) const OVERFLOW_MSG: &str =
+    "montgomery R>N: carrier too narrow for the m*N intermediate; use wide-REDC / CIOS";
+
 // Flavor-neutral items live at this flat path: the NPrimeMethod enum
 // (shared by every flavor's `*_with_method` siblings), the wide-REDC
 // param helpers (`compute_n_prime_newton` etc., generic over any T:

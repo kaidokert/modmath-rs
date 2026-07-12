@@ -21,8 +21,8 @@ where
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::Mul<&'a T, Output = T>,
 {
     // We need to find N' where modulus * N' ≡ R - 1 (mod R)
     let target = r.clone().wrapping_sub(T::one()); // This is -1 mod R
@@ -30,7 +30,11 @@ where
     // Simple trial search for N'
     let mut n_prime = T::one();
     loop {
-        if (modulus.clone() * &n_prime) % r == target {
+        let product = modulus
+            .clone()
+            .checked_mul(n_prime.clone())
+            .expect(crate::montgomery::OVERFLOW_MSG);
+        if product % r == target {
             return Some(n_prime);
         }
         n_prime = n_prime.wrapping_add(T::one());
@@ -55,8 +59,7 @@ where
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>,
+        + core::ops::Sub<Output = T>,
     for<'a> T: core::ops::Add<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T> + core::ops::Div<&'a T, Output = T>,
 {
@@ -88,9 +91,9 @@ where
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> T: core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     // Hensel's lifting for N' computation when R = 2^k
@@ -99,7 +102,10 @@ where
     // Lift from 2^1 to 2^r_bits using Newton's method
     for k in 2..=r_bits {
         let target_mod = T::one() << k; // 2^k
-        let temp_prod = modulus.clone() * &n_prime;
+        let temp_prod = modulus
+            .clone()
+            .checked_mul(n_prime.clone())
+            .expect(crate::montgomery::OVERFLOW_MSG);
         let temp_sum = temp_prod.wrapping_add(T::one());
         let check_val = &temp_sum % &target_mod;
 
@@ -112,7 +118,11 @@ where
     }
 
     // Final check
-    let final_check = (modulus.clone() * &n_prime) % r;
+    let final_prod = modulus
+        .clone()
+        .checked_mul(n_prime.clone())
+        .expect(crate::montgomery::OVERFLOW_MSG);
+    let final_check = final_prod % r;
     let target = r.clone().wrapping_sub(T::one()); // -1 mod R
 
     if final_check != target {
@@ -239,8 +249,8 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
-        + const_num_traits::ops::wrapping::WrappingSub<Output = T>,
-    for<'a> T: core::ops::Mul<&'a T, Output = T>,
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
+        + const_num_traits::CheckedMul<Output = T>,
     for<'a> &'a T: core::ops::BitAnd<&'a T, Output = T>,
 {
     // Montgomery reduction algorithm:
@@ -262,13 +272,18 @@ where
 
     // Step 1: m = ((a_mont & mask) * N') & mask
     let a_low = &a_mont & &mask;
-    let product = a_low * n_prime;
+    let product = a_low
+        .checked_mul(n_prime.clone())
+        .expect(crate::montgomery::OVERFLOW_MSG);
     let m = &product & &mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
-    // Warning: m * N can overflow for large moduli (m < R, N < R, so m*N
-    // can reach R²). For overflow-free reduction, use wide-REDC.
-    let m_times_n = m * modulus;
+    // m * N reaches up to R² (m < R, N < R); checked_mul turns a
+    // carrier-too-narrow product into a panic rather than a wrapped, wrong
+    // reduction. For overflow-free reduction, use wide-REDC.
+    let m_times_n = m
+        .checked_mul(modulus.clone())
+        .expect(crate::montgomery::OVERFLOW_MSG);
     let temp_sum = a_mont.wrapping_add(m_times_n);
     let t = temp_sum >> r_bits;
 
@@ -297,6 +312,7 @@ where
         + core::ops::Shr<usize, Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + crate::NonCt,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
