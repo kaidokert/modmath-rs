@@ -223,9 +223,11 @@ where
 #[inline]
 fn neg_mod_ct<T>(x: &T, m: &T) -> T
 where
-    T: Clone + Zero + ConditionallySelectable + WrappingSub<Output = T> + CtIsZero,
+    T: Clone + ConditionallySelectable + WrappingSub<Output = T> + CtIsZero,
 {
-    let zero = T::zero();
+    // Field-width zero (`m - m`), not `T::zero()`: on a runtime-width
+    // carrier the latter is narrow and would re-narrow d/e when selected.
+    let zero = m.clone().wrapping_sub(m.clone());
     let x_is_zero = x.ct_is_zero();
     let neg = m.clone().wrapping_sub(x.clone());
     T::conditional_select(&neg, &zero, x_is_zero)
@@ -293,7 +295,14 @@ where
         + core::ops::BitOr<Output = T>,
     T::Word: CtParity,
 {
-    let n_bits = value.word_count() * core::mem::size_of::<T::Word>() * 8;
+    // Divstep count is a function of the ring width, not the particular
+    // value: a runtime-width carrier can hand us a `value` narrower than the
+    // modulus (e.g. inverting a small residue in a wide field), and counting
+    // its words would run too few divsteps to converge. Bound by the wider
+    // of the two operands.
+    let n_bits = core::cmp::max(value.word_count(), modulus.word_count())
+        * core::mem::size_of::<T::Word>()
+        * 8;
     let total_steps = divsteps_total(n_bits);
     // Loop invariants for se_shr1 / half_mod_ct — hoisted so each
     // divstep doesn't redo a full-width shift. The mask is MAX − (MAX
@@ -301,8 +310,14 @@ where
     // defeats const-folding through multi-limb Shl impls, keeping
     // their index bounds-check panic path alive post-LTO (flagged by
     // the panic-free audit); a constant-amount shift folds clean.
-    let max = T::zero().wrapping_sub(T::one());
-    let top_bit_mask = max.wrapping_sub(max.clone() >> 1);
+    // All working values operate at the modulus width so the top-bit mask,
+    // the ±1 sentinels, and the mod-reductions align on a runtime-width
+    // carrier — a narrow `value`/`one`/`zero` would place the mask and the
+    // sentinels at the wrong bit and the divsteps would not converge.
+    // `m - m` is a field-width zero synthesized from the modulus.
+    let field_zero = modulus.clone().wrapping_sub(modulus.clone());
+    let max = field_zero.clone().wrapping_sub(T::one());
+    let top_bit_mask = max.clone().wrapping_sub(max.clone() >> 1);
     let m_half = modulus.clone() >> 1;
 
     let mut f = SignedExt {
@@ -310,11 +325,11 @@ where
         hi: 0,
     };
     let mut g = SignedExt {
-        lo: value.clone(),
+        lo: field_zero.clone().wrapping_add(value.clone()),
         hi: 0,
     };
-    let mut d = T::zero();
-    let mut e = T::one();
+    let mut d = field_zero.clone();
+    let mut e = field_zero.clone().wrapping_add(T::one());
     let mut delta: i64 = 1;
 
     for _ in 0..total_steps {
@@ -360,7 +375,9 @@ where
     // invertible case (gcd == 1), f is either +1 (lo == 1, hi == 0)
     // or -1 (lo all-ones, hi all-ones).
     let one = T::one();
-    let neg_one_lo = T::zero().wrapping_sub(T::one());
+    // -1 at the modulus width (all-ones), matching f.lo's width for the
+    // f == -1 sentinel check; a narrow `zero - one` would miscompare.
+    let neg_one_lo = max.clone();
 
     let f_is_one = f.lo.ct_eq(&one) & f.hi.ct_eq(&0u64);
     let f_is_neg_one = f.lo.ct_eq(&neg_one_lo) & f.hi.ct_eq(&u64::MAX);
@@ -386,6 +403,28 @@ where
 mod tests {
     use super::*;
     use crate::inv::basic_mod_inv;
+
+    #[test]
+    fn heapless_narrow_value_wide_modulus() {
+        // Runtime-width carrier: value occupies one word, modulus two.
+        // Divstep count and the shift mask must track the modulus width,
+        // not the value's, or the loop fails to converge and reports None.
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 8>;
+        for (v, m) in [(3u16, 511u16), (7, 65535), (2, 65521), (123, 40001)] {
+            let vh: H = v.into();
+            let mh: H = m.into();
+            let got = safegcd_inv_ct::<H>(&vh, &mh).into_option();
+            let want = safegcd_inv_ct::<u32>(&(v as u32), &(m as u32)).into_option();
+            match (got, want) {
+                (Some(g), Some(w)) => {
+                    let gw: u32 = (g.word(0) as u32) | ((g.word(1) as u32) << 8);
+                    assert_eq!(gw, w, "value={v} modulus={m}");
+                }
+                (a, b) => panic!("value={v} modulus={m}: heapless={a:?} u32={b:?}"),
+            }
+        }
+    }
 
     #[test]
     fn divsteps_total_matches_paper_bound() {

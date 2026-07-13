@@ -1713,4 +1713,35 @@ mod tests {
         let a = f.reduce(&H::from(4u8));
         assert_eq!(f.into_raw(&f.mul(&a, &a)), H::from(16u8));
     }
+
+    // CT safegcd inverse on a runtime-width carrier where the residue is
+    // narrower than the modulus (small blinding factor in a wide RSA field).
+    // The divstep count and shift mask must track the modulus width; a value-
+    // width count silently masks valid inverses to None. Scaled-down proxy for
+    // the 2048-bit RSA-blinding inverse; composite modulus, since Fermat can't
+    // invert mod p·q.
+    #[test]
+    fn heapless_inv_safegcd_ct_narrow_value_wide_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 8, Ct>; // modulus fills 2 words, operands 1
+        let f = FieldCt::new(65535u16.into()).unwrap(); // 3·5·17·257
+        for raw in [2u8, 4, 7, 8, 11] {
+            let r = f.reduce(&H::from(raw));
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(inv.is_some().unwrap_u8(), 1, "expected inverse for {raw}");
+            assert_eq!(
+                f.into_raw(&f.mul(&r, &inv.unwrap())),
+                H::from(1u8),
+                "{raw} * inv != 1 mod 65535"
+            );
+        }
+        for raw in [3u8, 5, 15, 17] {
+            let r = f.reduce(&H::from(raw));
+            assert_eq!(
+                f.inv_safegcd_ct(&r).is_some().unwrap_u8(),
+                0,
+                "expected None for non-coprime {raw} mod 65535"
+            );
+        }
+    }
 }
