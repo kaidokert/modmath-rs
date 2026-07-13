@@ -69,6 +69,9 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + crate::NonCt,
 {
+    // Widen a to the modulus width so the carry from a + b fires at bit W,
+    // not at a's narrower stored width. `m - m` is a field-width zero.
+    let a = m.wrapping_sub(m).wrapping_add(a);
     let sum = a.wrapping_add(b);
     if sum >= m || sum < a {
         sum.wrapping_sub(m)
@@ -123,6 +126,9 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + crate::NonCt,
 {
+    // Widen a to the modulus width so the carry from a + b fires at bit W,
+    // not at a's narrower stored width. `m - m` is a field-width zero.
+    let a = m.clone().wrapping_sub(m.clone()).wrapping_add(a);
     let sum = a.clone().wrapping_add(b.clone());
     if &sum >= m || sum < a {
         sum.wrapping_sub(m.clone())
@@ -179,6 +185,9 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + crate::NonCt,
 {
+    // Widen a to the modulus width so the carry from a + b fires at bit W,
+    // not at a's narrower stored width. `m - m` is a field-width zero.
+    let a = m.clone().overflowing_sub(m.clone()).0.overflowing_add(a).0;
     let (sum, overflow) = a.overflowing_add(b.clone());
     if &sum >= m || overflow {
         sum.overflowing_sub(m.clone()).0
@@ -459,6 +468,29 @@ mod bnum_add_tests {
         constrained: on,
         basic: on,
     );
+
+    // Operands occupy one byte, modulus spans two: a runtime-width carrier
+    // must reduce at the modulus width, not wrap at the operand's. Regression
+    // guard for the len(a) < len(m) case the single-word modules can't reach.
+    #[test]
+    fn heapless_narrow_operand_wide_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        let m: H = 1000u16.into();
+        let want: H = 400u16.into();
+        assert_eq!(
+            super::basic_mod_add(H::from(200u8), H::from(200u8), m),
+            want
+        );
+        assert_eq!(
+            super::constrained_mod_add(H::from(200u8), &H::from(200u8), &m),
+            want
+        );
+        assert_eq!(
+            super::strict_mod_add(H::from(200u8), &H::from(200u8), &m),
+            want
+        );
+    }
 }
 
 #[cfg(test)]

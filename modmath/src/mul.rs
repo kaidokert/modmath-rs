@@ -114,7 +114,7 @@ where
 /// Note: this only removes the division side-channel from the signature.
 /// The double-and-add loop still leaks `bit_length(b)`; for constant-time
 /// multiplication, use the Montgomery wide-REDC path.
-pub fn basic_mod_mul_pr<T>(mut a: T, mut b: T, m: T) -> T
+pub fn basic_mod_mul_pr<T>(a: T, mut b: T, m: T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
@@ -127,7 +127,12 @@ where
         + crate::NonCt,
 {
     let m1 = m;
-    let mut result = T::zero();
+    // Widen the doubling operand and accumulator to the modulus width so
+    // `a + a` / `result + a` overflow at bit W, not at the narrow operand's
+    // width. `m - m` is a field-width zero synthesized from the modulus.
+    let field_zero = m.wrapping_sub(m);
+    let mut a = field_zero.wrapping_add(a);
+    let mut result = field_zero;
 
     while b > T::zero() {
         if b.is_odd() {
@@ -200,7 +205,7 @@ where
 /// # Modular Multiplication (Constrained, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound. See
 /// [`basic_mod_mul_pr`] for the CT caveat.
-pub fn constrained_mod_mul_pr<T>(mut a: T, b: &T, m: &T) -> T
+pub fn constrained_mod_mul_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: Clone
         + const_num_traits::Zero
@@ -213,7 +218,12 @@ where
     for<'a> &'a T: crate::parity::Parity,
 {
     let mut b = b.clone();
-    let mut result = T::zero();
+    // Widen the doubling operand and accumulator to the modulus width so
+    // `a + a` / `result + a` overflow at bit W, not at the narrow operand's
+    // width. `m - m` is a field-width zero synthesized from the modulus.
+    let field_zero = m.clone().wrapping_sub(m.clone());
+    let mut a = field_zero.clone().wrapping_add(a);
+    let mut result = field_zero;
 
     while b > T::zero() {
         if (&b).is_odd() {
@@ -289,7 +299,7 @@ where
 /// # Modular Multiplication (Strict, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound. See
 /// [`basic_mod_mul_pr`] for the CT caveat.
-pub fn strict_mod_mul_pr<T>(mut a: T, b: &T, m: &T) -> T
+pub fn strict_mod_mul_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: Clone
         + const_num_traits::Zero
@@ -302,7 +312,12 @@ where
     for<'a> &'a T: crate::parity::Parity,
 {
     let mut b = b.clone();
-    let mut result = T::zero();
+    // Widen the doubling operand and accumulator to the modulus width so
+    // `a + a` / `result + a` overflow at bit W, not at the narrow operand's
+    // width. `m - m` is a field-width zero synthesized from the modulus.
+    let field_zero = m.clone().overflowing_sub(m.clone()).0;
+    let mut a = field_zero.clone().overflowing_add(a).0;
+    let mut result = field_zero;
 
     while b > T::zero() {
         if (&b).is_odd() {
@@ -723,6 +738,26 @@ mod bnum_mul_tests {
         constrained: on,
         basic: on,
     );
+
+    // Operands occupy one byte, modulus spans two: the peasant loop doubles
+    // `a` and must overflow at the modulus width, not the operand's. Regression
+    // guard for the len(a) < len(m) case the single-word modules can't reach.
+    #[test]
+    fn heapless_narrow_operand_wide_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        let m: H = 1000u16.into();
+        let want: H = 104u16.into(); // 234 * 56 = 13104 ≡ 104 (mod 1000)
+        assert_eq!(super::basic_mod_mul(H::from(234u8), H::from(56u8), m), want);
+        assert_eq!(
+            super::constrained_mod_mul(H::from(234u8), &H::from(56u8), &m),
+            want
+        );
+        assert_eq!(
+            super::strict_mod_mul(H::from(234u8), &H::from(56u8), &m),
+            want
+        );
+    }
 }
 
 #[cfg(test)]

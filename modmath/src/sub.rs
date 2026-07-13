@@ -63,6 +63,9 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + crate::NonCt,
 {
+    // Widen a to the modulus width so an underflowing a - b wraps at bit W,
+    // matching m's width when the correction adds m. `m - m` is field-width zero.
+    let a = m.wrapping_sub(m).wrapping_add(a);
     let diff = a.wrapping_sub(b);
     if diff > a {
         // If we wrapped around (underflow)
@@ -115,6 +118,9 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + crate::NonCt,
 {
+    // Widen a to the modulus width so an underflowing a - b wraps at bit W,
+    // matching m's width when the correction adds m. `m - m` is field-width zero.
+    let a = m.clone().wrapping_sub(m.clone()).wrapping_add(a);
     let diff = a.clone().wrapping_sub(b.clone());
     if diff > a {
         // If we wrapped around (underflow)
@@ -168,6 +174,9 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + crate::NonCt,
 {
+    // Widen a to the modulus width so the wrapped diff on underflow is
+    // 2^W - (b-a), which m + diff then reduces correctly. `m - m` is field-width zero.
+    let a = m.clone().overflowing_sub(m.clone()).0.overflowing_add(a).0;
     let (diff, overflow) = a.overflowing_sub(b.clone());
     if overflow {
         m.clone().overflowing_add(diff).0
@@ -428,6 +437,23 @@ mod bnum_sub_tests {
         constrained: on,
         basic: on,
     );
+
+    // Operands occupy one byte, modulus spans two: an underflowing a - b must
+    // wrap at the modulus width so the +m correction lands. Regression guard
+    // for the len(a) < len(m) case the single-word modules can't reach.
+    #[test]
+    fn heapless_narrow_operand_wide_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        let m: H = 1000u16.into();
+        let want: H = 998u16.into(); // (5 - 7) mod 1000
+        assert_eq!(super::basic_mod_sub(H::from(5u8), H::from(7u8), m), want);
+        assert_eq!(
+            super::constrained_mod_sub(H::from(5u8), &H::from(7u8), &m),
+            want
+        );
+        assert_eq!(super::strict_mod_sub(H::from(5u8), &H::from(7u8), &m), want);
+    }
 }
 
 #[cfg(test)]

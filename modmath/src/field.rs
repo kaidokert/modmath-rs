@@ -1688,20 +1688,15 @@ mod tests {
         assert_eq!(f.into_raw(&f.mul(&a, &b)), w(15)); // 3*5=15 < modulus
     }
 
-    // Shift-left coverage: the SUB-CAP config (len < CAP) that leaked all the way
-    // to ed25519/rsa. A modulus narrower than the carrier makes the field width
-    // (`bits_precision` = len*word) smaller than storage, so the wide-REDC
-    // precompute (`compute_n_prime_newton` etc.) needs value-width wrapping
-    // arithmetic. It currently fails because HeaplessBigInt's wrapping_add/sub/mul
-    // GROW the result length instead of wrapping at value width, so the Newton
-    // loop computes n_prime at the wrong (growing) width. Repro:
-    // `reduce(4).into_raw()` yields 14, must be 4; `mont(4)^2` yields 13, want 16.
-    //
-    // Ignored until fixed-bigint ships value-width (non-growing) wrapping ops;
-    // this is the acceptance for that fix. Un-`ignore` when it lands — then CI
-    // catches any regression here instead of two crates downstream.
+    // Shift-left guard: the SUB-CAP config (len < CAP) that leaked all the way to
+    // ed25519/rsa. A modulus narrower than the carrier makes the field width
+    // (`bits_precision` = len*word) smaller than storage, so the whole wide-REDC
+    // precompute runs at value width on unused-capacity operands. Passes because
+    // HeaplessBigInt@len behaves bit-for-bit like FixedUInt<len> (fixed-bigint
+    // alpha.20) — this test exercises that with NO modmath accommodation. If a
+    // future carrier change reintroduces capacity-dependent arithmetic, it fails
+    // here, in modmath's CI, not two crates downstream.
     #[test]
-    #[ignore = "acceptance for fixed-bigint value-width wrapping-op fix (sub-CAP HeaplessBigInt)"]
     fn heapless_field_roundtrip_subcap() {
         use fixed_bigint::HeaplessBigInt;
         type H = HeaplessBigInt<u8, 8, const_num_traits::Nct>; // modulus 35 -> len 1 < CAP 8

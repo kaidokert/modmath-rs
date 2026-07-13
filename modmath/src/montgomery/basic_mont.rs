@@ -491,7 +491,9 @@ where
     if modulus == T::one() {
         return T::zero();
     }
-    let mut result = val;
+    // Widen the start value to the modulus width so mod_double's
+    // overflow flag fires at bit W, not at the narrow value's width.
+    let mut result = modulus.wrapping_sub(modulus).overflowing_add(val).0;
     for _ in 0..w {
         result = mod_double(result, modulus);
     }
@@ -514,7 +516,9 @@ where
         + subtle::ConstantTimeEq
         + subtle::ConstantTimeLess,
 {
-    let mut result = val;
+    // Widen the start value to the modulus width so mod_double_ct's
+    // overflow flag fires at bit W, not at the narrow value's width.
+    let mut result = modulus.wrapping_sub(modulus).wrapping_add(val);
     for _ in 0..w {
         result = mod_double_ct(result, modulus);
     }
