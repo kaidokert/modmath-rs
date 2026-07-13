@@ -756,8 +756,9 @@ where
 
     /// Modular exponentiation — constant-time over `exp`.
     ///
-    /// Implements a fixed-iteration Montgomery ladder over all
-    /// `bit_length(T)` bits of the exponent. Both square and multiply are
+    /// Implements a fixed-iteration Montgomery ladder over the exponent's
+    /// declared width (`exp.bits_precision()` — a public shape, independent of
+    /// the secret value). Both square and multiply are
     /// performed every iteration; the result is selected branchlessly. Loop
     /// count does not depend on `exp`; per-iteration timing does not depend
     /// on the bit pattern.
@@ -907,16 +908,16 @@ where
     /// iteration CT Montgomery ladder.
     ///
     /// **Requires `modulus` to be prime.** Constant-time over `a`'s
-    /// bits and zero-ness via the fixed `T::BITS`-iteration Montgomery
-    /// ladder in [`Self::exp`]. The loop count depends only on the
-    /// carrier type's bit width, not on `modulus - 2`'s significant
-    /// bit count or `a`'s value. Returns `CtOption::None`-masked for
-    /// the zero residue.
+    /// bits and zero-ness via the fixed-iteration Montgomery ladder in
+    /// [`Self::exp`]. The loop count is the exponent's declared width
+    /// (`(modulus - 2).bits_precision()`, a public shape), not
+    /// `modulus - 2`'s significant bit count or `a`'s value. Returns
+    /// `CtOption::None`-masked for the zero residue.
     ///
-    /// Cost: one full ladder over every bit of `T` (e.g. 256
-    /// square-and-multiply iterations for a 256-bit carrier over a
-    /// Curve25519 scalar field), regardless of whether `modulus - 2`
-    /// occupies the full carrier width. For composite moduli (RSA
+    /// Cost: one full ladder over the exponent's declared width (e.g.
+    /// 256 square-and-multiply iterations for a 256-bit field over a
+    /// Curve25519 scalar field), regardless of whether `modulus - 2`'s
+    /// significant bits fill that width. For composite moduli (RSA
     /// `n = p·q`) where Fermat doesn't apply, use
     /// [`Self::inv_safegcd_ct`] instead.
     pub fn inv_fermat(&self, a: &Residue<'_, T, Ct>) -> subtle::CtOption<Residue<'_, T, Ct>>
