@@ -1745,6 +1745,124 @@ mod tests {
         }
     }
 
+    // Multi-word modulus (len 8) held sub-CAP (CAP 16): the ed25519 field
+    // (p = 2^255-19) / group-order shape krabitls deploys for Nct verify.
+    // The prior sub-CAP guard used a len-1 modulus; this exercises a multi-
+    // word modulus with full-width operands, where a capacity leak would
+    // diverge from the CAP==len carrier. Both carriers are HeaplessBigInt so
+    // any CAP-dependent arithmetic (not value-dependent) shows up as a diff.
+    #[test]
+    fn heapless_subcap_multiword_modulus_parity() {
+        use fixed_bigint::HeaplessBigInt;
+        use modmath_cios::CiosRowOps as _;
+        const P: [u32; 8] = [
+            0xFFFF_FFED,
+            0xFFFF_FFFF,
+            0xFFFF_FFFF,
+            0xFFFF_FFFF,
+            0xFFFF_FFFF,
+            0xFFFF_FFFF,
+            0xFFFF_FFFF,
+            0x7FFF_FFFF,
+        ];
+        const A: [u32; 8] = [
+            0x1234_5678,
+            0x9abc_def0,
+            0x0f1e_2d3c,
+            0x4b5a_6978,
+            0x1122_3344,
+            0x5566_7788,
+            0x99aa_bbcc,
+            0x1357_9bdf,
+        ];
+        const B: [u32; 8] = [
+            0xdead_beef,
+            0xcafe_babe,
+            0xfeed_face,
+            0x0bad_c0de,
+            0x8899_aabb,
+            0xccdd_eeff,
+            0x0011_2233,
+            0x2468_ace0,
+        ];
+        type Full = HeaplessBigInt<u32, 8>; // CAP == len
+        type Sub = HeaplessBigInt<u32, 16>; // CAP > len (deployment carrier)
+        let mfull = Full::from_limbs(P, 8);
+        let mut p16 = [0u32; 16];
+        p16[..8].copy_from_slice(&P);
+        let msub = Sub::from_limbs(p16, 8);
+        let full = |a: [u32; 8]| Full::from_limbs(a, 8);
+        let sub = |a: [u32; 8]| {
+            let mut w = [0u32; 16];
+            w[..8].copy_from_slice(&a);
+            Sub::from_limbs(w, 8)
+        };
+        let eq = |a: &Full, b: &Sub| (0..8).all(|i| a.word(i) == b.word(i));
+        let eqo = |a: &Option<Full>, b: &Option<Sub>| match (a, b) {
+            (Some(x), Some(y)) => eq(x, y),
+            (None, None) => true,
+            _ => false,
+        };
+        assert!(
+            eq(
+                &crate::basic::add(full(A), full(B), mfull),
+                &crate::basic::add(sub(A), sub(B), msub)
+            ),
+            "add"
+        );
+        assert!(
+            eq(
+                &crate::basic::sub(full(A), full(B), mfull),
+                &crate::basic::sub(sub(A), sub(B), msub)
+            ),
+            "sub"
+        );
+        assert!(
+            eq(
+                &crate::basic::mul(full(A), full(B), mfull),
+                &crate::basic::mul(sub(A), sub(B), msub)
+            ),
+            "mul"
+        );
+        assert!(
+            eq(
+                &crate::basic::exp(full(A), full(B), mfull),
+                &crate::basic::exp(sub(A), sub(B), msub)
+            ),
+            "exp"
+        );
+        assert!(
+            eqo(
+                &crate::inv::basic_mod_inv(full(A), mfull),
+                &crate::inv::basic_mod_inv(sub(A), msub)
+            ),
+            "basic_inv"
+        );
+        assert!(
+            eqo(
+                &crate::inv::strict_mod_inv(full(A), &mfull),
+                &crate::inv::strict_mod_inv(sub(A), &msub)
+            ),
+            "strict_inv"
+        );
+        let ff: Field<Full> = Field::new(mfull).unwrap();
+        let fs: Field<Sub> = Field::new(msub).unwrap();
+        assert!(
+            eq(
+                &ff.into_raw(&ff.mul(&ff.reduce(&full(A)), &ff.reduce(&full(B)))),
+                &fs.into_raw(&fs.mul(&fs.reduce(&sub(A)), &fs.reduce(&sub(B)))),
+            ),
+            "montgomery mul"
+        );
+        assert!(
+            eq(
+                &ff.into_raw(&ff.exp(&ff.reduce(&full(A)), &full(B))),
+                &fs.into_raw(&fs.exp(&fs.reduce(&sub(A)), &sub(B))),
+            ),
+            "montgomery exp"
+        );
+    }
+
     // CT safegcd inverse where the modulus FILLS the carrier (top bit set):
     // the full-CAP RSA deployment shape (2048-bit N in a 2048-bit carrier),
     // scaled to a 128-bit carrier. Guards the se_shr1 top-bit mask — it must
