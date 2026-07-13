@@ -1668,12 +1668,12 @@ mod tests {
         assert!(eq_ab);
         assert!(!eq_ac);
     }
+    // Full Field round-trip on HeaplessBigInt at CAP == len (modulus fills the
+    // carrier). Catches the type_bit_width proxy (precompute R width) and the
+    // CarryingMul value-width split — the full-CAP config ed25519 / 2048-bit RSA
+    // use. Passes as of modmath's bits_precision fix + fixed-bigint alpha.17.
     #[test]
     fn heapless_field_roundtrip() {
-        // The coverage that was missing: a full Field round-trip on a carrier
-        // whose size_of != value width AND whose field is narrower than CAP
-        // (len 2 in an 8-word carrier). Catches both the type_bit_width proxy
-        // (precompute R width) and the CarryingMul CAP-split (wide-REDC hi/lo).
         use fixed_bigint::HeaplessBigInt;
         type H = HeaplessBigInt<u32, 2, const_num_traits::Nct>;
         let modulus = H::from_limbs([7u32, 1], 2); // 2^32 + 7, odd, fills CAP=2
@@ -1683,9 +1683,39 @@ mod tests {
             let r = f.reduce(&w(raw));
             assert_eq!(f.into_raw(&r), w(raw), "round trip {raw}");
         }
-        // 3 * 5 = 15 < modulus, so the raw product is exactly 15.
         let a = f.reduce(&w(3));
         let b = f.reduce(&w(5));
-        assert_eq!(f.into_raw(&f.mul(&a, &b)), w(15));
+        assert_eq!(f.into_raw(&f.mul(&a, &b)), w(15)); // 3*5=15 < modulus
+    }
+
+    // Shift-left coverage: the SUB-CAP config (len < CAP) that leaked all the way
+    // to ed25519/rsa. A modulus narrower than the carrier makes the field width
+    // (`bits_precision` = len*word) smaller than storage, so the wide-REDC
+    // precompute (`compute_n_prime_newton` etc.) needs value-width wrapping
+    // arithmetic. It currently fails because HeaplessBigInt's wrapping_add/sub/mul
+    // GROW the result length instead of wrapping at value width, so the Newton
+    // loop computes n_prime at the wrong (growing) width. Repro:
+    // `reduce(4).into_raw()` yields 14, must be 4; `mont(4)^2` yields 13, want 16.
+    //
+    // Ignored until fixed-bigint ships value-width (non-growing) wrapping ops;
+    // this is the acceptance for that fix. Un-`ignore` when it lands — then CI
+    // catches any regression here instead of two crates downstream.
+    #[test]
+    #[ignore = "acceptance for fixed-bigint value-width wrapping-op fix (sub-CAP HeaplessBigInt)"]
+    fn heapless_field_roundtrip_subcap() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 8, const_num_traits::Nct>; // modulus 35 -> len 1 < CAP 8
+        let f: Field<H> = Field::new(H::from(35u8)).unwrap();
+        // reduce/into_raw is the identity.
+        for raw in [0u8, 1, 4, 17, 34] {
+            assert_eq!(
+                f.into_raw(&f.reduce(&H::from(raw))),
+                H::from(raw),
+                "round trip {raw}"
+            );
+        }
+        // 4 * 4 = 16 mod 35.
+        let a = f.reduce(&H::from(4u8));
+        assert_eq!(f.into_raw(&f.mul(&a, &a)), H::from(16u8));
     }
 }
