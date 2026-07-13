@@ -504,6 +504,21 @@ mod heapless_cios_montmul {
     }
 
     #[test]
+    fn ct_variant_runs() {
+        let m = H::from(13u8);
+        let w = m.word_count() * 32;
+        let n_prime = compute_n_prime_newton(m, w);
+        let r2 = compute_r2_mod_n(compute_r_mod_n(m, w), m, w);
+        let np0 = n_prime.word(0);
+        // 7*R and 5*R in domain, CT multiply, CT back-convert.
+        let a_m = cios_montgomery_mul_ct(&H::from(7u8), &r2, &m, np0);
+        let b_m = cios_montgomery_mul_ct(&H::from(5u8), &r2, &m, np0);
+        let p_m = cios_montgomery_mul_ct(&a_m, &b_m, &m, np0);
+        let one = H::from(1u8);
+        assert_eq!(cios_montgomery_mul_ct(&p_m, &one, &m, np0), H::from(9u8));
+    }
+
+    #[test]
     fn single_word_modulus() {
         let m = H::from(13u8);
         for (a, b, exp) in [(7u8, 5u8, 9u8), (12, 12, 1), (2, 11, 9), (0, 7, 0)] {
