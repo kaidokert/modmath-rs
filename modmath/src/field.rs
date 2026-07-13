@@ -1667,4 +1667,24 @@ mod tests {
         assert!(eq_ab);
         assert!(!eq_ac);
     }
+    #[test]
+    fn heapless_field_roundtrip() {
+        // The coverage that was missing: a full Field round-trip on a carrier
+        // whose size_of != value width AND whose field is narrower than CAP
+        // (len 2 in an 8-word carrier). Catches both the type_bit_width proxy
+        // (precompute R width) and the CarryingMul CAP-split (wide-REDC hi/lo).
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u32, 2, const_num_traits::Nct>;
+        let modulus = H::from_limbs([7u32, 1], 2); // 2^32 + 7, odd, fills CAP=2
+        let w = |v: u32| H::from_limbs([v, 0], 2);
+        let f: Field<H> = Field::new(modulus).unwrap();
+        for raw in [3u32, 5, 200, 255, 1_000_000] {
+            let r = f.reduce(&w(raw));
+            assert_eq!(f.into_raw(&r), w(raw), "round trip {raw}");
+        }
+        // 3 * 5 = 15 < modulus, so the raw product is exactly 15.
+        let a = f.reduce(&w(3));
+        let b = f.reduce(&w(5));
+        assert_eq!(f.into_raw(&f.mul(&a, &b)), w(15));
+    }
 }
