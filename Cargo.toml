@@ -31,3 +31,6 @@ panic = "abort"
 debug = "line-tables-only"
 overflow-checks = false
 incremental = false
+
+[patch.crates-io]
+const-num-traits = { path = "../num-traits" }

@@ -39,7 +39,7 @@ where
     debug_assert!(a < modulus, "CIOS input a must be in [0, modulus)");
     debug_assert!(b < modulus, "CIOS input b must be in [0, modulus)");
 
-    let n = a.word_count();
+    let n = modulus.word_count();
     let zero = <T::Word as Zero>::zero();
     let one = <T::Word as One>::one();
     let mut acc = modulus.cios_accumulator();
@@ -98,7 +98,7 @@ where
         + core::ops::Add<Output = T::Word>
         + subtle::ConditionallySelectable,
 {
-    let n = a.word_count();
+    let n = modulus.word_count();
     let zero = <T::Word as Zero>::zero();
     let one = <T::Word as One>::one();
     let mut acc = modulus.cios_accumulator();
@@ -474,5 +474,50 @@ mod tests {
         let carry1 = <H as CiosRowOps>::mul_acc_row(u32::MAX, &one_limb, &mut acc1, 0);
         assert_eq!(<H as CiosRowOps>::word(&acc1, 0), 1);
         assert_eq!(carry1, u32::MAX - 1);
+    }
+}
+
+// The CIOS driver's operating width is the modulus word count (public), not
+// the multiplier's — so a HeaplessBigInt operand narrower than the modulus
+// still reduces over the full modulus width. Regression against `n =
+// a.word_count()`, which under-iterated the reduction on a runtime-len carrier
+// (invisible on fixed carriers, where every operand is one width).
+#[cfg(test)]
+mod heapless_cios_montmul {
+    use super::*;
+    use crate::montgomery::{compute_n_prime_newton, compute_r_mod_n, compute_r2_mod_n};
+    use fixed_bigint::HeaplessBigInt;
+
+    type H = HeaplessBigInt<u32, 4, const_num_traits::Nct>;
+
+    // Full a·b mod N via CIOS: reduce → mul → reduce back out of the domain.
+    fn mont_mul(a: H, b: H, modulus: H) -> H {
+        let w = modulus.word_count() * 32;
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r2 = compute_r2_mod_n(compute_r_mod_n(modulus, w), modulus, w);
+        let np0 = n_prime.word(0);
+        let a_m = cios_montgomery_mul(&a, &r2, &modulus, np0);
+        let b_m = cios_montgomery_mul(&b, &r2, &modulus, np0);
+        let p_m = cios_montgomery_mul(&a_m, &b_m, &modulus, np0);
+        let one = H::from_limbs([1u32, 0, 0, 0], modulus.word_count() as u16);
+        cios_montgomery_mul(&p_m, &one, &modulus, np0)
+    }
+
+    #[test]
+    fn single_word_modulus() {
+        let m = H::from(13u8);
+        for (a, b, exp) in [(7u8, 5u8, 9u8), (12, 12, 1), (2, 11, 9), (0, 7, 0)] {
+            assert_eq!(mont_mul(H::from(a), H::from(b), m), H::from(exp));
+        }
+    }
+
+    #[test]
+    fn multiword_modulus_narrow_operand() {
+        // 2-word odd modulus 2^32 + 15; operands fit in one word (len 1 < 2).
+        let m = H::from_limbs([15u32, 1, 0, 0], 2);
+        // 70000 * 70000 = 4_900_000_000 ≡ 605_032_689 (mod 2^32 + 15).
+        let want = H::from_limbs([605_032_689u32, 0, 0, 0], 1);
+        let a = H::from_limbs([70000u32, 0, 0, 0], 1);
+        assert_eq!(mont_mul(a, a, m), want);
     }
 }
