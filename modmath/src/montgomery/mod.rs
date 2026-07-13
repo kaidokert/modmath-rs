@@ -2,8 +2,8 @@
 //!
 //! Holds the [`NPrimeMethod`] enum (shared by every flavor's
 //! `*_with_method` siblings), the wide-REDC param helpers
-//! ([`compute_n_prime_newton`], [`compute_r_mod_n`], [`compute_r2_mod_n`],
-//! [`type_bit_width`]), and the [`cios`] submodule with the
+//! ([`compute_n_prime_newton`], [`compute_r_mod_n`], [`compute_r2_mod_n`]),
+//! and the [`cios`] submodule with the
 //! interleaved-multiply-and-reduce primitives and their CT siblings.
 //!
 //! The R>N path's per-flavor implementations live in private
@@ -34,14 +34,13 @@ pub(crate) const OVERFLOW_MSG: &str =
 // Flavor-neutral items live at this flat path: the NPrimeMethod enum
 // (shared by every flavor's `*_with_method` siblings), the wide-REDC
 // param helpers (`compute_n_prime_newton` etc., generic over any T:
-// WrappingMul + ...), and `type_bit_width`. Flavor-keyed R>N items are
+// WrappingMul + ...). Flavor-keyed R>N items are
 // surfaced through `modmath::{basic,constrained,strict}::montgomery::*`
 // and reach into `basic_mont` / `constrained_mont` / `strict_mont` via
 // the submodule paths instead of this flat re-export.
 #[rustfmt::skip]
 pub use basic_mont::{
     NPrimeMethod,
-    type_bit_width,
     compute_n_prime_newton,
     compute_r_mod_n,
     compute_r_mod_n_ct,
@@ -876,17 +875,13 @@ mod backend_montgomery_tests {
         heapless_bigint,
         fixed_bigint::FixedUInt,
         type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
-        // Off, but the R>N path itself is correct on HeaplessBigInt: strict
-        // and constrained montgomery_mod_mul(7,5,13) both give 9 (verified).
-        // Two things still block a green row, both modmath/test-side:
-        //   1. basic_montgomery_mod_mul routes through wide-REDC (R = 2^W),
-        //      and `type_bit_width::<T>() = size_of::<T>() * 8` reads 48 for
-        //      HeaplessBigInt (the `len: u16` field inflates size_of past the
-        //      32-bit value width), so it builds a bogus R and reduces wrong.
-        //      A runtime-length carrier needs a value-bit-width source other
-        //      than size_of before wide-REDC can support it.
-        //   2. test_montgomery_parameter_computation verifies via plain `*`/`%`
-        //      on the carrier, which HeaplessBigInt shape-panics on.
+        // Off. The width bug is fixed (the precompute reads
+        // `modulus.bits_precision()`, not `size_of*8`), and HeaplessBigInt's CT
+        // montgomery is the CIOS path, covered by `cios::heapless_cios_montmul`
+        // (single- and multi-word). This schoolbook row stays off for two
+        // reasons unrelated to that fix: `test_montgomery_parameter_computation`
+        // verifies via plain `*`/`%` on the carrier (shape-panics), and the
+        // Nct wide-REDC multiply is not width-uniform on a runtime-len carrier.
         strict: off,
         constrained: off,
         basic: off,

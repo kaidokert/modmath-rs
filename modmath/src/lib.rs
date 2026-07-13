@@ -69,12 +69,11 @@ pub use exp::const_mod_exp;
 // (algorithm selector for R>N `*_with_method` computations, used through
 // `modmath::{basic,constrained,strict}::montgomery::compute_params_with_method`)
 // plus the precompute helpers (`compute_n_prime_newton`, `compute_r_mod_n`,
-// `compute_r2_mod_n`) and `type_bit_width`. The flavor-keyed wide-REDC
+// `compute_r2_mod_n`). The flavor-keyed wide-REDC
 // wrappers live under `modmath::{basic,constrained,strict}::montgomery::wide::*`.
 #[rustfmt::skip]
 pub use montgomery::{
     NPrimeMethod,
-    type_bit_width,
     compute_n_prime_newton,
     compute_r_mod_n,
     compute_r_mod_n_ct,

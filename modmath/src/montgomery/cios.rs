@@ -190,7 +190,8 @@ where
 #[cfg(test)]
 mod smoke_tests {
     use super::*;
-    use crate::montgomery::{compute_n_prime_newton, type_bit_width};
+    use crate::montgomery::compute_n_prime_newton;
+    use const_num_traits::BitsPrecision;
 
     /// New CIOS via `CiosRowOps` must match the existing wide-REDC
     /// `wide_montgomery_mul` reference for every `(a, b)` modulo a small
@@ -201,7 +202,7 @@ mod smoke_tests {
             #[test]
             fn $name() {
                 let modulus: $t = 13;
-                let n_prime = compute_n_prime_newton(modulus, type_bit_width::<$t>());
+                let n_prime = compute_n_prime_newton(modulus, modulus.bits_precision() as usize);
                 for a in 0..modulus {
                     for b in 0..modulus {
                         let direct = crate::montgomery::basic_mont::wide_montgomery_mul(
@@ -225,9 +226,9 @@ mod smoke_tests {
 mod tests {
     use super::*;
     use crate::montgomery::basic_mont::{
-        compute_n_prime_newton, compute_r_mod_n, compute_r2_mod_n, type_bit_width,
-        wide_montgomery_mul, wide_redc,
+        compute_n_prime_newton, compute_r_mod_n, compute_r2_mod_n, wide_montgomery_mul, wide_redc,
     };
+    use const_num_traits::BitsPrecision;
     use const_num_traits::Ct;
     use fixed_bigint::FixedUInt;
 
@@ -241,7 +242,7 @@ mod tests {
         type U16 = FixedUInt<u8, 2>;
 
         let modulus = U16::from(13u16);
-        let w = type_bit_width::<U16>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -278,7 +279,7 @@ mod tests {
         type U128 = FixedUInt<u32, 4>;
 
         let modulus = !U128::from(0u64) - U128::from(58u64); // 2^128 - 59 (odd)
-        let w = type_bit_width::<U128>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -308,7 +309,7 @@ mod tests {
         type U128 = FixedUInt<u32, 4>;
 
         let modulus = !U128::from(0u64) - U128::from(58u64);
-        let w = type_bit_width::<U128>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -339,7 +340,7 @@ mod tests {
         type U128 = FixedUInt<u32, 4>;
 
         let modulus = !U128::from(0u64) - U128::from(58u64);
-        let w = type_bit_width::<U128>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -370,7 +371,7 @@ mod tests {
         type U16Ct = FixedUInt<u8, 2, Ct>;
 
         let modulus = U16::from(13u16);
-        let w = type_bit_width::<U16>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -406,7 +407,7 @@ mod tests {
         type U128Ct = FixedUInt<u32, 4, Ct>;
 
         let modulus = !U128::from(0u64) - U128::from(58u64);
-        let w = type_bit_width::<U128>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);

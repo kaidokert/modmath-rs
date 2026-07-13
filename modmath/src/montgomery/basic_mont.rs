@@ -401,11 +401,6 @@ where
 // Wide-REDC private helpers (R = 2^W, full type width)
 // ---------------------------------------------------------------------------
 
-/// Bit width of type T (e.g. 32 for u32, 128 for a 4×32-limb bigint).
-pub const fn type_bit_width<T>() -> usize {
-    core::mem::size_of::<T>() * 8
-}
-
 /// Modular doubling: (val + val) mod modulus, handling overflow.
 ///
 /// **Variable-time.** Branches on the `overflow || doubled >= modulus`
@@ -1011,7 +1006,8 @@ where
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + core::ops::Rem<Output = T>,
+        + core::ops::Rem<Output = T>
+        + const_num_traits::BitsPrecision,
 {
     let m = modulus.get();
     basic_montgomery_mod_mul_pr_odd(reduce_mod(a, m), reduce_mod(b, m), modulus)
@@ -1032,7 +1028,8 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + Parity
-        + core::ops::Rem<Output = T>,
+        + core::ops::Rem<Output = T>
+        + const_num_traits::BitsPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_mul_odd(a, b, m))
 }
@@ -1058,10 +1055,11 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
-        + const_num_traits::WrappingSub<Output = T>,
+        + const_num_traits::WrappingSub<Output = T>
+        + const_num_traits::BitsPrecision,
 {
     let modulus = modulus.get();
-    let w = type_bit_width::<T>();
+    let w = modulus.bits_precision() as usize;
     let n_prime = compute_n_prime_newton(modulus, w);
     let r_mod_n = compute_r_mod_n(modulus, w);
     let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -1098,7 +1096,8 @@ where
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + Parity,
+        + Parity
+        + const_num_traits::BitsPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_mul_pr_odd(a, b, m))
 }
@@ -1119,7 +1118,8 @@ where
         + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::Rem<Output = T>
-        + core::ops::ShrAssign<usize>,
+        + core::ops::ShrAssign<usize>
+        + const_num_traits::BitsPrecision,
 {
     let m = modulus.get();
     basic_montgomery_mod_exp_pr_odd(reduce_mod(base, m), exponent, modulus)
@@ -1145,7 +1145,8 @@ where
         + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::Rem<Output = T>
-        + core::ops::ShrAssign<usize>,
+        + core::ops::ShrAssign<usize>
+        + const_num_traits::BitsPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_odd(base, exponent, m))
 }
@@ -1165,10 +1166,11 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + Parity
-        + core::ops::ShrAssign<usize>,
+        + core::ops::ShrAssign<usize>
+        + const_num_traits::BitsPrecision,
 {
     let modulus = modulus.get();
-    let w = type_bit_width::<T>();
+    let w = modulus.bits_precision() as usize;
     let n_prime = compute_n_prime_newton(modulus, w);
     let r_mod_n = compute_r_mod_n(modulus, w);
     let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -1212,7 +1214,8 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + Parity
-        + core::ops::ShrAssign<usize>,
+        + core::ops::ShrAssign<usize>
+        + const_num_traits::BitsPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_pr_odd(base, exponent, m))
 }
@@ -1255,10 +1258,11 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::BitAnd<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeLess,
+        + subtle::ConstantTimeLess
+        + const_num_traits::BitsPrecision,
 {
     let modulus = modulus.get();
-    let w = type_bit_width::<T>();
+    let w = modulus.bits_precision() as usize;
     let n_prime = compute_n_prime_newton(modulus, w);
     let r_mod_n = compute_r_mod_n(modulus, w);
     let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -1271,10 +1275,12 @@ where
 
     let mut result = one_mont;
 
-    // Constant-time square-and-multiply, MSB to LSB, fixed iteration count = w.
-    // Always squares; always computes the multiply; conditionally selects.
+    // Constant-time square-and-multiply, MSB to LSB. Iteration count is the
+    // exponent width (public shape); equals w on a fixed carrier, tracks the
+    // exponent independently of the modulus R width on a runtime-len carrier.
+    let exp_bits = exponent.bits_precision() as usize;
     let one = T::one();
-    for i in (0..w).rev() {
+    for i in (0..exp_bits).rev() {
         // Always square
         result = wide_montgomery_mul_ct(result, result, modulus, n_prime);
 
@@ -1311,7 +1317,8 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::BitAnd<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeLess,
+        + subtle::ConstantTimeLess
+        + const_num_traits::BitsPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_pr_odd_ct(base, exponent, m))
 }
@@ -1319,6 +1326,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use const_num_traits::BitsPrecision;
     use const_num_traits::Ct;
     use fixed_bigint::FixedUInt;
 
@@ -1615,14 +1623,6 @@ mod tests {
     // -- Wide REDC helper tests (moved from wide_mont.rs) --------------------
 
     #[test]
-    fn test_type_bit_width() {
-        assert_eq!(type_bit_width::<u8>(), 8);
-        assert_eq!(type_bit_width::<u16>(), 16);
-        assert_eq!(type_bit_width::<u32>(), 32);
-        assert_eq!(type_bit_width::<u64>(), 64);
-    }
-
-    #[test]
     fn test_mod_double() {
         // Normal case: 5+5=10, 10 < 13 -> 10
         assert_eq!(mod_double(5u8, 13), 10);
@@ -1686,7 +1686,7 @@ mod tests {
     #[test]
     fn test_wide_montgomery_roundtrip() {
         let modulus = 13u8;
-        let w = type_bit_width::<u8>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -1701,7 +1701,7 @@ mod tests {
     #[test]
     fn test_wide_montgomery_roundtrip_u32() {
         let modulus = 0xFFFF_FFF1u32; // large odd u32
-        let w = type_bit_width::<u32>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -1847,7 +1847,7 @@ mod tests {
         let modulus = !U128::from(0u64) - U128::from(58u64); // 2^128 - 59 (odd)
 
         // Round-trip test via wide helpers directly
-        let w = type_bit_width::<U128>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -2084,7 +2084,7 @@ mod tests {
     #[test]
     fn test_wide_mul_acc_dot_product_u32_mlkem_q() {
         let modulus = 3329u32;
-        let w = type_bit_width::<u32>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r2 = compute_r2_mod_n(compute_r_mod_n(modulus, w), modulus, w);
         let to_mont = |x: u32| {
@@ -2121,7 +2121,7 @@ mod tests {
         type U128Ct = FixedUInt<u32, 4, Ct>;
 
         let modulus = !U128::from(0u64) - U128::from(58u64);
-        let w = type_bit_width::<U128>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let modulus_ct: U128Ct = modulus.into();
         let n_prime_ct: U128Ct = n_prime.into();

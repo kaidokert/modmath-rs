@@ -58,7 +58,6 @@ use crate::montgomery::basic_mont::{
 };
 use crate::montgomery::{
     CiosMontMul, CiosMontMulCt, compute_n_prime_newton, compute_r_mod_n, compute_r2_mod_n,
-    type_bit_width,
 };
 use crate::parity::Parity;
 use crate::wide_mul::WideMul;
@@ -236,10 +235,13 @@ where
     /// [`new`]: Self::new
     pub fn new_odd(modulus: Odd<T>) -> Self
     where
-        T: PartialEq + PartialOrd + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>,
+        T: PartialEq
+            + PartialOrd
+            + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+            + const_num_traits::BitsPrecision,
     {
         let modulus = modulus.get();
-        let w = type_bit_width::<T>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -273,10 +275,12 @@ where
     /// [`new_odd`]: Self::new_odd
     pub fn new_odd_ct(modulus: Odd<T>) -> Self
     where
-        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+        T: subtle::ConditionallySelectable
+            + subtle::ConstantTimeLess
+            + const_num_traits::BitsPrecision,
     {
         let modulus = modulus.get();
-        let w = type_bit_width::<T>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = crate::montgomery::compute_r_mod_n_ct(modulus, w);
         let r2_mod_n = crate::montgomery::compute_r2_mod_n_ct(r_mod_n, modulus, w);
@@ -303,7 +307,8 @@ where
         T: PartialEq
             + PartialOrd
             + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-            + Parity,
+            + Parity
+            + const_num_traits::BitsPrecision,
     {
         Odd::new(modulus).map(Self::new_odd)
     }
@@ -641,7 +646,10 @@ where
     /// [`CtParity`]: const_num_traits::CtParity
     pub fn try_new_odd_ct(modulus: T) -> subtle::CtOption<Self>
     where
-        T: const_num_traits::CtParity + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+        T: const_num_traits::CtParity
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeLess
+            + const_num_traits::BitsPrecision,
     {
         // Mask the parity check (no branch on the secret modulus). The
         // precompute below uses the CT path ([`Self::new_odd_ct`]) so
@@ -759,9 +767,10 @@ where
             + const_num_traits::CtIsZero
             + subtle::ConditionallySelectable
             + core::ops::Shr<usize, Output = T>
-            + core::ops::BitAnd<Output = T>,
+            + core::ops::BitAnd<Output = T>
+            + const_num_traits::BitsPrecision,
     {
-        let w = type_bit_width::<T>();
+        let w = (*exp).bits_precision() as usize;
         let one = T::one();
         let mut result = self.r_mod_n;
 
@@ -811,9 +820,12 @@ where
     /// instead, which is a fixed-iteration Montgomery ladder.
     pub fn exp_public_exp(&self, base: &Residue<'_, T, Ct>, exp: &T) -> Residue<'_, T, Ct>
     where
-        T: CiosMontMulCt + core::ops::Shr<usize, Output = T> + core::ops::BitAnd<Output = T>,
+        T: CiosMontMulCt
+            + core::ops::Shr<usize, Output = T>
+            + core::ops::BitAnd<Output = T>
+            + const_num_traits::BitsPrecision,
     {
-        let w = type_bit_width::<T>();
+        let w = (*exp).bits_precision() as usize;
         let one = T::one();
         let zero = T::zero();
 
@@ -913,7 +925,8 @@ where
             + const_num_traits::CtIsZero
             + subtle::ConditionallySelectable
             + core::ops::Shr<usize, Output = T>
-            + core::ops::BitAnd<Output = T>,
+            + core::ops::BitAnd<Output = T>
+            + const_num_traits::BitsPrecision,
     {
         let a_is_nonzero = !a.mont.ct_is_zero();
         let two = T::one().wrapping_add(T::one());
