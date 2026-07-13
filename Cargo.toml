@@ -31,6 +31,3 @@ panic = "abort"
 debug = "line-tables-only"
 overflow-checks = false
 incremental = false
-
-[patch.crates-io]
-const-num-traits = { git = "https://github.com/kaidokert/num-traits.git", tag = "v0.2.1-alpha.1" }
