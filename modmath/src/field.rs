@@ -1744,4 +1744,29 @@ mod tests {
             );
         }
     }
+
+    // CT safegcd inverse where the modulus FILLS the carrier (top bit set):
+    // the full-CAP RSA deployment shape (2048-bit N in a 2048-bit carrier),
+    // scaled to a 128-bit carrier. Guards the se_shr1 top-bit mask — it must
+    // sit at the modulus's top bit, not the low word's. A narrow mask masks
+    // every coprime inverse to None at multi-word widths (invisible to the
+    // single-word inv tests).
+    #[test]
+    fn heapless_inv_safegcd_ct_full_cap_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u32, 4, Ct>; // 128-bit carrier, modulus fills it
+        let modulus = H::from_limbs([0x1234_5679, 0x1357_9bdf, 0x2468_ace0, 0x8000_0001], 4);
+        let f = FieldCt::new(modulus).unwrap();
+        // Powers of two are coprime to any odd modulus; the inverse must exist.
+        for v in [2u8, 4, 8, 16, 32] {
+            let r = f.reduce(&H::from(v));
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(inv.is_some().unwrap_u8(), 1, "expected inverse for {v}");
+            assert_eq!(
+                f.into_raw(&f.mul(&r, &inv.unwrap())),
+                H::from(1u8),
+                "{v} * inv != 1 in full-cap field"
+            );
+        }
+    }
 }
