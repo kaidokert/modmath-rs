@@ -5,6 +5,7 @@ use crate::inv::basic_mod_inv;
 use crate::parity::Parity;
 use crate::wide_mul::WideMul;
 use const_num_traits::Odd;
+use const_num_traits::WithPrecision;
 use subtle::Choice;
 
 /// Methods for computing N' in Montgomery parameter computation
@@ -258,7 +259,8 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::Rem<Output = T>
         + crate::parity::Parity
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     crate::mul::basic_mod_mul(a, r, modulus)
 }
@@ -275,7 +277,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::parity::Parity
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     crate::mul::basic_mod_mul_pr(a, r, modulus)
 }
@@ -359,7 +362,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + crate::parity::Parity
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     // Montgomery multiplication algorithm:
     // Input: a_mont, b_mont (both in Montgomery form), modulus N, N', r_bits
@@ -391,7 +395,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + crate::parity::Parity
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     let product = crate::mul::basic_mod_mul_pr(a_mont, b_mont, modulus);
     basic_from_montgomery(product, modulus, n_prime, r_bits)
@@ -485,15 +490,16 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + const_num_traits::WrappingSub<Output = T>,
+        + const_num_traits::WrappingSub<Output = T>
+        + WithPrecision,
 {
     // For modulus == 1, any value mod 1 == 0
     if modulus == T::one() {
         return T::zero();
     }
-    // Widen the start value to the modulus width so mod_double's
-    // overflow flag fires at bit W, not at the narrow value's width.
-    let mut result = modulus.wrapping_sub(modulus).overflowing_add(val).0;
+    // Seed the start value at the modulus width so mod_double's overflow
+    // flag fires at bit W, not the narrow value's width.
+    let mut result = val.widen_to_precision_of(&modulus);
     for _ in 0..w {
         result = mod_double(result, modulus);
     }
@@ -514,11 +520,12 @@ where
         + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeEq
-        + subtle::ConstantTimeLess,
+        + subtle::ConstantTimeLess
+        + WithPrecision,
 {
-    // Widen the start value to the modulus width so mod_double_ct's
-    // overflow flag fires at bit W, not at the narrow value's width.
-    let mut result = modulus.wrapping_sub(modulus).wrapping_add(val);
+    // Seed the start value at the modulus width so mod_double_ct's overflow
+    // flag fires at bit W, not the narrow value's width.
+    let mut result = val.widen_to_precision_of(&modulus);
     for _ in 0..w {
         result = mod_double_ct(result, modulus);
     }
@@ -539,7 +546,8 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + const_num_traits::WrappingSub<Output = T>,
+        + const_num_traits::WrappingSub<Output = T>
+        + const_num_traits::WithPrecision,
 {
     mod_exp2(T::one(), modulus, w)
 }
@@ -555,7 +563,8 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeLess,
+        + subtle::ConstantTimeLess
+        + const_num_traits::WithPrecision,
 {
     mod_exp2_ct(T::one(), modulus, w)
 }
@@ -571,7 +580,8 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + const_num_traits::WrappingSub<Output = T>,
+        + const_num_traits::WrappingSub<Output = T>
+        + const_num_traits::WithPrecision,
 {
     mod_exp2(r_mod_n, modulus, w)
 }
@@ -586,7 +596,8 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeLess,
+        + subtle::ConstantTimeLess
+        + const_num_traits::WithPrecision,
 {
     mod_exp2_ct(r_mod_n, modulus, w)
 }
@@ -1011,7 +1022,8 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + core::ops::Rem<Output = T>
-        + const_num_traits::BitsPrecision,
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     let m = modulus.get();
     basic_montgomery_mod_mul_pr_odd(reduce_mod(a, m), reduce_mod(b, m), modulus)
@@ -1033,7 +1045,8 @@ where
         + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::Rem<Output = T>
-        + const_num_traits::BitsPrecision,
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_mul_odd(a, b, m))
 }
@@ -1060,7 +1073,8 @@ where
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + const_num_traits::BitsPrecision,
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     let modulus = modulus.get();
     let w = modulus.bits_precision() as usize;
@@ -1101,7 +1115,8 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + Parity
-        + const_num_traits::BitsPrecision,
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_mul_pr_odd(a, b, m))
 }
@@ -1123,7 +1138,8 @@ where
         + Parity
         + core::ops::Rem<Output = T>
         + core::ops::ShrAssign<usize>
-        + const_num_traits::BitsPrecision,
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     let m = modulus.get();
     basic_montgomery_mod_exp_pr_odd(reduce_mod(base, m), exponent, modulus)
@@ -1150,7 +1166,8 @@ where
         + Parity
         + core::ops::Rem<Output = T>
         + core::ops::ShrAssign<usize>
-        + const_num_traits::BitsPrecision,
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_odd(base, exponent, m))
 }
@@ -1171,7 +1188,8 @@ where
         + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::ShrAssign<usize>
-        + const_num_traits::BitsPrecision,
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     let modulus = modulus.get();
     let w = modulus.bits_precision() as usize;
@@ -1219,7 +1237,8 @@ where
         + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::ShrAssign<usize>
-        + const_num_traits::BitsPrecision,
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_pr_odd(base, exponent, m))
 }
@@ -1263,7 +1282,8 @@ where
         + core::ops::BitAnd<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeLess
-        + const_num_traits::BitsPrecision,
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     let modulus = modulus.get();
     let w = modulus.bits_precision() as usize;
@@ -1322,7 +1342,8 @@ where
         + core::ops::BitAnd<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeLess
-        + const_num_traits::BitsPrecision,
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_pr_odd_ct(base, exponent, m))
 }

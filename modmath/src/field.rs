@@ -217,7 +217,8 @@ where
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + MontStorage,
+        + MontStorage
+        + const_num_traits::WithPrecision,
 {
     /// Construct a new `Field` from an already-proven-odd modulus.
     ///
@@ -373,7 +374,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + Parity
         + crate::NonCt
-        + MontStorage,
+        + MontStorage
+        + const_num_traits::WithPrecision,
 {
     /// Convert a raw value `< modulus` (or arbitrary value, which is then
     /// reduced) to Montgomery form. Returns a brand-tagged [`Residue`].
@@ -614,7 +616,8 @@ where
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + MontStorage,
+        + MontStorage
+        + const_num_traits::WithPrecision,
 {
     /// Construct a `Field<T, Ct>` from a **secret** modulus without a
     /// value-dependent branch on the parity check.

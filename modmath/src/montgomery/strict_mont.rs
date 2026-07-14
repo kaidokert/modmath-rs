@@ -275,7 +275,8 @@ where
         + core::ops::Shl<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::RemAssign<&'a T>
         + core::ops::Sub<&'a T, Output = T>,
@@ -361,7 +362,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: crate::parity::Parity,
@@ -392,7 +394,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -456,7 +459,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -497,7 +501,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Sub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
@@ -576,7 +581,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Sub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>

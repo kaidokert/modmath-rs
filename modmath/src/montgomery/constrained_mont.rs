@@ -230,7 +230,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: crate::parity::Parity,
@@ -313,7 +314,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + const_num_traits::CheckedMul<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::BitAnd<Output = T>,
     for<'a> &'a T: crate::parity::Parity,
@@ -349,7 +351,8 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
@@ -391,7 +394,8 @@ where
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + crate::NonCt
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
@@ -430,7 +434,8 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
         + crate::NonCt
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -495,7 +500,8 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::ShrAssign<usize>
         + crate::NonCt
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>

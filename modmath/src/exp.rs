@@ -58,7 +58,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + Copy
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     if modulus == T::one() {
         return T::zero();
@@ -83,7 +84,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + Copy
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     let m_raw = T::nonzero_get(modulus);
     if m_raw == T::one() {
@@ -110,7 +112,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + Copy
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     // x mod 1 == 0 for every x, including 1. The square-and-multiply loop
     // below starts with `result = T::one()` and would return 1 in that case.
@@ -146,7 +149,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: crate::parity::Parity,
 {
@@ -170,7 +174,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     let m_raw = T::nonzero_get(modulus);
@@ -193,7 +198,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     // See `basic_mod_exp_pr` for the modulus==1 rationale.
@@ -231,7 +237,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::ShrAssign<usize>,
     for<'a> &'a T: crate::parity::Parity,
 {
@@ -254,7 +261,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::ShrAssign<usize>,
     for<'a> &'a T: crate::parity::Parity,
 {
@@ -277,7 +285,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::ShrAssign<usize>,
     for<'a> &'a T: crate::parity::Parity,
 {

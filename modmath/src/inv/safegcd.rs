@@ -65,7 +65,7 @@
 //! suitable for cases where the latency budget allows it (RSA blinding
 //! at 2048 bits is dominated by the main exponentiation anyway).
 
-use const_num_traits::{CtIsZero, CtParity, One, WrappingAdd, WrappingSub, Zero};
+use const_num_traits::{CtIsZero, CtParity, One, WithPrecision, WrappingAdd, WrappingSub, Zero};
 use modmath_cios::CiosRowOps;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeLess, CtOption};
 
@@ -223,11 +223,11 @@ where
 #[inline]
 fn neg_mod_ct<T>(x: &T, m: &T) -> T
 where
-    T: Clone + ConditionallySelectable + WrappingSub<Output = T> + CtIsZero,
+    T: Clone + ConditionallySelectable + WrappingSub<Output = T> + CtIsZero + Zero + WithPrecision,
 {
-    // Field-width zero (`m - m`), not `T::zero()`: on a runtime-width
-    // carrier the latter is narrow and would re-narrow d/e when selected.
-    let zero = m.clone().wrapping_sub(m.clone());
+    // Field-width zero, not `T::zero()`: on a runtime-width carrier the
+    // latter is narrow and would re-narrow d/e when selected.
+    let zero = T::zero_with_precision(m.clone().bits_precision());
     let x_is_zero = x.ct_is_zero();
     let neg = m.clone().wrapping_sub(x.clone());
     T::conditional_select(&neg, &zero, x_is_zero)
@@ -291,6 +291,7 @@ where
         + One
         + WrappingAdd<Output = T>
         + WrappingSub<Output = T>
+        + WithPrecision
         + core::ops::Shr<usize, Output = T>
         + core::ops::BitOr<Output = T>,
     T::Word: CtParity,
@@ -314,9 +315,8 @@ where
     // the ±1 sentinels, and the mod-reductions align on a runtime-width
     // carrier — a narrow `value`/`one`/`zero` would place the mask and the
     // sentinels at the wrong bit and the divsteps would not converge.
-    // `m - m` is a field-width zero synthesized from the modulus.
-    let field_zero = modulus.clone().wrapping_sub(modulus.clone());
-    let max = field_zero.clone().wrapping_sub(T::one());
+    let w_bits = modulus.clone().bits_precision();
+    let max = T::zero_with_precision(w_bits).wrapping_sub(T::one());
     let top_bit_mask = max.clone().wrapping_sub(max.clone() >> 1);
     let m_half = modulus.clone() >> 1;
 
@@ -325,11 +325,11 @@ where
         hi: 0,
     };
     let mut g = SignedExt {
-        lo: field_zero.clone().wrapping_add(value.clone()),
+        lo: value.clone().widen_to_precision(w_bits),
         hi: 0,
     };
-    let mut d = field_zero.clone();
-    let mut e = field_zero.clone().wrapping_add(T::one());
+    let mut d = T::zero_with_precision(w_bits);
+    let mut e = T::one_with_precision(w_bits);
     let mut delta: i64 = 1;
 
     for _ in 0..total_steps {

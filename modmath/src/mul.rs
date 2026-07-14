@@ -1,4 +1,5 @@
 use crate::parity::Parity;
+use const_num_traits::WithPrecision;
 #[cfg(feature = "nightly")]
 use const_num_traits::{One, OverflowingAdd, OverflowingSub, Zero};
 
@@ -63,7 +64,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Rem<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     basic_mod_mul_pr(a % m, b % m, m)
 }
@@ -102,7 +104,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m_raw = T::nonzero_get(m);
     basic_mod_mul_pr(a.rem_nonzero(m), b.rem_nonzero(m), m_raw)
@@ -124,15 +127,14 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m1 = m;
-    // Widen the doubling operand and accumulator to the modulus width so
-    // `a + a` / `result + a` overflow at bit W, not at the narrow operand's
-    // width. `m - m` is a field-width zero synthesized from the modulus.
-    let field_zero = m.wrapping_sub(m);
-    let mut a = field_zero.wrapping_add(a);
-    let mut result = field_zero;
+    // Seed the doubling operand and accumulator at the modulus width so
+    // `a + a` / `result + a` overflow at bit W, not the narrow operand's.
+    let mut a = a.widen_to_precision_of(&m);
+    let mut result = T::zero_with_precision_of(&m);
 
     while b > T::zero() {
         if b.is_odd() {
@@ -172,7 +174,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: crate::parity::Parity,
@@ -194,7 +197,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     let m_raw = T::nonzero_get(m);
@@ -214,16 +218,16 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     let mut b = b.clone();
-    // Widen the doubling operand and accumulator to the modulus width so
-    // `a + a` / `result + a` overflow at bit W, not at the narrow operand's
-    // width. `m - m` is a field-width zero synthesized from the modulus.
-    let field_zero = m.clone().wrapping_sub(m.clone());
-    let mut a = field_zero.clone().wrapping_add(a);
-    let mut result = field_zero;
+    // Seed the doubling operand and accumulator at the modulus width so
+    // `a + a` / `result + a` overflow at bit W, not the narrow operand's.
+    let w = m.clone().bits_precision();
+    let mut a = a.widen_to_precision(w);
+    let mut result = T::zero_with_precision(w);
 
     while b > T::zero() {
         if (&b).is_odd() {
@@ -266,7 +270,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     let m_raw = T::nonzero_get(m);
@@ -286,7 +291,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: crate::parity::Parity,
@@ -308,16 +314,16 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     let mut b = b.clone();
-    // Widen the doubling operand and accumulator to the modulus width so
-    // `a + a` / `result + a` overflow at bit W, not at the narrow operand's
-    // width. `m - m` is a field-width zero synthesized from the modulus.
-    let field_zero = m.clone().overflowing_sub(m.clone()).0;
-    let mut a = field_zero.clone().overflowing_add(a).0;
-    let mut result = field_zero;
+    // Seed the doubling operand and accumulator at the modulus width so
+    // `a + a` / `result + a` overflow at bit W, not the narrow operand's.
+    let w = m.clone().bits_precision();
+    let mut a = a.widen_to_precision(w);
+    let mut result = T::zero_with_precision(w);
 
     while b > T::zero() {
         if (&b).is_odd() {

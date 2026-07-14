@@ -77,6 +77,19 @@ impl const_num_traits::ops::wrapping::WrappingSub for NcU64 {
     }
 }
 
+impl const_num_traits::BitsPrecision for NcU64 {
+    fn bits_precision(self) -> u32 {
+        64
+    }
+}
+
+// Fixed-width newtype: width is the type, so widening is the identity.
+impl const_num_traits::WithPrecision for NcU64 {
+    fn widen_to_precision(self, _bits_precision: u32) -> Self {
+        self
+    }
+}
+
 impl const_num_traits::ops::overflowing::OverflowingAdd for NcU64 {
     type Output = NcU64;
     fn overflowing_add(self, v: Self) -> (Self, bool) {

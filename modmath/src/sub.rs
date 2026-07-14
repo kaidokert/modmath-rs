@@ -1,3 +1,4 @@
+use const_num_traits::WithPrecision;
 #[cfg(feature = "nightly")]
 use const_num_traits::{OverflowingAdd, OverflowingSub};
 
@@ -33,7 +34,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Rem<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     basic_mod_sub_pr(a % m, b % m, m)
 }
@@ -47,7 +49,8 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m_raw = T::nonzero_get(m);
     basic_mod_sub_pr(a.rem_nonzero(m), b.rem_nonzero(m), m_raw)
@@ -61,11 +64,11 @@ where
         + Copy
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
-    // Widen a to the modulus width so an underflowing a - b wraps at bit W,
-    // matching m's width when the correction adds m. `m - m` is field-width zero.
-    let a = m.wrapping_sub(m).wrapping_add(a);
+    // Widen a to the modulus width so an underflowing a - b wraps at bit W.
+    let a = a.widen_to_precision_of(&m);
     let diff = a.wrapping_sub(b);
     if diff > a {
         // If we wrapped around (underflow)
@@ -84,7 +87,8 @@ where
         + Clone
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     let a_mod = &a % m;
@@ -101,7 +105,8 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m_raw = T::nonzero_get(m);
     let b_mod = b.clone().rem_nonzero(m);
@@ -116,11 +121,11 @@ where
         + Clone
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
-    // Widen a to the modulus width so an underflowing a - b wraps at bit W,
-    // matching m's width when the correction adds m. `m - m` is field-width zero.
-    let a = m.clone().wrapping_sub(m.clone()).wrapping_add(a);
+    // Widen a to the modulus width so an underflowing a - b wraps at bit W.
+    let a = a.widen_to_precision(m.clone().bits_precision());
     let diff = a.clone().wrapping_sub(b.clone());
     if diff > a {
         // If we wrapped around (underflow)
@@ -139,7 +144,8 @@ where
         + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'b> T: core::ops::RemAssign<&'b T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
@@ -157,7 +163,8 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m_raw = T::nonzero_get(m);
     let b_mod = b.clone().rem_nonzero(m);
@@ -172,11 +179,12 @@ where
         + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     // Widen a to the modulus width so the wrapped diff on underflow is
-    // 2^W - (b-a), which m + diff then reduces correctly. `m - m` is field-width zero.
-    let a = m.clone().overflowing_sub(m.clone()).0.overflowing_add(a).0;
+    // 2^W - (b-a), which m + diff then reduces correctly.
+    let a = a.widen_to_precision(m.clone().bits_precision());
     let (diff, overflow) = a.overflowing_sub(b.clone());
     if overflow {
         m.clone().overflowing_add(diff).0
