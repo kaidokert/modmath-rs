@@ -409,4 +409,49 @@ mod bnum_inv_tests {
             }
         }
     }
+
+    // Multi-limb guard for num-bigint's FixedWidthBigUint (const-7 minimized its
+    // width handling): cross-check inv + schoolbook mul against a u128 oracle at
+    // a >1-limb odd modulus. The single-limb macro tests can't see a multi-limb
+    // width regression; this can.
+    #[test]
+    fn num_bigint_multilimb_matches_u128_oracle() {
+        use num_bigint_patched::{BigUint, FixedWidthBigUint as FW};
+        const N: usize = 4; // >= 128 bits even for u32 digits; holds m + EEA headroom
+        let m_u128: u128 = 1_180_591_620_717_411_303_451; // ~2^70, odd, multi-limb
+        let fw = |v: u128| FW::new(BigUint::from(v), N);
+        let m = fw(m_u128);
+        for a in [2u128, 3, 5, 65_537, 999_999_937, m_u128 - 1] {
+            for (label, gotv, wantv) in [
+                (
+                    "strict",
+                    super::strict_mod_inv(fw(a), &m),
+                    super::strict_mod_inv(a, &m_u128),
+                ),
+                (
+                    "constrained",
+                    super::constrained_mod_inv(fw(a), &m),
+                    super::constrained_mod_inv(a, &m_u128),
+                ),
+            ] {
+                match (gotv, wantv) {
+                    (Some(g), Some(w)) => assert_eq!(g, fw(w), "{label} inv({a})"),
+                    (None, None) => {}
+                    (g, w) => {
+                        panic!("{label} inv({a}): FW.is_some={} u128={w:?}", g.is_some())
+                    }
+                }
+            }
+        }
+        // Multi-limb schoolbook mul against the u128 oracle.
+        for (a, b) in [
+            (3u128, 5u128),
+            (123_456_789, 987_654_321),
+            (m_u128 - 1, m_u128 - 2),
+        ] {
+            let got = crate::mul::constrained_mod_mul(fw(a), &fw(b), &m);
+            let want = crate::mul::constrained_mod_mul(a, &b, &m_u128);
+            assert_eq!(got, fw(want), "mul({a},{b})");
+        }
+    }
 }
