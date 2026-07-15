@@ -333,17 +333,13 @@ mod bnum_inv_tests {
     //         basic: off, // Copy is not implemented, heap
     //     );
 
-    // num-bigint `FixedWidthBigUint`: heap carrier, Nct. constrained is its
-    // natural flavor (it *is* Clone). strict is off here: strict_mod_inv clones
-    // a signed coefficient via `Signed::new(T::zero()) + &x`, whose width-0
-    // signed-zero seed mishandles magnitude/sign on an exact-width carrier
-    // (wrong inverses for ~half of inputs); constrained's real `.clone()` is
-    // correct. `basic: off` — not Copy.
+    // num-bigint `FixedWidthBigUint`: heap carrier, Nct, constrained/strict
+    // only (not `Copy`, so `basic: off`).
     inv_test_module!(
         num_bigint_patched,
         num_bigint_patched::FixedWidthBigUint,
         type U256 = num_bigint_patched::FixedWidthBigUint;
-        strict: off,
+        strict: on,
         constrained: on,
         basic: off,
     );
@@ -391,4 +387,26 @@ mod bnum_inv_tests {
         constrained: on,
         basic: on,
     );
+
+    // Regression for the strict_mod_inv width-0 seed bug: on a runtime-width
+    // carrier (len < CAP) strict_mod_inv corrupted the inverse for a large
+    // fraction of residues. Cross-check every residue against the u32 oracle.
+    #[test]
+    fn strict_mod_inv_runtime_width_full_range() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        for m in [13u8, 17, 251] {
+            for a in 1..m {
+                let got = super::strict_mod_inv(H::from(a), &H::from(m));
+                let want = super::strict_mod_inv(a as u32, &(m as u32));
+                match (got, want) {
+                    (Some(g), Some(w)) => {
+                        assert_eq!(g, H::from(w as u8), "strict inv({a}) mod {m}")
+                    }
+                    (None, None) => {}
+                    (g, w) => panic!("strict inv({a}) mod {m}: heapless={g:?} u32={w:?}"),
+                }
+            }
+        }
+    }
 }
