@@ -39,7 +39,7 @@
 //! check inside (`Odd::new_ct` / `try_new_odd_ct`) branches on a defined
 //! bit and the rest of the modulus stays tainted.
 
-#![cfg_attr(feature = "panic-handler", no_std)]
+#![cfg_attr(feature = "no-std", no_std)]
 #![allow(non_snake_case)]
 // The raw-pointer ABI is the harness contract; the only callers are the
 // generated ct-ctgrind wrappers, which always pass valid buffers. Marking

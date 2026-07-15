@@ -14,13 +14,14 @@ crate-type = ["staticlib", "rlib"]
 
 [features]
 default = []
+no-std = []
 # no_std + a local #[panic_handler], required for the cross-built
 # staticlib (bare-metal targets have no std to supply one). Deliberately
 # NOT default: ct-ctgrind links this crate into a std binary where a
 # second panic handler would collide, and the asm-grep driver shells out
 # to its own `cargo build --features panic-handler`, so the two builds
 # never share a feature resolution.
-panic-handler = []
+panic-handler = ["no-std"]
 
 [dependencies]
 modmath = { path = "../../modmath" }

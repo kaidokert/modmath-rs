@@ -10,7 +10,7 @@ where Valgrind does; asm-grep runs on every cross target and catches
 data-dependent branches that only materialize in a particular ISA's
 lowering (no conditional select, no flags register).
 
-Four members:
+Five members:
 
 - **`ct-fixtures`** — one `#[no_mangle] pub extern "C"` symbol per
   (CT entry point, carrier) pair, `core::hint::black_box` at both ends
@@ -50,6 +50,11 @@ Four members:
   run caught a live one: safegcd's runtime-amount `one << (n_bits − 1)`
   kept the multi-limb shift impl's bounds-check panic alive through
   LTO.
+- **`cyccnt-hardware`** — links the same fixture ABI into Cortex-M firmware
+  and runs contract-valid paired inputs under interrupt-free DWT `CYCCNT` on
+  the J-Trace STM32F407VG. RTT reports all raw timing bounds. Timing-negative
+  controls must separate; the secret-indexed-load control remains diagnostic
+  because same-cycle address leaks require ctgrind's taint tracking.
 
 Which inputs are tainted mirrors each entry's documented secrecy
 contract, not a blanket "everything is secret": the wide-mul/REDC and
@@ -81,6 +86,13 @@ the `llvm-tools-preview` component:
 ```bash
 cargo run --release -p ct-driver -- --target thumbv7m-none-eabi
 cargo run --release -p ct-driver -- --list-targets
+```
+
+The physical-hardware layer runs from its own directory:
+
+```bash
+cd ct-verify/cyccnt-hardware
+cargo run --release
 ```
 
 CI: `.github/workflows/ct-ctgrind.yml` (x86_64 + aarch64 taint rows)
