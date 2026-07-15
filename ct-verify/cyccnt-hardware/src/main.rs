@@ -2,13 +2,14 @@
 #![no_std]
 
 use core::hint::black_box;
-use cortex_m::peripheral::DWT;
 use cortex_m_rt::entry;
-use rtt_target::{rprintln, rtt_init_print};
+use embedded_measure::cortex_m::DwtCycleCounter;
+use embedded_measure::report::Field;
+use embedded_measure::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
 
 const TRIALS: usize = 4;
+const BATCHES: usize = 1;
 const MAX_POSITIVE_SPREAD: u32 = 32;
-const ORDER: [bool; TRIALS * 2] = [false, true, true, false, true, false, false, true];
 
 const M64_A: u64 = 0xffff_ffff_ffff_ff43;
 const NP64_A: u64 = 0xa53f_a94f_ea53_fa95;
@@ -191,106 +192,6 @@ struct Swap256 {
     choice: u8,
 }
 
-#[derive(Clone, Copy)]
-struct Samples {
-    a: [u32; TRIALS],
-    b: [u32; TRIALS],
-    outputs_ok: bool,
-}
-
-#[inline(always)]
-fn measure_once(mut operation: impl FnMut() -> bool) -> (u32, bool) {
-    cortex_m::interrupt::free(|_| {
-        cortex_m::asm::dsb();
-        cortex_m::asm::isb();
-        let start = DWT::cycle_count();
-        let ok = black_box(operation());
-        cortex_m::asm::dsb();
-        cortex_m::asm::isb();
-        (DWT::cycle_count().wrapping_sub(start), ok)
-    })
-}
-
-fn measure_pair<I: ?Sized>(
-    input_a: &I,
-    input_b: &I,
-    mut operation: impl FnMut(&I) -> bool,
-) -> Samples {
-    let _ = black_box(operation(black_box(input_a)));
-    let _ = black_box(operation(black_box(input_b)));
-    let _ = black_box(operation(black_box(input_b)));
-    let _ = black_box(operation(black_box(input_a)));
-
-    let mut samples = Samples {
-        a: [0; TRIALS],
-        b: [0; TRIALS],
-        outputs_ok: true,
-    };
-    let mut ai = 0;
-    let mut bi = 0;
-    for use_b in ORDER {
-        let input = if use_b { input_b } else { input_a };
-        let (cycles, ok) = measure_once(|| operation(black_box(input)));
-        samples.outputs_ok &= ok;
-        if use_b {
-            samples.b[bi] = cycles;
-            bi += 1;
-        } else {
-            samples.a[ai] = cycles;
-            ai += 1;
-        }
-    }
-    samples
-}
-
-fn bounds(values: &[u32; TRIALS]) -> (u32, u32) {
-    let mut min = u32::MAX;
-    let mut max = 0;
-    for &value in values {
-        min = min.min(value);
-        max = max.max(value);
-    }
-    (min, max)
-}
-
-fn report(name: &str, class: &str, samples: Samples, expect_equal: bool) -> bool {
-    let (a_min, a_max) = bounds(&samples.a);
-    let (b_min, b_max) = bounds(&samples.b);
-    let spread = a_min.min(b_min).abs_diff(a_max.max(b_max));
-    let timing_ok = if expect_equal {
-        spread <= MAX_POSITIVE_SPREAD
-    } else {
-        a_max < b_min || b_max < a_min
-    };
-    let passed = samples.outputs_ok && timing_ok;
-    rprintln!(
-        "CT_RESULT fixture:{} class:{} a_min:{} a_max:{} b_min:{} b_max:{} spread:{} output_ok:{} status:{}",
-        name,
-        class,
-        a_min,
-        a_max,
-        b_min,
-        b_max,
-        spread,
-        samples.outputs_ok as u8,
-        if passed { "PASS" } else { "FAIL" }
-    );
-    passed
-}
-
-fn report_diagnostic(name: &str, samples: Samples) {
-    let (a_min, a_max) = bounds(&samples.a);
-    let (b_min, b_max) = bounds(&samples.b);
-    rprintln!(
-        "CT_DIAGNOSTIC fixture:{} class:address-only a_min:{} a_max:{} b_min:{} b_max:{}",
-        name,
-        a_min,
-        a_max,
-        b_min,
-        b_max
-    );
-}
-
 #[inline(never)]
 fn fixture_wide_mul(v: &Mont64) -> bool {
     let mut out = 0;
@@ -418,25 +319,14 @@ fn fixture_table(v: &u64) -> bool {
     true
 }
 
-fn record(ok: bool, passed: &mut u32, failed: &mut u32) {
-    if ok {
-        *passed += 1;
-    } else {
-        *failed += 1;
-    }
-}
-
 #[entry]
 fn main() -> ! {
-    rtt_init_print!();
+    let mut reporter = embedded_measure::rtt::init_ct_compatible();
     ct_fixtures::link_anchor();
     let mut peripherals = cortex_m::Peripherals::take().unwrap();
-    assert!(DWT::has_cycle_counter());
-    peripherals.DCB.enable_trace();
-    peripherals.DWT.set_cycle_count(0);
-    peripherals.DWT.enable_cycle_counter();
-    cortex_m::asm::dsb();
-    cortex_m::asm::isb();
+    let mut counter =
+        DwtCycleCounter::enable(&mut peripherals.DCB, &mut peripherals.DWT, Some(16_000_000))
+            .unwrap();
 
     let mont64_a = Mont64 {
         a: 5,
@@ -523,20 +413,35 @@ fn main() -> ! {
     let asym_e_a = exp256_a.exp;
     let asym_e_b = exp256_b.exp;
 
-    rprintln!(
-        "CT_BEGIN suite:modmath-cyccnt trials:{} max_positive_spread:{}",
-        TRIALS,
-        MAX_POSITIVE_SPREAD
-    );
-    let mut passed = 0;
-    let mut failed = 0;
+    let run_fields = [
+        Field::u64("trials", TRIALS as u64),
+        Field::u64("max_positive_spread", MAX_POSITIVE_SPREAD as u64),
+    ];
+    let summary_fields = [Field::u64("diagnostics", 1)];
+    let mut suite = PairedSuite::<_, _, TRIALS>::start(
+        &mut counter,
+        &mut reporter,
+        PairedSuiteConfig {
+            suite: "modmath-cyccnt",
+            target: "thumbv7em-none-eabihf",
+            board: Some("stm32f407vg"),
+            unit: embedded_measure::Unit::CoreCycles,
+            frequency_hz: Some(16_000_000),
+            warmup_blocks: 1,
+            batches: BATCHES,
+            positive_max_spread: MAX_POSITIVE_SPREAD as u64,
+            positive_require_overlap: false,
+            fields: PairedSuiteFields {
+                run: &run_fields,
+                fixture: &[],
+                summary: &summary_fields,
+            },
+        },
+    )
+    .unwrap();
     macro_rules! positive {
         ($name:literal, $a:expr, $b:expr, $fixture:expr) => {
-            record(
-                report($name, "positive", measure_pair($a, $b, $fixture), true),
-                &mut passed,
-                &mut failed,
-            )
+            suite.positive($name, $a, $b, $fixture).unwrap()
         };
     }
     positive!("wide_mont_mul_u64", &mont64_a, &mont64_b, fixture_wide_mul);
@@ -587,50 +492,39 @@ fn main() -> ! {
         fixture_asym_exp256
     );
     positive!("asym_cswap_choice_fb32", &0, &1, fixture_asym_cswap);
-    record(
-        report(
+    suite
+        .negative(
             "negative_eea_inverse",
-            "negative",
-            measure_pair(
-                &Field64 {
-                    modulus: M64_B,
-                    value: 1,
-                },
-                &field64_b,
-                fixture_neg_eea,
-            ),
-            false,
-        ),
-        &mut passed,
-        &mut failed,
-    );
-    record(
-        report(
+            &Field64 {
+                modulus: M64_B,
+                value: 1,
+            },
+            &field64_b,
+            fixture_neg_eea,
+        )
+        .unwrap();
+    suite
+        .negative(
             "negative_schoolbook_exp",
-            "negative",
-            measure_pair(
-                &Exp64 {
-                    base: 3,
-                    exp: 1,
-                    modulus: M64_B,
-                },
-                &exp64_b,
-                fixture_neg_exp,
-            ),
-            false,
-        ),
-        &mut passed,
-        &mut failed,
-    );
-    report_diagnostic(
-        "negative_table_lookup",
-        measure_pair(&0, &15, fixture_table),
-    );
-    rprintln!(
-        "CT_SUMMARY passed:{} failed:{} diagnostics:1",
-        passed,
-        failed
-    );
+            &Exp64 {
+                base: 3,
+                exp: 1,
+                modulus: M64_B,
+            },
+            &exp64_b,
+            fixture_neg_exp,
+        )
+        .unwrap();
+    suite
+        .diagnostic(
+            "negative_table_lookup",
+            "address-only",
+            &0,
+            &15,
+            fixture_table,
+        )
+        .unwrap();
+    suite.finish().unwrap();
     loop {
         cortex_m::asm::nop();
     }

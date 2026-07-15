@@ -10,6 +10,11 @@ ABBA trial order. Positive fixtures have an absolute 32-cycle combined-spread
 limit. The EEA inverse and schoolbook exponentiation ABI fixtures are negative
 controls and must produce disjoint A/B ranges.
 
+The carrier uses `embedded-measure::PairedSuite` for DWT sampling, exact-path
+warmups, policy evaluation, versioned reporting, diagnostics, and totals. It
+emits lossless `EM_*` schema 1 records plus legacy `CT_*` records during host
+tooling migration.
+
 Run from this directory:
 
 ```sh
