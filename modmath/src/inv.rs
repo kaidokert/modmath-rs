@@ -327,9 +327,11 @@ mod bnum_inv_tests {
     //         basic: off, // Copy is not implemented, heap
     //     );
 
-    // num-bigint `FixedWidthBigUint` deferred here: strict/constrained
-    // mod_inv need `T: Sub<&T>`, not yet impl'd on the fork (has
-    // `Sub<&FW> for &FW` + `Add<&FW> for FW`, needs `Sub<&FW> for FW`).
+    // num-bigint `FixedWidthBigUint` inv deferred: the fork's Add/Sub/Mul
+    // truncate the result to `self.n_limbs`, so the EEA's width-free clone
+    // idiom `T::zero() + &x` (and `T::zero() + modulus`) yields 0 instead of x
+    // (`zero` is n_limbs=0). Every other carrier preserves `zero + x == x`.
+    // Re-enable once the fork widens results to `max(self.n_limbs, rhs.n_limbs)`.
     // inv_test_module!(
     //     num_bigint_patched,
     //     num_bigint_patched::FixedWidthBigUint,
