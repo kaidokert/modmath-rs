@@ -38,7 +38,7 @@ crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/k
 # num-bigint = { package = "num-bigint", version = "0.4"}
 # Heap-backed carrier (`FixedWidthBigUint`): Nct, constrained/strict only (not
 # `Copy`). Uses its own `num-traits` (default `std`) — no default-features override.
-num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git", tag = "v0.4.4-const-5" }
+num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git", tag = "v0.4.4-const-6" }
 # ibig = "0.3"
 # ibig_patched = { package = "ibig", git = "https://github.com/kaidokert/ibig-rs.git" , tag = "v0.3.6_patch" }
 paste = "1"
