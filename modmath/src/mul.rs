@@ -225,9 +225,8 @@ where
     let mut b = b.clone();
     // Seed the doubling operand and accumulator at the modulus width so
     // `a + a` / `result + a` overflow at bit W, not the narrow operand's.
-    let w = m.bits_precision();
-    let mut a = a.widen_to_precision(w);
-    let mut result = T::zero_with_precision(w);
+    let mut a = a.widen_to_precision_of(m);
+    let mut result = T::zero_with_precision_of(m);
 
     while b > T::zero() {
         if (&b).is_odd() {
@@ -321,9 +320,8 @@ where
     let mut b = b.clone();
     // Seed the doubling operand and accumulator at the modulus width so
     // `a + a` / `result + a` overflow at bit W, not the narrow operand's.
-    let w = m.bits_precision();
-    let mut a = a.widen_to_precision(w);
-    let mut result = T::zero_with_precision(w);
+    let mut a = a.widen_to_precision_of(m);
+    let mut result = T::zero_with_precision_of(m);
 
     while b > T::zero() {
         if (&b).is_odd() {

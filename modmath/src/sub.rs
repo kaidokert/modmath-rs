@@ -125,7 +125,7 @@ where
         + WithPrecision,
 {
     // Widen a to the modulus width so an underflowing a - b wraps at bit W.
-    let a = a.widen_to_precision(m.bits_precision());
+    let a = a.widen_to_precision_of(m);
     let diff = a.clone().wrapping_sub(b.clone());
     if diff > a {
         // If we wrapped around (underflow)
@@ -184,7 +184,7 @@ where
 {
     // Widen a to the modulus width so the wrapped diff on underflow is
     // 2^W - (b-a), which m + diff then reduces correctly.
-    let a = a.widen_to_precision(m.bits_precision());
+    let a = a.widen_to_precision_of(m);
     let (diff, overflow) = a.overflowing_sub(b.clone());
     if overflow {
         m.clone().overflowing_add(diff).0

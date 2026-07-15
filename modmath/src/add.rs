@@ -133,7 +133,7 @@ where
         + WithPrecision,
 {
     // Widen a to the modulus width so the carry from a + b fires at bit W.
-    let a = a.widen_to_precision(m.bits_precision());
+    let a = a.widen_to_precision_of(m);
     let sum = a.clone().wrapping_add(b.clone());
     if &sum >= m || sum < a {
         sum.wrapping_sub(m.clone())
@@ -194,7 +194,7 @@ where
         + WithPrecision,
 {
     // Widen a to the modulus width so the carry from a + b fires at bit W.
-    let a = a.widen_to_precision(m.bits_precision());
+    let a = a.widen_to_precision_of(m);
     let (sum, overflow) = a.overflowing_add(b.clone());
     if &sum >= m || overflow {
         sum.overflowing_sub(m.clone()).0
@@ -426,10 +426,16 @@ mod bnum_add_tests {
     //         basic: off, // Copy cannot be implemented, heap allocation
     //     );
 
+    // num-bigint fork (`FixedWidthBigUint`) is Nct/constrained/strict-only
+    // (heap, not `Copy`). Blocked re-enabling: the v0.4.4-const-2 fork does not
+    // compile standalone (`bigint.rs` imports the nonexistent `num_traits::Signum`
+    // and impls `num_traits::Checked*` with const-num-traits' value-receiver
+    // signature), and `FixedWidthBigUint` has no width-free `From<uN>` for the
+    // test macro's `U256::from(..)` constructors.
     //     add_test_module!(
     //         num_bigint_patched,
-    //         num_bigint_patched::BigUint,
-    //         type U256 = num_bigint_patched::BigUint;
+    //         num_bigint_patched::FixedWidthBigUint,
+    //         type U256 = num_bigint_patched::FixedWidthBigUint;
     //         strict: on,
     //         constrained: on,
     //         basic: off, // Copy cannot be implemented, heap allocation

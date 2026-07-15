@@ -227,7 +227,7 @@ where
 {
     // Field-width zero, not `T::zero()`: on a runtime-width carrier the
     // latter is narrow and would re-narrow d/e when selected.
-    let zero = T::zero_with_precision(m.bits_precision());
+    let zero = T::zero_with_precision_of(m);
     let x_is_zero = x.ct_is_zero();
     let neg = m.clone().wrapping_sub(x.clone());
     T::conditional_select(&neg, &zero, x_is_zero)
@@ -315,8 +315,7 @@ where
     // the ±1 sentinels, and the mod-reductions align on a runtime-width
     // carrier — a narrow `value`/`one`/`zero` would place the mask and the
     // sentinels at the wrong bit and the divsteps would not converge.
-    let w_bits = modulus.bits_precision();
-    let max = T::zero_with_precision(w_bits).wrapping_sub(T::one());
+    let max = T::zero_with_precision_of(modulus).wrapping_sub(T::one());
     let top_bit_mask = max.clone().wrapping_sub(max.clone() >> 1);
     let m_half = modulus.clone() >> 1;
 
@@ -325,11 +324,11 @@ where
         hi: 0,
     };
     let mut g = SignedExt {
-        lo: value.clone().widen_to_precision(w_bits),
+        lo: value.clone().widen_to_precision_of(modulus),
         hi: 0,
     };
-    let mut d = T::zero_with_precision(w_bits);
-    let mut e = T::one_with_precision(w_bits);
+    let mut d = T::zero_with_precision_of(modulus);
+    let mut e = T::one_with_precision_of(modulus);
     let mut delta: i64 = 1;
 
     for _ in 0..total_steps {
