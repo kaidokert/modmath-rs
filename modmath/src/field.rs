@@ -1034,6 +1034,162 @@ mod tests {
         U16Ct::from(n)
     }
 
+    // Nct `Field`/`Residue` API matrix: reduce/into_raw round-trip, add/sub/mul,
+    // exp, and Fermat inverse (prime modulus), cross-checked against a u64
+    // oracle. Runs the crypto-facing high-level surface across every backend,
+    // which the hand-rolled FixedUInt-alias tests never did.
+    macro_rules! field_test_module {
+        ($stem:ident, $type_path:path, $(type $td:ty = $te:ty;)?) => {
+            paste::paste! {
+                mod [<$stem _field_tests>] {
+                    #[allow(unused_imports)]
+                    use $type_path;
+                    $( type $td = $te; )?
+                    use crate::Field;
+
+                    const M: u64 = 251; // prime, fits u8
+
+                    fn field() -> Field<U256> {
+                        Field::new(U256::from(251u8)).unwrap()
+                    }
+
+                    #[test]
+                    fn reduce_roundtrip() {
+                        let f = field();
+                        for raw in [0u8, 1, 2, 100, 250] {
+                            assert_eq!(
+                                f.into_raw(&f.reduce(&U256::from(raw))),
+                                U256::from(raw),
+                                "roundtrip {raw}"
+                            );
+                        }
+                    }
+
+                    #[test]
+                    fn add_sub_mul() {
+                        let f = field();
+                        for a in [3u8, 100, 250] {
+                            for b in [7u8, 200, 249] {
+                                let ra = f.reduce(&U256::from(a));
+                                let rb = f.reduce(&U256::from(b));
+                                let add = ((a as u64 + b as u64) % M) as u8;
+                                let sub = ((a as u64 + M - b as u64) % M) as u8;
+                                let mul = ((a as u64 * b as u64) % M) as u8;
+                                assert_eq!(f.into_raw(&f.add(&ra, &rb)), U256::from(add), "add {a}+{b}");
+                                assert_eq!(f.into_raw(&f.sub(&ra, &rb)), U256::from(sub), "sub {a}-{b}");
+                                assert_eq!(f.into_raw(&f.mul(&ra, &rb)), U256::from(mul), "mul {a}*{b}");
+                            }
+                        }
+                    }
+
+                    #[test]
+                    fn exp_matches_oracle() {
+                        let f = field();
+                        for base in [2u8, 7, 200] {
+                            for e in [0u8, 1, 5, 17] {
+                                let want = crate::exp::basic_mod_exp(base as u64, e as u64, M) as u8;
+                                let got = f.into_raw(&f.exp(&f.reduce(&U256::from(base)), &U256::from(e)));
+                                assert_eq!(got, U256::from(want), "exp {base}^{e}");
+                            }
+                        }
+                    }
+
+                    #[test]
+                    fn inv_fermat_roundtrip() {
+                        let f = field();
+                        for a in [1u8, 2, 100, 250] {
+                            let ra = f.reduce(&U256::from(a));
+                            let inv = f.inv_fermat(&ra).expect("prime modulus invertible");
+                            assert_eq!(f.into_raw(&f.mul(&ra, &inv)), U256::from(1u8), "inv {a}");
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    field_test_module!(
+        fixed_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::FixedUInt<u8, 4>;
+    );
+
+    field_test_module!(
+        heapless_bigint,
+        fixed_bigint::HeaplessBigInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
+    );
+
+    // bnum / crypto-bigint expose a ready `U256`; the type-path import *is* the
+    // alias, so no `type U256 =`.
+    field_test_module!(bnum_patched, bnum_patched::types::U256,);
+
+    field_test_module!(crypto_bigint_patched, crypto_bigint_patched::U256,);
+
+    // num-bigint (`FixedWidthBigUint`) is intentionally absent: the Montgomery
+    // `Field`/CIOS path is `Copy`-bound (row ops copy limbs), and it is a
+    // heap-allocated non-`Copy` carrier. It rides the schoolbook + free-function
+    // Montgomery matrices instead.
+
+    // Ct `FieldCt` matrix: the constant-time surface (reduce/mul + the
+    // Bernstein-Yang `inv_safegcd_ct` RSA-blinding path), across Ct-personality
+    // carriers. Previously only hand-rolled on FixedUInt/U128 + reactive heapless.
+    macro_rules! field_ct_test_module {
+        ($stem:ident, $type_path:path, $(type $td:ty = $te:ty;)?) => {
+            paste::paste! {
+                mod [<$stem _field_ct_tests>] {
+                    #[allow(unused_imports)]
+                    use $type_path;
+                    $( type $td = $te; )?
+                    use crate::FieldCt;
+
+                    const M: u64 = 251; // prime, fits u8
+
+                    #[test]
+                    fn ct_reduce_mul() {
+                        let f = FieldCt::<U256>::new(U256::from(251u8)).unwrap();
+                        for raw in [0u8, 1, 100, 250] {
+                            assert_eq!(f.into_raw(&f.reduce(&U256::from(raw))), U256::from(raw));
+                        }
+                        for (a, b) in [(7u8, 5u8), (200, 199), (250, 2)] {
+                            let ra = f.reduce(&U256::from(a));
+                            let rb = f.reduce(&U256::from(b));
+                            let mul = ((a as u64 * b as u64) % M) as u8;
+                            assert_eq!(f.into_raw(&f.mul(&ra, &rb)), U256::from(mul), "mul {a}*{b}");
+                        }
+                    }
+
+                    #[test]
+                    fn ct_inv_safegcd_roundtrip() {
+                        let f = FieldCt::<U256>::new(U256::from(251u8)).unwrap();
+                        for a in [1u8, 2, 100, 250] {
+                            let ra = f.reduce(&U256::from(a));
+                            let inv = f.inv_safegcd_ct(&ra);
+                            assert_eq!(inv.is_some().unwrap_u8(), 1, "inv exists {a}");
+                            assert_eq!(
+                                f.into_raw(&f.mul(&ra, &inv.unwrap())),
+                                U256::from(1u8),
+                                "v*inv==1 for {a}"
+                            );
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    field_ct_test_module!(
+        fixed_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::FixedUInt<u8, 4, const_num_traits::Ct>;
+    );
+
+    field_ct_test_module!(
+        heapless_bigint,
+        fixed_bigint::HeaplessBigInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u8, 4, const_num_traits::Ct>;
+    );
+
     #[test]
     fn round_trip_small() {
         let f: Field<U16> = Field::new(u16(13)).unwrap();
