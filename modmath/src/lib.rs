@@ -56,7 +56,10 @@ pub mod basic;
 pub mod constrained;
 pub mod strict;
 
-pub use field::{Field, FieldCt, FieldNct, MontStorage, Residue, ResidueCt, ResidueNct};
+pub use field::{
+    Field, FieldCt, FieldFor, FieldNct, FieldOps, FieldView, MontStorage, Residue, ResidueCt,
+    ResidueNct,
+};
 pub use nonct::NonCt;
 pub use parity::Parity;
 pub use wide_mul::WideMul;

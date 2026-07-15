@@ -1026,6 +1026,205 @@ where
 // Tests
 // ---------------------------------------------------------------------------
 
+// ── [24]/[D] Phase 0: personality-generic `FieldOps` surface ────────────────
+//
+// `Field<T, P>` splits its arithmetic across two per-personality inherent impls,
+// so code that runs one algorithm over *either* personality has no generic
+// method surface. `FieldOps` provides it. It is impl'd on a `FieldView` wrapper,
+// never directly on `Field` — a direct `impl FieldOps for Field<T, Nct>` makes
+// the forwarding `self.mul(..)` re-dispatch to the trait method (inherent
+// priority does not win when the trait is impl'd on the same type), infinitely
+// recursing. The wrapper's `self.0.mul(..)` targets `Field` (no `FieldOps` on
+// it), so it resolves to the inherent method. Every consumer's hand-rolled
+// verify shim already uses exactly this wrapper shape; this hoists it.
+
+/// Personality-generic view of a Montgomery [`Field`]'s operation surface.
+/// `inv_fermat` normalizes the Ct field's `CtOption` to `Option` (verify inputs
+/// are public, so the branch leaks nothing). The residue carries ring-width as a
+/// type invariant, so a reducer written against this surface cannot inject a
+/// narrow value into a ring computation.
+pub trait FieldOps {
+    type Backend;
+    type Residue<'f>: Clone + PartialEq
+    where
+        Self: 'f;
+
+    fn reduce<'f>(&'f self, raw: &Self::Backend) -> Self::Residue<'f>;
+    fn mul<'f>(&'f self, a: &Self::Residue<'f>, b: &Self::Residue<'f>) -> Self::Residue<'f>;
+    fn add<'f>(&'f self, a: &Self::Residue<'f>, b: &Self::Residue<'f>) -> Self::Residue<'f>;
+    fn sub<'f>(&'f self, a: &Self::Residue<'f>, b: &Self::Residue<'f>) -> Self::Residue<'f>;
+    /// The exponent is a **magnitude** (consumed as bits by square-and-multiply),
+    /// so it stays a raw `Backend`, not a residue.
+    fn exp<'f>(&'f self, base: &Self::Residue<'f>, e: &Self::Backend) -> Self::Residue<'f>;
+    fn inv_fermat<'f>(&'f self, a: &Self::Residue<'f>) -> Option<Self::Residue<'f>>;
+    fn one(&self) -> Self::Residue<'_>;
+    fn zero(&self) -> Self::Residue<'_>;
+    /// Converts the *residue* out of the field (not `self`), mirroring
+    /// [`Field::into_raw`]; the `&self` receiver is the field.
+    #[allow(clippy::wrong_self_convention)]
+    fn into_raw(&self, a: &Self::Residue<'_>) -> Self::Backend;
+    fn modulus(&self) -> &Self::Backend;
+}
+
+/// The `Backend -> Field` selector: given a modulus, build the personality-keyed
+/// field for it. Consumers bound on `T: FieldFor` write verify code once.
+pub trait FieldFor: Sized {
+    type Field: FieldOps<Backend = Self>;
+    fn field(modulus: Self) -> Option<Self::Field>;
+}
+
+/// Wrapper owning a [`Field`], so `FieldOps` is impl'd on *it* (not on `Field`
+/// directly) — the indirection that dodges the trait-shadows-inherent recursion.
+#[derive(Clone, Debug)]
+pub struct FieldView<T, P: Personality>(pub Field<T, P>);
+
+impl<T> FieldOps for FieldView<T, Nct>
+where
+    T: MontStorage
+        + WideMul
+        + CiosMontMul
+        + const_num_traits::HasPersonality<P = Nct>
+        + const_num_traits::One
+        + const_num_traits::Zero
+        + Copy
+        + PartialEq
+        + PartialOrd
+        + crate::parity::Parity
+        + const_num_traits::WithPrecision
+        + core::ops::ShrAssign<usize>
+        + core::ops::Div<Output = T>
+        + core::ops::Sub<Output = T>
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>,
+{
+    type Backend = T;
+    type Residue<'f>
+        = Residue<'f, T, Nct>
+    where
+        Self: 'f;
+
+    fn reduce<'f>(&'f self, raw: &T) -> Residue<'f, T, Nct> {
+        self.0.reduce(raw)
+    }
+    fn mul<'f>(&'f self, a: &Residue<'f, T, Nct>, b: &Residue<'f, T, Nct>) -> Residue<'f, T, Nct> {
+        self.0.mul(a, b)
+    }
+    fn add<'f>(&'f self, a: &Residue<'f, T, Nct>, b: &Residue<'f, T, Nct>) -> Residue<'f, T, Nct> {
+        self.0.add(a, b)
+    }
+    fn sub<'f>(&'f self, a: &Residue<'f, T, Nct>, b: &Residue<'f, T, Nct>) -> Residue<'f, T, Nct> {
+        self.0.sub(a, b)
+    }
+    fn exp<'f>(&'f self, base: &Residue<'f, T, Nct>, e: &T) -> Residue<'f, T, Nct> {
+        self.0.exp(base, e)
+    }
+    fn inv_fermat<'f>(&'f self, a: &Residue<'f, T, Nct>) -> Option<Residue<'f, T, Nct>> {
+        self.0.inv_fermat(a)
+    }
+    fn one(&self) -> Residue<'_, T, Nct> {
+        self.0.one()
+    }
+    fn zero(&self) -> Residue<'_, T, Nct> {
+        self.0.zero()
+    }
+    fn into_raw(&self, a: &Residue<'_, T, Nct>) -> T {
+        self.0.into_raw(a)
+    }
+    fn modulus(&self) -> &T {
+        self.0.modulus()
+    }
+}
+
+impl<T> FieldOps for FieldView<T, Ct>
+where
+    T: MontStorage
+        + WideMul
+        + CiosMontMulCt
+        + const_num_traits::HasPersonality<P = Ct>
+        + const_num_traits::One
+        + const_num_traits::Zero
+        + Copy
+        + PartialEq
+        + PartialOrd
+        + const_num_traits::WithPrecision
+        + const_num_traits::CtIsZero
+        + const_num_traits::BitsPrecision
+        + subtle::ConditionallySelectable
+        + subtle::ConstantTimeEq
+        + subtle::ConstantTimeLess
+        + core::ops::ShrAssign<usize>
+        + core::ops::Shr<usize, Output = T>
+        + core::ops::BitAnd<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>,
+{
+    type Backend = T;
+    type Residue<'f>
+        = Residue<'f, T, Ct>
+    where
+        Self: 'f;
+
+    fn reduce<'f>(&'f self, raw: &T) -> Residue<'f, T, Ct> {
+        self.0.reduce(raw)
+    }
+    fn mul<'f>(&'f self, a: &Residue<'f, T, Ct>, b: &Residue<'f, T, Ct>) -> Residue<'f, T, Ct> {
+        self.0.mul(a, b)
+    }
+    fn add<'f>(&'f self, a: &Residue<'f, T, Ct>, b: &Residue<'f, T, Ct>) -> Residue<'f, T, Ct> {
+        self.0.add(a, b)
+    }
+    fn sub<'f>(&'f self, a: &Residue<'f, T, Ct>, b: &Residue<'f, T, Ct>) -> Residue<'f, T, Ct> {
+        self.0.sub(a, b)
+    }
+    fn exp<'f>(&'f self, base: &Residue<'f, T, Ct>, e: &T) -> Residue<'f, T, Ct> {
+        self.0.exp(base, e)
+    }
+    fn inv_fermat<'f>(&'f self, a: &Residue<'f, T, Ct>) -> Option<Residue<'f, T, Ct>> {
+        // Ct field returns CtOption; verify inputs are public, so normalize.
+        self.0.inv_fermat(a).into_option()
+    }
+    fn one(&self) -> Residue<'_, T, Ct> {
+        self.0.one()
+    }
+    fn zero(&self) -> Residue<'_, T, Ct> {
+        self.0.zero()
+    }
+    fn into_raw(&self, a: &Residue<'_, T, Ct>) -> T {
+        self.0.into_raw(a)
+    }
+    fn modulus(&self) -> &T {
+        self.0.modulus()
+    }
+}
+
+impl<T> FieldFor for T
+where
+    T: const_num_traits::HasPersonality
+        + Copy
+        + PartialEq
+        + PartialOrd
+        + crate::parity::Parity
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::BitsPrecision
+        + const_num_traits::One
+        + const_num_traits::Zero
+        + const_num_traits::WithPrecision
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>,
+    FieldView<T, <T as const_num_traits::HasPersonality>::P>: FieldOps<Backend = T>,
+{
+    type Field = FieldView<T, <T as const_num_traits::HasPersonality>::P>;
+    fn field(modulus: T) -> Option<Self::Field> {
+        Field::<T, <T as const_num_traits::HasPersonality>::P>::new(modulus).map(FieldView)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1920,6 +2119,39 @@ mod tests {
                 "expected None for non-coprime {raw} mod 65535"
             );
         }
+    }
+
+    // Phase 0 [24]: one generic body over `FieldOps` runs on both personalities,
+    // built directly and via the `FieldFor` selector. This is the surface that
+    // replaces the consumers' hand-rolled per-personality verify shims.
+    #[test]
+    fn fieldops_generic_over_personality() {
+        fn check<F>(f: &F)
+        where
+            F: FieldOps,
+            F::Backend: From<u8> + PartialEq + core::fmt::Debug,
+        {
+            let a = f.reduce(&F::Backend::from(3u8));
+            let b = f.reduce(&F::Backend::from(5u8));
+            assert_eq!(f.into_raw(&f.mul(&a, &b)), F::Backend::from(2u8)); // 15 % 13
+            assert_eq!(f.into_raw(&f.add(&a, &b)), F::Backend::from(8u8)); // 8
+            assert_eq!(f.into_raw(&f.sub(&b, &a)), F::Backend::from(2u8)); // 2
+            assert_eq!(
+                f.into_raw(&f.exp(&a, &F::Backend::from(3u8))),
+                F::Backend::from(1u8)
+            ); // 27 % 13
+            let inv = f.inv_fermat(&a).expect("3 invertible mod 13");
+            assert_eq!(f.into_raw(&f.mul(&a, &inv)), F::Backend::from(1u8));
+            assert_eq!(f.modulus(), &F::Backend::from(13u8));
+        }
+        type NctF = FixedUInt<u8, 4>;
+        type CtF = FixedUInt<u8, 4, Ct>;
+        // direct construction
+        check(&FieldView(Field::<NctF>::new(NctF::from(13u8)).unwrap()));
+        check(&FieldView(Field::<CtF, Ct>::new(CtF::from(13u8)).unwrap()));
+        // via the FieldFor selector
+        check(&<NctF as FieldFor>::field(NctF::from(13u8)).unwrap());
+        check(&<CtF as FieldFor>::field(CtF::from(13u8)).unwrap());
     }
 
     // Multi-word modulus (len 8) held sub-CAP (CAP 16): the ed25519 field
