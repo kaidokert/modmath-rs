@@ -296,14 +296,13 @@ where
         + core::ops::BitOr<Output = T>,
     T::Word: CtParity,
 {
-    // Divstep count is a function of the ring width, not the particular
-    // value: a runtime-width carrier can hand us a `value` narrower than the
-    // modulus (e.g. inverting a small residue in a wide field), and counting
-    // its words would run too few divsteps to converge. Bound by the wider
-    // of the two operands.
-    let n_bits = core::cmp::max(value.word_count(), modulus.word_count())
-        * core::mem::size_of::<T::Word>()
-        * 8;
+    // Divstep count is a function of the operating (ring) width, not the
+    // particular value: a runtime-width carrier can hand us a `value` narrower
+    // than the modulus (e.g. inverting a small residue in a wide field), and
+    // counting its width alone would run too few divsteps to converge. Bound by
+    // the wider of the two operands, read via the canonical width accessor
+    // `bits_precision()` (not `word_count()`).
+    let n_bits = core::cmp::max(value.bits_precision(), modulus.bits_precision()) as usize;
     let total_steps = divsteps_total(n_bits);
     // Loop invariants for se_shr1 / half_mod_ct — hoisted so each
     // divstep doesn't redo a full-width shift. The mask is MAX − (MAX
@@ -370,8 +369,18 @@ where
         e = half_mod_ct(&e, &m_half);
     }
 
-    // After total_steps divsteps, g == 0 and f == ±gcd. For the
-    // invertible case (gcd == 1), f is either +1 (lo == 1, hi == 0)
+    // After total_steps divsteps, g == 0 and f == ±gcd. A `None` below must
+    // therefore mean f == ±gcd with gcd > 1 (a genuine shared factor) — never
+    // that the divsteps failed to converge. If g != 0 here, the step count was
+    // too small for the operating width (a width desync), and the `None` would
+    // be a false "not coprime". Guard it in debug builds; stripped in release,
+    // so the shipped CT path is unaffected.
+    debug_assert!(
+        g.lo.ct_is_zero().unwrap_u8() == 1 && g.hi == 0,
+        "safegcd: divsteps did not converge (g != 0) — width desync, not a coprimality verdict"
+    );
+
+    // For the invertible case (gcd == 1), f is either +1 (lo == 1, hi == 0)
     // or -1 (lo all-ones, hi all-ones).
     let one = T::one();
     // -1 at the modulus width (all-ones), matching f.lo's width for the
