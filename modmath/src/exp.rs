@@ -649,14 +649,16 @@ mod bnum_exp_tests {
     //         basic: off, // Copy cannot be implemented, heap allocation
     //     );
 
-    //     exp_test_module!(
-    //         num_bigint_patched,
-    //         num_bigint_patched::BigUint,
-    //         type U256 = num_bigint_patched::BigUint;
-    //         strict: on,
-    //         constrained: on,
-    //         basic: off, // Copy cannot be implemented, heap allocation
-    //     );
+    // num-bigint `FixedWidthBigUint`: heap carrier, Nct, constrained/strict
+    // only (not `Copy`, so `basic: off`).
+    exp_test_module!(
+        num_bigint_patched,
+        num_bigint_patched::FixedWidthBigUint,
+        type U256 = num_bigint_patched::FixedWidthBigUint;
+        strict: on,
+        constrained: on,
+        basic: off,
+    );
 
     //     exp_test_module!(
     //         ibig,

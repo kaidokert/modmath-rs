@@ -327,14 +327,17 @@ mod bnum_inv_tests {
     //         basic: off, // Copy is not implemented, heap
     //     );
 
-    //     inv_test_module!(
-    //         num_bigint_patched,
-    //         num_bigint_patched::BigUint,
-    //         type U256 = num_bigint_patched::BigUint;
-    //         strict: on,
-    //         constrained: on,
-    //         basic: off, // Copy is not implemented, heap
-    //     );
+    // num-bigint `FixedWidthBigUint` deferred here: strict/constrained
+    // mod_inv need `T: Sub<&T>`, not yet impl'd on the fork (has
+    // `Sub<&FW> for &FW` + `Add<&FW> for FW`, needs `Sub<&FW> for FW`).
+    // inv_test_module!(
+    //     num_bigint_patched,
+    //     num_bigint_patched::FixedWidthBigUint,
+    //     type U256 = num_bigint_patched::FixedWidthBigUint;
+    //     strict: on,
+    //     constrained: on,
+    //     basic: off,
+    // );
 
     //     inv_test_module!(
     //         ibig,
