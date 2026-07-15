@@ -31,6 +31,27 @@
 //! flavor's `Copy` bound rules out heap-allocated backends; those use
 //! `constrained` or `strict`.
 //!
+//! ## Which surface to use (width safety)
+//!
+//! On a **runtime-width carrier** (a fixed-capacity, runtime-length bignum such
+//! as `HeaplessBigInt`), a value's stored width reflects its magnitude, not the
+//! ring it lives in — so a modular value must be established at the modulus
+//! ("ring") width or width-sensitive ops fire at the wrong bit and truncate.
+//! The [`FieldOps`] surface — Montgomery [`Field`]/[`FieldView`] and the
+//! schoolbook [`SchoolbookField`] strategy — carries the ring width as a **type
+//! invariant** of its [`Residue`], so a computation written against it cannot
+//! seed a narrow value. **Prefer it for anything on a runtime-width carrier, and
+//! for building your own reducer.**
+//!
+//! The raw-`T` schoolbook free functions ([`basic`]/[`constrained`]/[`strict`])
+//! are the low-level convenience layer: they reduce *their own* operands to the
+//! ring width internally, so a single `basic::mul(a, b, m)` is correct — but
+//! they operate on ring-membership-untyped `T`, so a **hand-rolled reducer** that
+//! seeds accumulators/coefficients from `T::zero()`/`one()` and grows them
+//! *outside* these calls re-opens the width-seed hazard. Such reducers belong on
+//! [`SchoolbookField`] (identities come from `field.zero()`/`one()`, which are
+//! ring-width by construction), not on raw `T`.
+//!
 //! [`Overflowing`]: https://docs.rs/num-traits/latest/num_traits/ops/overflowing
 //! [`subtle`]: https://crates.io/crates/subtle
 
