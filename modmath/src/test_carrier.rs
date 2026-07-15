@@ -78,7 +78,7 @@ impl const_num_traits::ops::wrapping::WrappingSub for NcU64 {
 }
 
 impl const_num_traits::BitsPrecision for NcU64 {
-    fn bits_precision(self) -> u32 {
+    fn bits_precision(&self) -> u32 {
         64
     }
 }

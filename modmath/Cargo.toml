@@ -16,7 +16,7 @@ keywords = ["numerics", "bignum"]
 c0nst = { version = "0.2", optional = true }
 subtle = { version = "2.6", default-features = false }
 zeroize = { version = "1", default-features = false, optional = true }
-const-num-traits = { git = "https://github.com/kaidokert/num-traits.git", tag = "v0.2.1-alpha.2", default-features = false, features = ["ct"] }
+const-num-traits = { git = "https://github.com/kaidokert/num-traits.git", tag = "v0.2.1-alpha.3", default-features = false, features = ["ct"] }
 # Leaf crate + registry-only (no path) so `CiosRowOps` has exactly one
 # identity everywhere — modmath, its test binaries, and fixed-bigint's
 # dev-dep all resolve the same copy.
@@ -27,14 +27,14 @@ modmath-cios = { version = "0.1" }
 # capacity, runtime length) behind heapless-runtime-len. Pulled as a
 # git tag to add it to the backend test matrix. Move back to a plain
 # registry version when done experimenting.
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.6.0-alpha.23", default-features = false, features = ["cios", "heapless-runtime-len"] }
+fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.6.0-alpha.25", default-features = false, features = ["cios", "heapless-runtime-len"] }
 # Third-party bigint backends. The `_patched` kaidokert forks carry
 # const-num-traits 0.2 + modmath-cios impls (proven end-to-end in the
 # krabitls backend-swap experiments), so their test matrices are live
 # again. Upstream (unforked) crates and num-bigint/ibig stay disabled:
 # no const-num-traits impls upstream; ibig is blocked architecturally.
-bnum_patched = { package = "bnum", git = "https://github.com/kaidokert/bnum.git", tag = "v0.14.4-const-16", default-features = false }
-crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.7.5-const-16", default-features = false }
+bnum_patched = { package = "bnum", git = "https://github.com/kaidokert/bnum.git", tag = "v0.14.4-const-17", default-features = false }
+crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.7.5-const-17", default-features = false }
 # num-bigint = { package = "num-bigint", version = "0.4"}
 # num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git" , tag = "v0.4.6_patch" }
 # ibig = "0.3"

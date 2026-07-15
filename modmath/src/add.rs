@@ -133,7 +133,7 @@ where
         + WithPrecision,
 {
     // Widen a to the modulus width so the carry from a + b fires at bit W.
-    let a = a.widen_to_precision(m.clone().bits_precision());
+    let a = a.widen_to_precision(m.bits_precision());
     let sum = a.clone().wrapping_add(b.clone());
     if &sum >= m || sum < a {
         sum.wrapping_sub(m.clone())
@@ -194,7 +194,7 @@ where
         + WithPrecision,
 {
     // Widen a to the modulus width so the carry from a + b fires at bit W.
-    let a = a.widen_to_precision(m.clone().bits_precision());
+    let a = a.widen_to_precision(m.bits_precision());
     let (sum, overflow) = a.overflowing_add(b.clone());
     if &sum >= m || overflow {
         sum.overflowing_sub(m.clone()).0
