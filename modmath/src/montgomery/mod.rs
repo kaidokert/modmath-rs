@@ -830,14 +830,19 @@ mod backend_montgomery_tests {
     //         basic: off, // Copy is not implemented, heap allocation
     //     );
 
-    //     montgomery_test_module!(
-    //         num_bigint_patched,
-    //         num_bigint_patched::BigUint,
-    //         type U256 = num_bigint_patched::BigUint;
-    //         strict: off, // Complex trait bounds for Montgomery operations not fully compatible
-    //         constrained: on, // Fixed trait bounds - now works with patched libraries
-    //         basic: off, // Copy is not implemented, heap allocation
-    //     );
+    // num-bigint `FixedWidthBigUint`: heap carrier, Nct. `basic: off` — not
+    // `Copy`. `strict: off` — the strict Montgomery free-functions move out of
+    // `&modulus`/reuse operands assuming `Copy`, so they don't compile for a
+    // non-`Copy` carrier (a library limitation, not a fork gap). `constrained`
+    // is clean and runs the full param-compute / mont-mul / mont-exp surface.
+    montgomery_test_module!(
+        num_bigint_patched,
+        num_bigint_patched::FixedWidthBigUint,
+        type U256 = num_bigint_patched::FixedWidthBigUint;
+        strict: off,
+        constrained: on,
+        basic: off,
+    );
 
     //     montgomery_test_module!(
     //         ibig,
