@@ -58,7 +58,7 @@ pub mod strict;
 
 pub use field::{
     Field, FieldCt, FieldFor, FieldNct, FieldOps, FieldView, MontStorage, Residue, ResidueCt,
-    ResidueNct,
+    ResidueNct, SchoolbookField, SchoolbookResidue,
 };
 pub use nonct::NonCt;
 pub use parity::Parity;

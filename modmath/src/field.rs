@@ -1225,6 +1225,119 @@ where
     }
 }
 
+// ── [D] Phase 1: schoolbook reduction strategy under `FieldOps` ─────────────
+//
+// The Montgomery `Field` is one reduction strategy; `SchoolbookField` is the
+// other, exposed through the *same* `FieldOps` surface so verify code is
+// strategy-agnostic. Its residue carries ring-width by construction: `reduce`,
+// `zero`, `one` seed at the modulus width, and the pre-reduced `_pr` ops
+// preserve it. Schoolbook is variable-time (the `>= m` branch), so it is
+// Nct-only — the Ct strategy is always Montgomery.
+
+/// A plain (non-Montgomery) residue in `[0, m)`, carried at the ring width.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SchoolbookResidue<'f, T> {
+    val: T,
+    _brand: core::marker::PhantomData<&'f ()>,
+}
+
+/// Schoolbook (double-and-add / peasant) modular arithmetic as a `FieldOps`
+/// strategy. `Copy` carriers only (the `basic` flavor); the modulus is stored
+/// at its own (ring) width.
+#[derive(Clone, Debug)]
+pub struct SchoolbookField<T> {
+    modulus: T,
+}
+
+impl<T> SchoolbookField<T> {
+    /// Build a schoolbook field over `modulus`. Rejects `modulus < 2`.
+    pub fn new(modulus: T) -> Option<Self>
+    where
+        T: const_num_traits::One + PartialOrd,
+    {
+        (modulus > T::one()).then_some(SchoolbookField { modulus })
+    }
+
+    fn wrap<'f>(&self, val: T) -> SchoolbookResidue<'f, T> {
+        SchoolbookResidue {
+            val,
+            _brand: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<T> FieldOps for SchoolbookField<T>
+where
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
+        + PartialEq
+        + PartialOrd
+        + crate::parity::Parity
+        + crate::NonCt
+        + const_num_traits::WithPrecision
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
+        + core::ops::Rem<Output = T>
+        + core::ops::Div<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Shr<usize, Output = T>
+        + core::ops::ShrAssign<usize>,
+{
+    type Backend = T;
+    type Residue<'f>
+        = SchoolbookResidue<'f, T>
+    where
+        Self: 'f;
+
+    fn reduce<'f>(&'f self, raw: &T) -> SchoolbookResidue<'f, T> {
+        // Enter the ring: reduce, then establish ring width (hedge #3, here).
+        self.wrap((*raw % self.modulus).widen_to_precision_of(&self.modulus))
+    }
+    fn mul<'f>(
+        &'f self,
+        a: &SchoolbookResidue<'f, T>,
+        b: &SchoolbookResidue<'f, T>,
+    ) -> SchoolbookResidue<'f, T> {
+        self.wrap(crate::mul::basic_mod_mul_pr(a.val, b.val, self.modulus))
+    }
+    fn add<'f>(
+        &'f self,
+        a: &SchoolbookResidue<'f, T>,
+        b: &SchoolbookResidue<'f, T>,
+    ) -> SchoolbookResidue<'f, T> {
+        self.wrap(crate::add::basic_mod_add_pr(a.val, b.val, self.modulus))
+    }
+    fn sub<'f>(
+        &'f self,
+        a: &SchoolbookResidue<'f, T>,
+        b: &SchoolbookResidue<'f, T>,
+    ) -> SchoolbookResidue<'f, T> {
+        self.wrap(crate::sub::basic_mod_sub_pr(a.val, b.val, self.modulus))
+    }
+    fn exp<'f>(&'f self, base: &SchoolbookResidue<'f, T>, e: &T) -> SchoolbookResidue<'f, T> {
+        self.wrap(crate::exp::basic_mod_exp_pr(base.val, *e, self.modulus))
+    }
+    fn inv_fermat<'f>(&'f self, a: &SchoolbookResidue<'f, T>) -> Option<SchoolbookResidue<'f, T>> {
+        crate::inv::basic_mod_inv(a.val, self.modulus)
+            .map(|v| self.wrap(v.widen_to_precision_of(&self.modulus)))
+    }
+    fn one(&self) -> SchoolbookResidue<'_, T> {
+        self.wrap(T::one_with_precision_of(&self.modulus))
+    }
+    fn zero(&self) -> SchoolbookResidue<'_, T> {
+        self.wrap(T::zero_with_precision_of(&self.modulus))
+    }
+    fn into_raw(&self, a: &SchoolbookResidue<'_, T>) -> T {
+        a.val
+    }
+    fn modulus(&self) -> &T {
+        &self.modulus
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2117,6 +2230,33 @@ mod tests {
                 f.inv_safegcd_ct(&r).is_some().unwrap_u8(),
                 0,
                 "expected None for non-coprime {raw} mod 65535"
+            );
+        }
+    }
+
+    // Phase 1 [D]: schoolbook runs through the same `FieldOps` surface as
+    // Montgomery, and the two strategies agree.
+    #[test]
+    fn schoolbook_strategy_via_fieldops() {
+        type U = FixedUInt<u8, 4>;
+        let sb = SchoolbookField::new(U::from(13u8)).unwrap();
+        let a = sb.reduce(&U::from(3u8));
+        let b = sb.reduce(&U::from(5u8));
+        assert_eq!(sb.into_raw(&sb.mul(&a, &b)), U::from(2u8)); // 15 % 13
+        assert_eq!(sb.into_raw(&sb.add(&a, &b)), U::from(8u8));
+        assert_eq!(sb.into_raw(&sb.sub(&b, &a)), U::from(2u8));
+        assert_eq!(sb.into_raw(&sb.exp(&a, &U::from(3u8))), U::from(1u8)); // 27 % 13
+        let inv = sb.inv_fermat(&a).expect("3 invertible mod 13");
+        assert_eq!(sb.into_raw(&sb.mul(&a, &inv)), U::from(1u8));
+        // schoolbook and Montgomery agree, both through FieldOps
+        let mont = FieldView(Field::<U>::new(U::from(13u8)).unwrap());
+        for x in [1u8, 2, 7, 11, 12] {
+            let rs = sb.reduce(&U::from(x));
+            let rm = mont.reduce(&U::from(x));
+            assert_eq!(
+                sb.into_raw(&sb.mul(&rs, &rs)),
+                mont.into_raw(&mont.mul(&rm, &rm)),
+                "sq({x})"
             );
         }
     }
