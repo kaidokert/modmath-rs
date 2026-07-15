@@ -42,16 +42,22 @@ where
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
         + core::ops::Sub<Output = T>
+        + const_num_traits::WithPrecision
         + core::cmp::PartialOrd,
     for<'a> T: core::ops::Sub<&'a T, Output = T>
         + core::ops::Add<&'a T, Output = T>
         + core::cmp::PartialOrd,
     for<'a> &'a T: core::ops::Div<&'a T, Output = T> + core::ops::Sub<T, Output = T>,
 {
-    let mut t = Signed::new(T::zero(), false);
-    let mut new_t = Signed::new(T::one(), false);
+    // Seed the signed coefficients at the modulus width: on a runtime-width
+    // carrier `T::zero()` is width 0, and the signed magnitude arithmetic
+    // (canonicalization, magnitude subtraction) misbehaves when a width-0
+    // magnitude meets field-width values. `zero_with_precision_of` establishes
+    // the ring width; identity on fixed-width carriers.
+    let mut t = Signed::new(T::zero_with_precision_of(modulus), false);
+    let mut new_t = Signed::new(T::one_with_precision_of(modulus), false);
     // makes a clone of modulus
-    let mut r = T::zero() + modulus;
+    let mut r = T::zero_with_precision_of(modulus) + modulus;
     let mut new_r = a;
 
     while new_r != T::zero() {
@@ -59,15 +65,15 @@ where
         // strict avoids a `Clone` bound: duplicate `quotient` via the same
         // reference-add trick used for `r`/`t`, so each coefficient update can
         // consume an owned copy through the checked multiply.
-        let quotient2 = T::zero() + &quotient;
+        let quotient2 = T::zero_with_precision_of(modulus) + &quotient;
 
         // clone
-        let tmp_t = Signed::new(T::zero(), false) + &new_t;
+        let tmp_t = Signed::new(T::zero_with_precision_of(modulus), false) + &new_t;
         new_t = t - new_t * quotient;
         t = tmp_t;
 
         // clone
-        let tmp_r = T::zero() + &new_r;
+        let tmp_r = T::zero_with_precision_of(modulus) + &new_r;
         new_r = r - new_r.checked_mul(quotient2).expect(signed::OVERFLOW_MSG);
         r = tmp_r;
     }

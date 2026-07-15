@@ -63,7 +63,8 @@ where
         + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Sub<&'a T, Output = T> + core::ops::Add<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
@@ -177,7 +178,8 @@ where
         + core::ops::Shl<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + core::ops::Sub<Output = T>
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Add<&'a T, Output = T>,
@@ -213,7 +215,8 @@ where
         + core::ops::Shl<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + core::ops::Sub<Output = T>
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Add<&'a T, Output = T>,
