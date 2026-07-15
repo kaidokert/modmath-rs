@@ -28,6 +28,24 @@
 //! shared by both algorithms (precompute, `new`, `zero`, `one`, the
 //! residue brand) live in the common `impl<T, P: Personality>` block.
 //!
+//! ## Width under each personality (runtime-width carriers)
+//!
+//! The two finalize strategies treat operand *width* differently on a
+//! runtime-width carrier (`HeaplessBigInt`), where stored length is a public
+//! shape parameter rather than value-derived:
+//!
+//! - **Ct (conditional-select finalize):** `conditional_select(x, x − m, ge)`
+//!   materializes both branches at the field width and selects between them, so
+//!   the result is always carried at the modulus width — the finalize
+//!   self-normalizes.
+//! - **Nct (compare-branch finalize):** `if x ≥ m { x − m } else { x }` returns
+//!   whichever branch at that branch's width; it does **not** widen a narrow
+//!   input. Correctness therefore depends on operands already sitting at the
+//!   modulus width, which the precompute/reduce path establishes via
+//!   [`WithPrecision`](const_num_traits::WithPrecision) seeding (see
+//!   `montgomery::basic_mont`). A residue entering narrower would fire its
+//!   carry/borrow at the wrong bit — the width-seed hazard that seeding closes.
+//!
 //! ## Branding
 //!
 //! Each `Field<T, P>` instance is implicitly tagged by its borrow lifetime

@@ -831,10 +831,13 @@ mod backend_montgomery_tests {
     //     );
 
     // num-bigint `FixedWidthBigUint`: heap carrier, Nct. `basic: off` — not
-    // `Copy`. `strict: off` — the strict Montgomery free-functions move out of
-    // `&modulus`/reuse operands assuming `Copy`, so they don't compile for a
-    // non-`Copy` carrier (a library limitation, not a fork gap). `constrained`
-    // is clean and runs the full param-compute / mont-mul / mont-exp surface.
+    // `Copy`. `strict: off` — the *test macro's* strict rows assume `Copy`
+    // (they reuse `a`/`base` after moving into the mont fn, and the
+    // param-compute assertions do `% *modulus`), so they don't compile for a
+    // non-`Copy` carrier. The strict library free-functions are `Clone`-bounded
+    // and fine; this is a test-harness limitation, not a library one, and
+    // `constrained` already runs the full param-compute / mont-mul / mont-exp
+    // surface on the heap carrier.
     montgomery_test_module!(
         num_bigint_patched,
         num_bigint_patched::FixedWidthBigUint,
