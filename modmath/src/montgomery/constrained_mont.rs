@@ -59,7 +59,8 @@ where
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Sub<Output = T>,
+        + core::ops::Sub<Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Add<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T> + core::ops::Div<&'a T, Output = T>,
 {
@@ -153,7 +154,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shl<usize, Output = T>
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>,
@@ -209,7 +211,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shl<usize, Output = T>
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Add<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>,

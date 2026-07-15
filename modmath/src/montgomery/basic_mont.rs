@@ -84,7 +84,8 @@ where
         + PartialEq
         + PartialOrd
         + core::ops::Sub<Output = T>
-        + core::ops::Div<Output = T>,
+        + core::ops::Div<Output = T>
+        + const_num_traits::WithPrecision,
 {
     // We need to solve: modulus * N' ≡ -1 (mod R)
     // This is equivalent to: modulus * N' ≡ R - 1 (mod R)
@@ -194,7 +195,8 @@ where
         + core::ops::Div<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Rem<Output = T>
-        + core::ops::Add<Output = T>,
+        + core::ops::Add<Output = T>
+        + const_num_traits::WithPrecision,
 {
     // Step 1: Find R = 2^k where R > modulus
     let mut r = T::one();
@@ -242,7 +244,8 @@ where
         + core::ops::Div<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Rem<Output = T>
-        + core::ops::Add<Output = T>,
+        + core::ops::Add<Output = T>
+        + const_num_traits::WithPrecision,
 {
     basic_compute_montgomery_params_with_method(modulus, NPrimeMethod::default())
 }

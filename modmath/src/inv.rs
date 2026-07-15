@@ -113,14 +113,18 @@ where
         + core::cmp::PartialOrd
         + const_num_traits::CheckedAdd<Output = T>
         + core::ops::Sub<Output = T>
-        + const_num_traits::CheckedMul<Output = T>,
+        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Add<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T> + core::ops::Div<&'a T, Output = T>,
 {
-    let mut t = Signed::new(T::zero(), false);
-    let mut new_t = Signed::new(T::one(), false);
+    // Seed the signed coefficients at the modulus width (as strict_mod_inv):
+    // on a runtime-width carrier `T::zero()`/`one()` are minimal-width and the
+    // signed magnitude arithmetic corrupts the inverse otherwise.
+    let mut t = Signed::new(T::zero_with_precision_of(modulus), false);
+    let mut new_t = Signed::new(T::one_with_precision_of(modulus), false);
     let mut r = modulus.clone();
-    let mut new_r = a;
+    let mut new_r = a.widen_to_precision_of(modulus);
 
     while new_r != T::zero() {
         let quotient = &r / &new_r;
@@ -168,12 +172,16 @@ where
         + const_num_traits::CheckedAdd<Output = T>
         + core::ops::Sub<Output = T>
         + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::WithPrecision
         + core::cmp::PartialOrd,
 {
-    let mut t = Signed::new(T::zero(), false);
-    let mut new_t = Signed::new(T::one(), false);
+    // Seed the signed coefficients at the modulus width (as strict_mod_inv):
+    // on a runtime-width carrier `T::zero()`/`one()` are minimal-width and the
+    // signed magnitude arithmetic corrupts the inverse otherwise.
+    let mut t = Signed::new(T::zero_with_precision_of(&modulus), false);
+    let mut new_t = Signed::new(T::one_with_precision_of(&modulus), false);
     let mut r = Signed::new(modulus, false);
-    let mut new_r = Signed::new(a, false);
+    let mut new_r = Signed::new(a.widen_to_precision_of(&modulus), false);
 
     while new_r != Signed::new(T::zero(), false) {
         let quotient = r / new_r;
@@ -388,24 +396,30 @@ mod bnum_inv_tests {
         basic: on,
     );
 
-    // Regression for the strict_mod_inv width-0 seed bug: on a runtime-width
-    // carrier (len < CAP) strict_mod_inv corrupted the inverse for a large
-    // fraction of residues. Cross-check every residue against the u32 oracle.
+    // Regression for the width-0 seed bug in the EEA inverses: on a runtime-width
+    // carrier (len < CAP) `zero()`/`one()`-seeded coefficients corrupted the
+    // inverse for a large fraction of residues. All three flavors now seed at the
+    // modulus width; cross-check every residue against the u32 oracle.
     #[test]
-    fn strict_mod_inv_runtime_width_full_range() {
+    fn mod_inv_all_flavors_runtime_width_full_range() {
         use fixed_bigint::HeaplessBigInt;
         type H = HeaplessBigInt<u8, 4>;
         for m in [13u8, 17, 251] {
+            let hm = H::from(m);
             for a in 1..m {
-                let got = super::strict_mod_inv(H::from(a), &H::from(m));
-                let want = super::strict_mod_inv(a as u32, &(m as u32));
-                match (got, want) {
-                    (Some(g), Some(w)) => {
-                        assert_eq!(g, H::from(w as u8), "strict inv({a}) mod {m}")
-                    }
-                    (None, None) => {}
-                    (g, w) => panic!("strict inv({a}) mod {m}: heapless={g:?} u32={w:?}"),
-                }
+                let ha = H::from(a);
+                let want = super::basic_mod_inv(a as u32, m as u32).map(|w| H::from(w as u8));
+                assert_eq!(super::basic_mod_inv(ha, hm), want, "basic inv({a}) mod {m}");
+                assert_eq!(
+                    super::constrained_mod_inv(ha, &hm),
+                    want,
+                    "constrained inv({a}) mod {m}"
+                );
+                assert_eq!(
+                    super::strict_mod_inv(ha, &hm),
+                    want,
+                    "strict inv({a}) mod {m}"
+                );
             }
         }
     }
