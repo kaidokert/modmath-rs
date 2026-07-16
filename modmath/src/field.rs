@@ -1056,7 +1056,19 @@ pub trait FieldOps {
     /// The exponent is a **magnitude** (consumed as bits by square-and-multiply),
     /// so it stays a raw `Backend`, not a residue.
     fn exp<'f>(&'f self, base: &Self::Residue<'f>, e: &Self::Backend) -> Self::Residue<'f>;
-    fn inv_fermat<'f>(&'f self, a: &Self::Residue<'f>) -> Option<Self::Residue<'f>>;
+    /// Modular inverse, strategy-neutral: Montgomery backends compute it by
+    /// Fermat (`a^(m−2)`), schoolbook by extended Euclid — the trait names the
+    /// operation, not either algorithm.
+    ///
+    /// **CT contract.** The returned *value* is computed under the backend's
+    /// personality (constant-time on a `Ct` backend). The `Option` itself is
+    /// **not** constant-time: `None` is observable and means the operand is
+    /// non-invertible, i.e. `≡ 0` (or shares a factor with a composite modulus)
+    /// — a negligible-probability event callers already handle by resampling
+    /// (e.g. an ECDSA nonce). A caller that must not branch even on that bit
+    /// uses the inherent [`Field::inv_fermat`] on a `Ct` field, which returns a
+    /// masked [`subtle::CtOption`] and never collapses the existence flag.
+    fn inv<'f>(&'f self, a: &Self::Residue<'f>) -> Option<Self::Residue<'f>>;
     fn one(&self) -> Self::Residue<'_>;
     fn zero(&self) -> Self::Residue<'_>;
     /// Converts the *residue* out of the field (not `self`), mirroring
@@ -1122,7 +1134,7 @@ where
     fn exp<'f>(&'f self, base: &Residue<'f, T, Nct>, e: &T) -> Residue<'f, T, Nct> {
         self.0.exp(base, e)
     }
-    fn inv_fermat<'f>(&'f self, a: &Residue<'f, T, Nct>) -> Option<Residue<'f, T, Nct>> {
+    fn inv<'f>(&'f self, a: &Residue<'f, T, Nct>) -> Option<Residue<'f, T, Nct>> {
         self.0.inv_fermat(a)
     }
     fn one(&self) -> Residue<'_, T, Nct> {
@@ -1184,8 +1196,10 @@ where
     fn exp<'f>(&'f self, base: &Residue<'f, T, Ct>, e: &T) -> Residue<'f, T, Ct> {
         self.0.exp(base, e)
     }
-    fn inv_fermat<'f>(&'f self, a: &Residue<'f, T, Ct>) -> Option<Residue<'f, T, Ct>> {
-        // Ct field returns CtOption; verify inputs are public, so normalize.
+    fn inv<'f>(&'f self, a: &Residue<'f, T, Ct>) -> Option<Residue<'f, T, Ct>> {
+        // Collapses the CtOption existence bit (operand ≡ 0) per the trait's CT
+        // contract; the inverse value itself stays constant-time. Callers who
+        // must not branch on existence use the inherent `Field::inv_fermat`.
         self.0.inv_fermat(a).into_option()
     }
     fn one(&self) -> Residue<'_, T, Ct> {
@@ -1324,7 +1338,8 @@ where
     fn exp<'f>(&'f self, base: &SchoolbookResidue<'f, T>, e: &T) -> SchoolbookResidue<'f, T> {
         self.wrap(crate::exp::basic_mod_exp_pr(base.val, *e, self.modulus))
     }
-    fn inv_fermat<'f>(&'f self, a: &SchoolbookResidue<'f, T>) -> Option<SchoolbookResidue<'f, T>> {
+    fn inv<'f>(&'f self, a: &SchoolbookResidue<'f, T>) -> Option<SchoolbookResidue<'f, T>> {
+        // Extended Euclid, not Fermat — the strategy-neutral `inv` names the op.
         crate::inv::basic_mod_inv(a.val, self.modulus)
             .map(|v| self.wrap(v.widen_to_precision_of(&self.modulus)))
     }
@@ -2250,7 +2265,7 @@ mod tests {
         assert_eq!(sb.into_raw(&sb.add(&a, &b)), U::from(8u8));
         assert_eq!(sb.into_raw(&sb.sub(&b, &a)), U::from(2u8));
         assert_eq!(sb.into_raw(&sb.exp(&a, &U::from(3u8))), U::from(1u8)); // 27 % 13
-        let inv = sb.inv_fermat(&a).expect("3 invertible mod 13");
+        let inv = sb.inv(&a).expect("3 invertible mod 13");
         assert_eq!(sb.into_raw(&sb.mul(&a, &inv)), U::from(1u8));
         // schoolbook and Montgomery agree, both through FieldOps
         let mont = FieldView(Field::<U>::new(U::from(13u8)).unwrap());
@@ -2284,7 +2299,7 @@ mod tests {
                 f.into_raw(&f.exp(&a, &F::Backend::from(3u8))),
                 F::Backend::from(1u8)
             ); // 27 % 13
-            let inv = f.inv_fermat(&a).expect("3 invertible mod 13");
+            let inv = f.inv(&a).expect("3 invertible mod 13");
             assert_eq!(f.into_raw(&f.mul(&a, &inv)), F::Backend::from(1u8));
             assert_eq!(f.modulus(), &F::Backend::from(13u8));
         }
