@@ -1216,7 +1216,11 @@ where
         + const_num_traits::WithPrecision
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingMul<Output = T>
-        + const_num_traits::WrappingSub<Output = T>,
+        + const_num_traits::WrappingSub<Output = T>
+        // `Field::new` (below) is bounded on `MontStorage`, which is `zeroize`-gated
+        // to require `Zeroize`. Without this the blanket is vacuous with `zeroize`
+        // off but unsatisfiable with it on — every real consumer sets `zeroize`.
+        + MontStorage,
     FieldView<T, <T as const_num_traits::HasPersonality>::P>: FieldOps<Backend = T>,
 {
     type Field = FieldView<T, <T as const_num_traits::HasPersonality>::P>;
