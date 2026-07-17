@@ -1,6 +1,11 @@
 [profiles.jtrace-f407]
 runner = "command"
 target = "thumbv7em-none-eabihf"
+board = "jtrace-reference-board"
+mcu = "STM32F407VG"
+transport = "rtt"
+probe = "1366:1020:001224000224"
+clock-frequency-hz = 16000000
 executable = "probe-rs"
 args = [
   "run",
@@ -26,4 +31,3 @@ expected-suite = "modmath-cyccnt"
 [campaigns.modmath-jtrace-f407]
 profile = "jtrace-f407"
 case-set = "modmath-cyccnt"
-
