@@ -16,7 +16,7 @@ keywords = ["numerics", "bignum"]
 c0nst = { version = "0.2", optional = true }
 subtle = { version = "2.6", default-features = false }
 zeroize = { version = "1", default-features = false, optional = true }
-const-num-traits = { git = "https://github.com/kaidokert/num-traits.git", tag = "v0.2.1-alpha.3", default-features = false, features = ["ct"] }
+const-num-traits = { version = "0.2.1", default-features = false, features = ["ct"] }
 # Leaf crate + registry-only (no path) so `CiosRowOps` has exactly one
 # identity everywhere — modmath, its test binaries, and fixed-bigint's
 # dev-dep all resolve the same copy.
@@ -30,7 +30,7 @@ modmath-cios = { version = "0.1" }
 # `zeroize` on the carrier gives the test matrix `Zeroize`/`DefaultIsZeroes`, so
 # the suite compiles under `--features zeroize` (which gates `MontStorage` on
 # `Zeroize`) — the column every real consumer builds. Dev-only; harmless off.
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.6.0-alpha.27", default-features = false, features = ["cios", "heapless-runtime-len", "zeroize"] }
+fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.6.0-alpha.28", default-features = false, features = ["cios", "heapless-runtime-len", "zeroize"] }
 # Third-party bigint backends. The `_patched` kaidokert forks carry
 # const-num-traits 0.2 + modmath-cios impls (proven end-to-end in the
 # krabitls backend-swap experiments), so their test matrices are live
