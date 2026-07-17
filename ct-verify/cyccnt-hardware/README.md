@@ -15,11 +15,18 @@ warmups, policy evaluation, versioned reporting, diagnostics, and totals. It
 emits lossless `EM_*` schema 1 records plus legacy `CT_*` records during host
 tooling migration.
 
-Run from this directory:
+Run the complete hardware gate from this directory with the shared Rust
+campaign runner:
 
 ```sh
-cargo run --release
+cargo embedded-measure run modmath-jtrace-f407
 ```
+
+The declarative profile in `embedded-measure.toml` owns the release build,
+explicit SWD/J-Trace selection, RTT completion, deadline, ELF retention, raw
+logs, and JSON/Markdown results below
+`target/embedded-measure/modmath-jtrace-f407/`. The retained metadata includes
+the exact `cargo build` and `probe-rs run` commands for direct reproduction.
 
 This timing-regression layer complements, rather than replaces, ctgrind and
 the cross-target conditional-branch audit.
