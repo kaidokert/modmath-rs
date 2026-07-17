@@ -30,7 +30,7 @@ modmath-cios = { version = "0.1" }
 # `zeroize` on the carrier gives the test matrix `Zeroize`/`DefaultIsZeroes`, so
 # the suite compiles under `--features zeroize` (which gates `MontStorage` on
 # `Zeroize`) — the column every real consumer builds. Dev-only; harmless off.
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.6.0-alpha.25", default-features = false, features = ["cios", "heapless-runtime-len", "zeroize"] }
+fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs.git", tag = "v0.6.0-alpha.26", default-features = false, features = ["cios", "heapless-runtime-len", "zeroize"] }
 # Third-party bigint backends. The `_patched` kaidokert forks carry
 # const-num-traits 0.2 + modmath-cios impls (proven end-to-end in the
 # krabitls backend-swap experiments), so their test matrices are live

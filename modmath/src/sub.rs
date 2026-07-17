@@ -58,7 +58,7 @@ where
 
 /// # Modular Subtraction (Basic, pre-reduced)
 /// Precondition: `a < m` and `b < m`. No `Rem` bound.
-pub fn basic_mod_sub_pr<T>(a: T, b: T, m: T) -> T
+pub(crate) fn basic_mod_sub_pr<T>(a: T, b: T, m: T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
@@ -115,7 +115,7 @@ where
 
 /// # Modular Subtraction (Constrained, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
-pub fn constrained_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
+pub(crate) fn constrained_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone
@@ -173,7 +173,7 @@ where
 
 /// # Modular Subtraction (Strict, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
-pub fn strict_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
+pub(crate) fn strict_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone

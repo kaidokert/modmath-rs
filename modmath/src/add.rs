@@ -64,7 +64,7 @@ where
 
 /// # Modular Addition (Basic, pre-reduced)
 /// Precondition: `a < m` and `b < m`. No `Rem` bound.
-pub fn basic_mod_add_pr<T>(a: T, b: T, m: T) -> T
+pub(crate) fn basic_mod_add_pr<T>(a: T, b: T, m: T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
@@ -123,7 +123,7 @@ where
 
 /// # Modular Addition (Constrained, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
-pub fn constrained_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
+pub(crate) fn constrained_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone
@@ -184,7 +184,7 @@ where
 
 /// # Modular Addition (Strict, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
-pub fn strict_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
+pub(crate) fn strict_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone

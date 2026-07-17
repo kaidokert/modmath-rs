@@ -268,24 +268,6 @@ where
     crate::mul::basic_mod_mul(a, r, modulus)
 }
 
-/// Convert to Montgomery form (Basic, pre-reduced): a -> (a * R) mod N
-/// Precondition: `a < modulus` and `r < modulus`. No `Rem` bound.
-pub fn basic_to_montgomery_pr<T>(a: T, modulus: T, r: T) -> T
-where
-    T: core::cmp::PartialOrd
-        + Copy
-        + const_num_traits::Zero
-        + const_num_traits::One
-        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
-        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Shr<usize, Output = T>
-        + crate::parity::Parity
-        + crate::NonCt
-        + const_num_traits::WithPrecision,
-{
-    crate::mul::basic_mod_mul_pr(a, r, modulus)
-}
-
 /// Convert from Montgomery form (Basic): (a * R) -> a mod N
 /// Uses Montgomery reduction algorithm with R > N semantics.
 ///
@@ -378,30 +360,6 @@ where
     // from_montgomery can also overflow at key sizes. For overflow-free
     // multiplication, route through wide-REDC / CIOS instead.
     let product = crate::mul::basic_mod_mul(a_mont, b_mont, modulus);
-    basic_from_montgomery(product, modulus, n_prime, r_bits)
-}
-
-/// Montgomery multiplication (Basic, pre-reduced)
-/// Precondition: `a_mont < modulus` and `b_mont < modulus`. No `Rem` bound.
-pub fn basic_montgomery_mul_pr<T>(a_mont: T, b_mont: T, modulus: T, n_prime: T, r_bits: usize) -> T
-where
-    T: Copy
-        + const_num_traits::Zero
-        + core::ops::Add<Output = T>
-        + const_num_traits::CheckedMul<Output = T>
-        + const_num_traits::One
-        + PartialOrd
-        + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>
-        + core::ops::Shl<usize, Output = T>
-        + core::ops::BitAnd<Output = T>
-        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
-        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::parity::Parity
-        + crate::NonCt
-        + const_num_traits::WithPrecision,
-{
-    let product = crate::mul::basic_mod_mul_pr(a_mont, b_mont, modulus);
     basic_from_montgomery(product, modulus, n_prime, r_bits)
 }
 
@@ -1064,7 +1022,7 @@ where
 ///
 /// Precondition (unchanged from the `Option`-returning sibling): `a < modulus`
 /// and `b < modulus`.
-pub fn basic_montgomery_mod_mul_pr_odd<T>(a: T, b: T, modulus: Odd<T>) -> T
+pub(crate) fn basic_montgomery_mod_mul_pr_odd<T>(a: T, b: T, modulus: Odd<T>) -> T
 where
     T: Copy
         + const_num_traits::Zero
@@ -1105,7 +1063,8 @@ where
 /// [`basic_montgomery_mod_mul_pr_odd`] that performs the parity proof at
 /// runtime — prefer the `_odd` form to keep the panic path out of the
 /// linked binary.
-pub fn basic_montgomery_mod_mul_pr<T>(a: T, b: T, modulus: T) -> Option<T>
+#[cfg(test)] // retained as differential test oracle; absent from the shipped surface
+pub(crate) fn basic_montgomery_mod_mul_pr<T>(a: T, b: T, modulus: T) -> Option<T>
 where
     T: Copy
         + const_num_traits::Zero
@@ -1177,7 +1136,7 @@ where
 
 /// Complete Montgomery modular exponentiation (Basic, pre-reduced,
 /// proven-odd modulus). **Infallible.** Precondition: `base < modulus`.
-pub fn basic_montgomery_mod_exp_pr_odd<T>(base: T, exponent: T, modulus: Odd<T>) -> T
+pub(crate) fn basic_montgomery_mod_exp_pr_odd<T>(base: T, exponent: T, modulus: Odd<T>) -> T
 where
     T: Copy
         + const_num_traits::Zero
@@ -1226,7 +1185,8 @@ where
 /// Precondition: `base < modulus`. No `Rem` bound. Returns None only if
 /// modulus is even or zero. Thin wrapper around
 /// [`basic_montgomery_mod_exp_pr_odd`].
-pub fn basic_montgomery_mod_exp_pr<T>(base: T, exponent: T, modulus: T) -> Option<T>
+#[cfg(test)] // retained as differential test oracle; absent from the shipped surface
+pub(crate) fn basic_montgomery_mod_exp_pr<T>(base: T, exponent: T, modulus: T) -> Option<T>
 where
     T: Copy
         + const_num_traits::Zero
@@ -1268,7 +1228,8 @@ where
 ///
 /// Complete Montgomery modular exponentiation (Basic, CT, pre-reduced,
 /// proven-odd modulus). **Infallible.** Precondition: `base < modulus`.
-pub fn basic_montgomery_mod_exp_pr_odd_ct<T>(base: T, exponent: T, modulus: Odd<T>) -> T
+#[cfg(test)] // retained as differential test oracle; absent from the shipped surface
+pub(crate) fn basic_montgomery_mod_exp_pr_odd_ct<T>(base: T, exponent: T, modulus: Odd<T>) -> T
 where
     T: Copy
         + const_num_traits::Zero
@@ -1327,7 +1288,8 @@ where
 
 /// Returns None if modulus is even or zero. Thin wrapper around
 /// [`basic_montgomery_mod_exp_pr_odd_ct`].
-pub fn basic_montgomery_mod_exp_pr_ct<T>(base: T, exponent: T, modulus: T) -> Option<T>
+#[cfg(test)] // retained as differential test oracle; absent from the shipped surface
+pub(crate) fn basic_montgomery_mod_exp_pr_ct<T>(base: T, exponent: T, modulus: T) -> Option<T>
 where
     T: Copy
         + const_num_traits::Zero

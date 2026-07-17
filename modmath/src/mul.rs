@@ -117,7 +117,7 @@ where
 /// Note: this only removes the division side-channel from the signature.
 /// The double-and-add loop still leaks `bit_length(b)`; for constant-time
 /// multiplication, use the Montgomery wide-REDC path.
-pub fn basic_mod_mul_pr<T>(a: T, mut b: T, m: T) -> T
+pub(crate) fn basic_mod_mul_pr<T>(a: T, mut b: T, m: T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
@@ -209,7 +209,7 @@ where
 /// # Modular Multiplication (Constrained, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound. See
 /// [`basic_mod_mul_pr`] for the CT caveat.
-pub fn constrained_mod_mul_pr<T>(a: T, b: &T, m: &T) -> T
+pub(crate) fn constrained_mod_mul_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: Clone
         + const_num_traits::Zero
@@ -304,7 +304,7 @@ where
 /// # Modular Multiplication (Strict, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound. See
 /// [`basic_mod_mul_pr`] for the CT caveat.
-pub fn strict_mod_mul_pr<T>(a: T, b: &T, m: &T) -> T
+pub(crate) fn strict_mod_mul_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: Clone
         + const_num_traits::Zero
