@@ -29,10 +29,7 @@ where
     let mut n_prime = T::one();
     loop {
         // Check if (modulus * n_prime) % r == target
-        let product = modulus
-            .clone()
-            .checked_mul(n_prime.clone())
-            .expect(crate::montgomery::OVERFLOW_MSG);
+        let product = modulus.clone().checked_mul(n_prime.clone())?;
         let remainder = &product % r;
         if remainder == target {
             return Some(n_prime);
@@ -121,10 +118,7 @@ where
         // This is the core of Hensel lifting: extending solutions modulo increasing powers
 
         let target_mod = T::one() << k; // 2^k
-        let temp_prod = modulus
-            .clone()
-            .checked_mul(n_prime.clone())
-            .expect(crate::montgomery::OVERFLOW_MSG);
+        let temp_prod = modulus.clone().checked_mul(n_prime.clone())?;
         let (temp_sum, _overflow) = temp_prod.overflowing_add(T::one());
         let check_val = &temp_sum % &target_mod;
 
@@ -145,10 +139,7 @@ where
 
     // Verification: ensure the computed N' satisfies modulus * N' ≡ -1 (mod R)
     // This check validates the mathematical correctness of our Hensel lifting
-    let final_prod = modulus
-        .clone()
-        .checked_mul(n_prime.clone())
-        .expect(crate::montgomery::OVERFLOW_MSG);
+    let final_prod = modulus.clone().checked_mul(n_prime.clone())?;
     let final_check = &final_prod % r;
     let target = r - &T::one(); // -1 mod R
 
@@ -418,6 +409,11 @@ where
     // Step 1: Compute Montgomery parameters using specified method
     let (r, _r_inv, n_prime, r_bits) =
         strict_compute_montgomery_params_with_method(modulus, method)?;
+    // The R>N reduction's intermediates (`a_low*N'`, `m*N`, and `a_mont+m*N`,
+    // all < R²) must fit the carrier. If R² overflows it, this modulus can't be
+    // reduced on this path — return None rather than let `from_montgomery` panic.
+    // (`Field`/CIOS/wide-REDC handle sized moduli overflow-free.)
+    r.clone().checked_mul(r.clone())?;
 
     // Step 2: Convert inputs to Montgomery form
     let a_mont = strict_to_montgomery(a, modulus, &r);
@@ -526,6 +522,9 @@ where
     // Step 1: Compute Montgomery parameters using specified method
     let (r, _r_inv, n_prime, r_bits) =
         strict_compute_montgomery_params_with_method(modulus, method)?;
+    // R² must fit the carrier (see mod_mul): the reduction intermediates are all
+    // < R², so if R² overflows, return None rather than panic in from_montgomery.
+    r.clone().checked_mul(r.clone())?;
 
     // Step 2: Reduce base and convert to Montgomery form
     base.rem_assign(modulus); // Reduce base first to ensure base < modulus

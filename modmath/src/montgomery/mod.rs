@@ -478,6 +478,21 @@ mod tests {
         );
     }
 
+    // A carrier too narrow for the R>N reduction (R² overflows it) must make the
+    // constrained/strict Option pipelines return None, not panic. N=100003 → R=2^17,
+    // R²=2^34 overflows u32; a small modulus whose R² fits still computes.
+    #[test]
+    fn mod_mul_exp_return_none_when_carrier_too_narrow() {
+        let big = 100_003u32; // odd; R² overflows u32
+        assert_eq!(constrained_montgomery_mod_mul(2u32, &3u32, &big), None);
+        assert_eq!(strict_montgomery_mod_mul(2u32, &3u32, &big), None);
+        assert_eq!(constrained_montgomery_mod_exp(2u32, &5u32, &big), None);
+        assert_eq!(strict_montgomery_mod_exp(2u32, &5u32, &big), None);
+        // R² fits (R=16 for N=13): still computes. 7*5=35 ≡ 9 (mod 13).
+        assert_eq!(constrained_montgomery_mod_mul(7u32, &5u32, &13u32), Some(9));
+        assert_eq!(strict_montgomery_mod_mul(7u32, &5u32, &13u32), Some(9));
+    }
+
     #[test]
     fn test_conversion_functions_with_edge_cases() {
         // Test the conversion functions with additional edge cases

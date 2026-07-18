@@ -30,10 +30,7 @@ where
     // Simple trial search for N'
     let mut n_prime = T::one();
     loop {
-        let product = modulus
-            .clone()
-            .checked_mul(n_prime.clone())
-            .expect(crate::montgomery::OVERFLOW_MSG);
+        let product = modulus.clone().checked_mul(n_prime.clone())?;
         if product % r == target {
             return Some(n_prime);
         }
@@ -103,10 +100,7 @@ where
     // Lift from 2^1 to 2^r_bits using Newton's method
     for k in 2..=r_bits {
         let target_mod = T::one() << k; // 2^k
-        let temp_prod = modulus
-            .clone()
-            .checked_mul(n_prime.clone())
-            .expect(crate::montgomery::OVERFLOW_MSG);
+        let temp_prod = modulus.clone().checked_mul(n_prime.clone())?;
         let temp_sum = temp_prod.wrapping_add(T::one());
         let check_val = &temp_sum % &target_mod;
 
@@ -119,10 +113,7 @@ where
     }
 
     // Final check
-    let final_prod = modulus
-        .clone()
-        .checked_mul(n_prime.clone())
-        .expect(crate::montgomery::OVERFLOW_MSG);
+    let final_prod = modulus.clone().checked_mul(n_prime.clone())?;
     let final_check = final_prod % r;
     let target = r.clone().wrapping_sub(T::one()); // -1 mod R
 
@@ -368,6 +359,11 @@ where
 {
     let (r, _r_inv, n_prime, r_bits) =
         constrained_compute_montgomery_params_with_method(modulus, method)?;
+    // The R>N reduction's intermediates (`a_low*N'`, `m*N`, and `a_mont+m*N`,
+    // all < R²) must fit the carrier. If R² overflows it, this modulus can't be
+    // reduced on this path — return None rather than let `from_montgomery` panic.
+    // (`Field`/CIOS/wide-REDC handle sized moduli overflow-free.)
+    r.clone().checked_mul(r.clone())?;
     let a_mont = constrained_to_montgomery(a, modulus, &r);
     let b_mont = constrained_to_montgomery(b.clone(), modulus, &r);
     let result_mont = constrained_montgomery_mul(&a_mont, &b_mont, modulus, &n_prime, r_bits);
@@ -450,6 +446,9 @@ where
     // Compute Montgomery parameters using specified method
     let (r, _r_inv, n_prime, r_bits) =
         constrained_compute_montgomery_params_with_method(modulus, method)?;
+    // R² must fit the carrier (see mod_mul): the reduction intermediates are all
+    // < R², so if R² overflows, return None rather than panic in from_montgomery.
+    r.clone().checked_mul(r.clone())?;
 
     // Reduce base and convert to Montgomery form
     base.rem_assign(modulus);

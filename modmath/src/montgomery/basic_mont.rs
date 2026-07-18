@@ -53,12 +53,7 @@ where
     // O(log R) alternatives for larger moduli.
     let mut n_prime = T::one();
     loop {
-        if modulus
-            .checked_mul(n_prime)
-            .expect(crate::montgomery::OVERFLOW_MSG)
-            % r
-            == target
-        {
+        if modulus.checked_mul(n_prime)? % r == target {
             return Some(n_prime);
         }
         n_prime = n_prime + T::one();
@@ -142,11 +137,7 @@ where
         //     x_new = x - x - 1/modulus  (but we work mod powers of 2)
 
         let target_mod = T::one() << k; // 2^k
-        let check_val = (modulus
-            .checked_mul(n_prime)
-            .expect(crate::montgomery::OVERFLOW_MSG)
-            + T::one())
-            % target_mod;
+        let check_val = (modulus.checked_mul(n_prime)? + T::one()) % target_mod;
 
         if check_val != T::zero() {
             // Need to adjust n_prime
@@ -160,10 +151,7 @@ where
     }
 
     // Final check and adjustment to ensure modulus * N' ≡ -1 (mod R)
-    let final_check = modulus
-        .checked_mul(n_prime)
-        .expect(crate::montgomery::OVERFLOW_MSG)
-        % r;
+    let final_check = modulus.checked_mul(n_prime)? % r;
     let target = r - T::one(); // -1 mod R
 
     if final_check != target {
