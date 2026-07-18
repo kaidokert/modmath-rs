@@ -565,20 +565,13 @@ where
     /// Works for any odd modulus (composite is fine). Variable-time —
     /// do not call with secret inputs; use [`Self::inv_fermat`] for CT
     /// paths. Returns `None` when `a` is not coprime to modulus.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the carrier `T` is too narrow to hold the extended-GCD
-    /// intermediates (checked coefficient arithmetic overflows). This is
-    /// a carrier-precondition violation, distinct from the `None` return
-    /// for a non-coprime input.
     pub fn inv_eea(&self, a: &Residue<'_, T, Nct>) -> Option<Residue<'_, T, Nct>>
     where
         T: WideMul
             + core::ops::Div<Output = T>
-            + const_num_traits::CheckedAdd<Output = T>
+            + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
             + core::ops::Sub<Output = T>
-            + const_num_traits::CheckedMul<Output = T>,
+            + const_num_traits::ops::overflowing::OverflowingMul<Output = T>,
     {
         if a.mont == T::zero() {
             return None;
@@ -1120,9 +1113,8 @@ where
         + core::ops::ShrAssign<usize>
         + core::ops::Div<Output = T>
         + core::ops::Sub<Output = T>
-        + const_num_traits::CheckedAdd<Output = T>
-        + const_num_traits::CheckedMul<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingSub<Output = T>,
@@ -1316,8 +1308,8 @@ where
         + const_num_traits::WithPrecision
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + const_num_traits::CheckedAdd<Output = T>
-        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + core::ops::Rem<Output = T>
         + core::ops::Div<Output = T>
         + core::ops::Sub<Output = T>

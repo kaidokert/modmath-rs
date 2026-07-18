@@ -25,22 +25,16 @@ function inverse(a, n)
 /// # Modular Inverse (Strict)
 /// Most constrained version that works with references. Requires
 /// reference-based operations for division and subtraction.
-///
-/// # Panics
-///
-/// Panics if `T` is too narrow to hold the extended-GCD intermediates
-/// (checked coefficient arithmetic overflows) — a carrier-precondition
-/// violation, distinct from the `None` return for a non-invertible input.
 pub fn strict_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
-    // Checked mul/add throughout (see `basic_mod_inv`): both the `Signed`
-    // coefficients and the raw `T` r-sequence refuse to rely on `*`'s
-    // implementation-defined overflow.
+    // Overflowing mul/add (see `basic_mod_inv` + `Signed`): the EEA coefficient
+    // and r-sequence products are provably < modulus, so the wrapped value is
+    // exact and no panic path is emitted; a debug_assert self-checks the proof.
     T: const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
-        + const_num_traits::CheckedAdd<Output = T>
-        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + core::ops::Sub<Output = T>
         + const_num_traits::WithPrecision
         + core::cmp::PartialOrd,
@@ -59,14 +53,14 @@ where
     // makes a clone of modulus
     let mut r = T::zero_with_precision_of(modulus) + modulus;
     // Widen `a` to the modulus width too (as constrained/basic do): a narrow
-    // `new_r` overflows `checked_mul(quotient2)` once `width(a) < width(modulus)`.
+    // `new_r` would wrap `overflowing_mul(quotient2)` once `width(a) < width(modulus)`.
     let mut new_r = a.widen_to_precision_of(modulus);
 
     while new_r != T::zero() {
         let quotient = &r / &new_r;
         // strict avoids a `Clone` bound: duplicate `quotient` via the same
         // reference-add trick used for `r`/`t`, so each coefficient update can
-        // consume an owned copy through the checked multiply.
+        // consume an owned copy through the multiply.
         let quotient2 = T::zero_with_precision_of(modulus) + &quotient;
 
         // clone
@@ -76,7 +70,14 @@ where
 
         // clone
         let tmp_r = T::zero_with_precision_of(modulus) + &new_r;
-        new_r = r - new_r.checked_mul(quotient2).expect(signed::OVERFLOW_MSG);
+        // `new_r * quotient <= r < modulus` (EEA), so the wrapped product is exact;
+        // debug-assert both the overflow flag and the domain bound.
+        let (prod, _overflow) = new_r.overflowing_mul(quotient2);
+        debug_assert!(
+            !_overflow && prod <= r,
+            "EEA r-sequence: new_r*quotient exceeded r"
+        );
+        new_r = r - prod;
         r = tmp_r;
     }
 
@@ -97,25 +98,19 @@ where
 /// # Modular Inverse (Constrained)
 /// Version that works with references. Requires Clone and
 /// reference-based operations.
-///
-/// # Panics
-///
-/// Panics if `T` is too narrow to hold the extended-GCD intermediates
-/// (checked coefficient arithmetic overflows) — a carrier-precondition
-/// violation, distinct from the `None` return for a non-invertible input.
 pub fn constrained_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
-    // Checked mul/add throughout (see `basic_mod_inv`): both the `Signed`
-    // coefficients and the raw `T` r-sequence refuse to rely on `*`'s
-    // implementation-defined overflow.
+    // Overflowing mul/add (see `basic_mod_inv` + `Signed`): the EEA coefficient
+    // and r-sequence products are provably < modulus, so the wrapped value is
+    // exact and no panic path is emitted; a debug_assert self-checks the proof.
     T: const_num_traits::Zero
         + const_num_traits::One
         + Clone
         + PartialEq
         + core::cmp::PartialOrd
-        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + core::ops::Sub<Output = T>
-        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Add<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T> + core::ops::Div<&'a T, Output = T>,
@@ -136,7 +131,14 @@ where
         t = tmp_t;
 
         let tmp_r = new_r.clone();
-        new_r = r - new_r.checked_mul(quotient).expect(signed::OVERFLOW_MSG);
+        // `new_r * quotient <= r < modulus` (EEA), so the wrapped product is exact;
+        // debug-assert both the overflow flag and the domain bound.
+        let (prod, _overflow) = new_r.overflowing_mul(quotient);
+        debug_assert!(
+            !_overflow && prod <= r,
+            "EEA r-sequence: new_r*quotient exceeded r"
+        );
+        new_r = r - prod;
         r = tmp_r;
     }
 
@@ -153,27 +155,20 @@ where
 
 /// # Modular Inverse (Basic)
 /// Simple version that operates on values and copies them.
-///
-/// # Panics
-///
-/// Panics if `T` is too narrow to hold the extended-GCD intermediates
-/// (checked coefficient arithmetic overflows) — a carrier-precondition
-/// violation, distinct from the `None` return for a non-invertible input.
 pub fn basic_mod_inv<T>(a: T, modulus: T) -> Option<T>
 where
-    // `Signed<T>` uses checked mul/add, not plain `*`/`+` whose overflow on
-    // `T` is implementation-defined. Products fit any carrier sized for the
-    // modulus, so this guards no live overflow — it refuses to rely on
-    // unspecified behavior, turning a too-narrow carrier into a clear panic
-    // rather than a wrong inverse. `Sub` stays plain (smaller from larger).
+    // `Signed<T>` takes the wrapped mul/add and debug-asserts no overflow, rather
+    // than a checked path: the coefficient products fit any carrier sized for the
+    // modulus (all magnitudes stay < modulus), so this is exact and panic-free.
+    // `Sub` stays plain (smaller from larger).
     T: const_num_traits::Zero
         + const_num_traits::One
         + Copy
         + PartialEq
         + core::ops::Div<Output = T>
-        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + core::ops::Sub<Output = T>
-        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + const_num_traits::WithPrecision
         + core::cmp::PartialOrd,
 {

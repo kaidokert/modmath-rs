@@ -106,6 +106,14 @@ impl const_num_traits::ops::overflowing::OverflowingSub for NcU64 {
     }
 }
 
+impl const_num_traits::ops::overflowing::OverflowingMul for NcU64 {
+    type Output = NcU64;
+    fn overflowing_mul(self, v: Self) -> (Self, bool) {
+        let (r, o) = self.0.overflowing_mul(v.0);
+        (NcU64(r), o)
+    }
+}
+
 impl core::ops::Add for NcU64 {
     type Output = NcU64;
     fn add(self, rhs: Self) -> Self {

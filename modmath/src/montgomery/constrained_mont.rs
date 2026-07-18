@@ -51,8 +51,8 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::CheckedAdd<Output = T>
-        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
@@ -136,8 +136,9 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
@@ -192,8 +193,9 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
@@ -232,8 +234,17 @@ where
 }
 
 /// Convert from Montgomery form (Constrained): (a * R) -> a mod N
-/// Uses Montgomery reduction algorithm
-pub fn constrained_from_montgomery<T>(a_mont: T, modulus: &T, n_prime: &T, r_bits: usize) -> T
+/// Uses Montgomery reduction algorithm.
+///
+/// Returns `None` when the carrier `T` is too narrow to hold the `m * N`
+/// intermediate (which reaches up to R²); route through wide-REDC / CIOS for
+/// overflow-free reduction.
+pub fn constrained_from_montgomery<T>(
+    a_mont: T,
+    modulus: &T,
+    n_prime: &T,
+    r_bits: usize,
+) -> Option<T>
 where
     T: Clone
         + const_num_traits::Zero
@@ -241,9 +252,9 @@ where
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
-        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
-        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + const_num_traits::CheckedMul<Output = T>,
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
+        + const_num_traits::ops::wrapping::WrappingSub<Output = T>,
     for<'a> &'a T: core::ops::BitAnd<&'a T, Output = T>,
 {
     // Montgomery reduction algorithm:
@@ -254,51 +265,57 @@ where
 
     // Fast path for R=1 (r_bits == 0): Montgomery reduction simplifies to conditional subtraction
     if r_bits == 0 {
-        return if &a_mont >= modulus {
+        return Some(if &a_mont >= modulus {
             a_mont.wrapping_sub(modulus.clone())
         } else {
             a_mont
-        };
+        });
     }
 
     let mask = (T::one() << r_bits).wrapping_sub(T::one()); // mask = 2^r_bits - 1
 
     // Step 1: m = ((a_mont & mask) * N') & mask
+    // `(a_mont & mask) * N'` and the later `m * N` reach up to R² (both factors
+    // < R); on a carrier too narrow to hold R² the product overflows, so surface
+    // `None` rather than a wrapped, wrong reduction. Route through wide-REDC for
+    // overflow-free reduction.
     let a_low = &a_mont & &mask;
-    let product = a_low
-        .checked_mul(n_prime.clone())
-        .expect(crate::montgomery::OVERFLOW_MSG);
+    let (product, overflow) = a_low.overflowing_mul(n_prime.clone());
+    if overflow {
+        return None;
+    }
     let m = &product & &mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
-    // m * N reaches up to R² (m < R, N < R); checked_mul turns a
-    // carrier-too-narrow product into a panic rather than a wrapped, wrong
-    // reduction. For overflow-free reduction, use wide-REDC.
-    let m_times_n = m
-        .checked_mul(modulus.clone())
-        .expect(crate::montgomery::OVERFLOW_MSG);
-    let temp_sum = a_mont.clone().wrapping_add(m_times_n);
-    // `wrapping_add` drops the carry (the `checked_mul` above guards only `m*N`);
-    // catch the wrap (sum < a_mont) and panic per the narrow-path contract.
-    assert!(temp_sum >= a_mont, "{}", crate::montgomery::OVERFLOW_MSG);
+    let (m_times_n, mul_overflow) = m.overflowing_mul(modulus.clone());
+    if mul_overflow {
+        return None;
+    }
+    let (temp_sum, add_overflow) = a_mont.overflowing_add(m_times_n);
+    if add_overflow {
+        return None;
+    }
     let t = temp_sum >> r_bits;
 
     // Step 3: Final reduction
-    if &t >= modulus {
+    Some(if &t >= modulus {
         t.wrapping_sub(modulus.clone())
     } else {
         t
-    }
+    })
 }
 
 /// Montgomery multiplication (Constrained): (a * R) * (b * R) -> (a * b * R) mod N
+///
+/// Returns `None` when the `m * N` reduction intermediate overflows the carrier
+/// (see [`constrained_from_montgomery`]); route large moduli through wide-REDC / CIOS.
 pub fn constrained_montgomery_mul<T>(
     a_mont: &T,
     b_mont: &T,
     modulus: &T,
     n_prime: &T,
     r_bits: usize,
-) -> T
+) -> Option<T>
 where
     T: Clone
         + const_num_traits::Zero
@@ -308,7 +325,8 @@ where
         + core::ops::Shr<usize, Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + crate::NonCt
         + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::Mul<&'a T, Output = T>,
@@ -335,8 +353,9 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
@@ -361,18 +380,13 @@ where
         constrained_compute_montgomery_params_with_method(modulus, method)?;
     // The R>N reduction's intermediates (`a_low*N'`, `m*N`, and `a_mont+m*N`,
     // all < R²) must fit the carrier. If R² overflows it, this modulus can't be
-    // reduced on this path — return None rather than let `from_montgomery` panic.
-    // (`Field`/CIOS/wide-REDC handle sized moduli overflow-free.)
+    // reduced on this path — bail early. (`Field`/CIOS/wide-REDC handle sized
+    // moduli overflow-free.)
     r.clone().checked_mul(r.clone())?;
     let a_mont = constrained_to_montgomery(a, modulus, &r);
     let b_mont = constrained_to_montgomery(b.clone(), modulus, &r);
-    let result_mont = constrained_montgomery_mul(&a_mont, &b_mont, modulus, &n_prime, r_bits);
-    Some(constrained_from_montgomery(
-        result_mont,
-        modulus,
-        &n_prime,
-        r_bits,
-    ))
+    let result_mont = constrained_montgomery_mul(&a_mont, &b_mont, modulus, &n_prime, r_bits)?;
+    constrained_from_montgomery(result_mont, modulus, &n_prime, r_bits)
 }
 
 /// Complete Montgomery modular multiplication (Constrained): A * B mod N
@@ -382,8 +396,9 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
@@ -420,8 +435,9 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
@@ -447,7 +463,7 @@ where
     let (r, _r_inv, n_prime, r_bits) =
         constrained_compute_montgomery_params_with_method(modulus, method)?;
     // R² must fit the carrier (see mod_mul): the reduction intermediates are all
-    // < R², so if R² overflows, return None rather than panic in from_montgomery.
+    // < R², so if R² overflows this modulus can't be reduced on this path — bail.
     r.clone().checked_mul(r.clone())?;
 
     // Reduce base and convert to Montgomery form
@@ -464,20 +480,18 @@ where
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
         if (&exp).is_odd() {
-            result = constrained_montgomery_mul(&result, &base, modulus, &n_prime, r_bits);
+            result = constrained_montgomery_mul(&result, &base, modulus, &n_prime, r_bits)?;
         }
 
         // Square the base for next iteration
         exp >>= 1;
         if exp > T::zero() {
-            base = constrained_montgomery_mul(&base, &base, modulus, &n_prime, r_bits);
+            base = constrained_montgomery_mul(&base, &base, modulus, &n_prime, r_bits)?;
         }
     }
 
     // Convert result back from Montgomery form
-    Some(constrained_from_montgomery(
-        result, modulus, &n_prime, r_bits,
-    ))
+    constrained_from_montgomery(result, modulus, &n_prime, r_bits)
 }
 
 /// Montgomery-based modular exponentiation (Constrained): base^exponent mod modulus
@@ -488,8 +502,9 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
@@ -612,12 +627,12 @@ mod tests {
         // Test with maximum value to potentially trigger final subtraction
         let high_value = 14u32;
         let mont_high = constrained_to_montgomery(high_value, &modulus, &r);
-        let result = constrained_from_montgomery(mont_high, &modulus, &n_prime, r_bits);
+        let result = constrained_from_montgomery(mont_high, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(result, high_value);
 
         // Test with another high value
         let mont_13 = constrained_to_montgomery(13u32, &modulus, &r);
-        let result_13 = constrained_from_montgomery(mont_13, &modulus, &n_prime, r_bits);
+        let result_13 = constrained_from_montgomery(mont_13, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(result_13, 13u32);
     }
 
@@ -666,8 +681,9 @@ mod tests {
 
             // This may hit different branches in Montgomery multiplication
             let result_mont =
-                constrained_montgomery_mul(&a_mont, &b_mont, &modulus, &n_prime, r_bits);
-            let result = constrained_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+                constrained_montgomery_mul(&a_mont, &b_mont, &modulus, &n_prime, r_bits).unwrap();
+            let result =
+                constrained_from_montgomery(result_mont, &modulus, &n_prime, r_bits).unwrap();
 
             let expected = (a * b) % modulus;
             assert_eq!(result, expected, "Failed for {} * {} mod {}", a, b, modulus);

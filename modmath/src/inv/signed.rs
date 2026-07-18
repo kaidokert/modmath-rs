@@ -1,12 +1,16 @@
-use const_num_traits::{CheckedAdd, CheckedMul};
+use const_num_traits::ops::overflowing::{OverflowingAdd, OverflowingMul};
 use core::cmp::Ordering;
 
-/// Overflow in a `Signed<T>` magnitude op means the carrier is too narrow
-/// for the modular-inverse intermediates. The checked ops make that a
-/// deterministic panic instead of relying on plain `*`/`+`, whose overflow
-/// on `T` is implementation-defined.
-pub(super) const OVERFLOW_MSG: &str =
-    "Signed<T>: carrier too narrow for modular-inverse intermediates";
+// `Signed<T>` magnitude arithmetic takes the wrapped product/sum and
+// `debug_assert!`s that it did not overflow, rather than paying for a checked
+// path. The math guarantees no overflow: in the extended-Euclid loop that drives
+// `Signed`, every `coefficient * quotient` and every magnitude sum is provably
+// < modulus (consecutive Bézout coefficients alternate sign, so the running
+// magnitude stays below the modulus; `quotient * |t_i|` is bounded by it too),
+// and the modulus is itself a `T`, so it fits the carrier. The compiler can't
+// see that, so `overflowing_*` gives us the exact value plus a flag we assert is
+// never set — the proof is checked in debug builds, and release keeps panic
+// machinery out of the variable-time inverse.
 
 /// Partial signed implementation for modular inverse calculations
 ///
@@ -221,20 +225,23 @@ where
 
 impl<T> core::ops::Add for Signed<T>
 where
-    T: CheckedAdd<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
+    T: OverflowingAdd<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
 {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self.negative, rhs.negative) {
-            // Same-sign magnitudes add and can exceed the carrier; mixed
-            // sign is larger-minus-smaller, which can't underflow (plain `Sub`).
-            (false, false) => Self::new_unchecked(
-                self.value.checked_add(rhs.value).expect(OVERFLOW_MSG),
-                false,
-            ),
-            (true, true) => {
-                Self::new_unchecked(self.value.checked_add(rhs.value).expect(OVERFLOW_MSG), true)
+            // Same-sign magnitudes add; mixed sign is larger-minus-smaller, which
+            // can't underflow (plain `Sub`). The EEA recurrence keeps every
+            // magnitude < modulus (module note), so the carrier never overflows.
+            (false, false) | (true, true) => {
+                let negative = self.negative;
+                let (value, _overflow) = self.value.overflowing_add(rhs.value);
+                debug_assert!(
+                    !_overflow,
+                    "Signed add magnitude overflow: EEA bound violated"
+                );
+                Self::new_unchecked(value, negative)
             }
             (false, true) | (true, false) => {
                 if self.value >= rhs.value {
@@ -249,7 +256,7 @@ where
 
 impl<T> core::ops::Sub for Signed<T>
 where
-    T: CheckedAdd<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
+    T: OverflowingAdd<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
 {
     type Output = Self;
 
@@ -267,13 +274,20 @@ where
 /// a non-negative magnitude. Using signed types will break this assumption.
 impl<T> core::ops::Mul for Signed<T>
 where
-    T: CheckedMul<Output = T>,
+    T: OverflowingMul<Output = T>,
 {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self::Output {
+        // `coefficient * quotient` is provably < modulus in EEA (module note),
+        // so the carrier never overflows; the wrapped value is the true product.
+        let (value, _overflow) = self.value.overflowing_mul(other.value);
+        debug_assert!(
+            !_overflow,
+            "Signed mul magnitude overflow: EEA bound violated"
+        );
         Self {
-            value: self.value.checked_mul(other.value).expect(OVERFLOW_MSG),
+            value,
             negative: self.negative != other.negative,
         }
     }
@@ -286,13 +300,19 @@ where
 /// represent a non-negative value to maintain correctness.
 impl<T> core::ops::Mul<T> for Signed<T>
 where
-    T: CheckedMul<Output = T>,
+    T: OverflowingMul<Output = T>,
 {
     type Output = Self;
 
     fn mul(self, other: T) -> Self::Output {
+        // See `Mul for Signed`: the product is < modulus, so the wrapped value is exact.
+        let (value, _overflow) = self.value.overflowing_mul(other);
+        debug_assert!(
+            !_overflow,
+            "Signed mul magnitude overflow: EEA bound violated"
+        );
         Self {
-            value: self.value.checked_mul(other).expect(OVERFLOW_MSG),
+            value,
             negative: self.negative,
         }
     }

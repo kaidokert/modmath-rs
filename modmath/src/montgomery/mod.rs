@@ -24,13 +24,6 @@ pub(crate) mod strict_mont;
 
 pub mod cios;
 
-/// The R>N schoolbook REDC forms a full-width `m * N` (up to R²) product; if
-/// the carrier can't hold it the reduction would silently wrap into a wrong
-/// result, so the checked multiplies panic instead. Sized moduli should route
-/// through wide-REDC / CIOS, which never forms this intermediate.
-pub(crate) const OVERFLOW_MSG: &str =
-    "montgomery R>N: carrier too narrow for the m*N intermediate; use wide-REDC / CIOS";
-
 // Flavor-neutral items live at this flat path: the NPrimeMethod enum
 // (shared by every flavor's `*_with_method` siblings), the wide-REDC
 // param helpers (`compute_n_prime_newton` etc., generic over any T:
@@ -263,24 +256,36 @@ mod tests {
         // 7 -> Montgomery (8) -> back to normal form (should be 7)
         let mont_7 = basic_to_montgomery(7u32, 13u32, r);
         assert_eq!(mont_7, 8u32); // Verify Montgomery form
-        assert_eq!(basic_from_montgomery(mont_7, 13u32, n_prime, r_bits), 7u32);
+        assert_eq!(
+            basic_from_montgomery(mont_7, 13u32, n_prime, r_bits).unwrap(),
+            7u32
+        );
 
         // 5 -> Montgomery (2) -> back to normal form (should be 5)
         let mont_5 = basic_to_montgomery(5u32, 13u32, r);
         assert_eq!(mont_5, 2u32); // Verify Montgomery form
-        assert_eq!(basic_from_montgomery(mont_5, 13u32, n_prime, r_bits), 5u32);
+        assert_eq!(
+            basic_from_montgomery(mont_5, 13u32, n_prime, r_bits).unwrap(),
+            5u32
+        );
 
         // Test edge cases
         let mont_0 = basic_to_montgomery(0u32, 13u32, r);
-        assert_eq!(basic_from_montgomery(mont_0, 13u32, n_prime, r_bits), 0u32);
+        assert_eq!(
+            basic_from_montgomery(mont_0, 13u32, n_prime, r_bits).unwrap(),
+            0u32
+        );
 
         let mont_1 = basic_to_montgomery(1u32, 13u32, r);
-        assert_eq!(basic_from_montgomery(mont_1, 13u32, n_prime, r_bits), 1u32);
+        assert_eq!(
+            basic_from_montgomery(mont_1, 13u32, n_prime, r_bits).unwrap(),
+            1u32
+        );
 
         // Test all values 0..13 for round-trip
         for i in 0u32..13u32 {
             let mont = basic_to_montgomery(i, 13u32, r);
-            let back = basic_from_montgomery(mont, 13u32, n_prime, r_bits);
+            let back = basic_from_montgomery(mont, 13u32, n_prime, r_bits).unwrap();
             assert_eq!(
                 back, i,
                 "Round-trip failed for {}: {} -> {} -> {}",
@@ -299,26 +304,27 @@ mod tests {
         let b_mont = basic_to_montgomery(5u32, 13u32, r); // 5 -> 2 (Montgomery form)
 
         // Montgomery multiplication: (7*R) * (5*R) -> (7*5*R) mod N
-        let result_mont = basic_montgomery_mul(a_mont, b_mont, 13u32, n_prime, r_bits);
+        let result_mont = basic_montgomery_mul(a_mont, b_mont, 13u32, n_prime, r_bits).unwrap();
 
         // Convert result back to normal form to verify
-        let result = basic_from_montgomery(result_mont, 13u32, n_prime, r_bits);
+        let result = basic_from_montgomery(result_mont, 13u32, n_prime, r_bits).unwrap();
         assert_eq!(result, 9u32); // 7 * 5 mod 13 = 35 mod 13 = 9
 
         // Test edge cases
         let zero_mont = basic_to_montgomery(0u32, 13u32, r);
         let any_mont = basic_to_montgomery(7u32, 13u32, r);
 
-        let zero_result = basic_montgomery_mul(zero_mont, any_mont, 13u32, n_prime, r_bits);
+        let zero_result =
+            basic_montgomery_mul(zero_mont, any_mont, 13u32, n_prime, r_bits).unwrap();
         assert_eq!(
-            basic_from_montgomery(zero_result, 13u32, n_prime, r_bits),
+            basic_from_montgomery(zero_result, 13u32, n_prime, r_bits).unwrap(),
             0u32
         );
 
         let one_mont = basic_to_montgomery(1u32, 13u32, r);
-        let one_result = basic_montgomery_mul(one_mont, any_mont, 13u32, n_prime, r_bits);
+        let one_result = basic_montgomery_mul(one_mont, any_mont, 13u32, n_prime, r_bits).unwrap();
         assert_eq!(
-            basic_from_montgomery(one_result, 13u32, n_prime, r_bits),
+            basic_from_montgomery(one_result, 13u32, n_prime, r_bits).unwrap(),
             7u32
         );
     }
@@ -506,13 +512,13 @@ mod tests {
         // Test basic_from_montgomery with edge values
         let mont_zero = basic_to_montgomery(0u32, modulus, r);
         assert_eq!(
-            basic_from_montgomery(mont_zero, modulus, n_prime, r_bits),
+            basic_from_montgomery(mont_zero, modulus, n_prime, r_bits).unwrap(),
             0u32
         );
 
         let mont_max = basic_to_montgomery(modulus - 1, modulus, r);
         assert_eq!(
-            basic_from_montgomery(mont_max, modulus, n_prime, r_bits),
+            basic_from_montgomery(mont_max, modulus, n_prime, r_bits).unwrap(),
             modulus - 1
         );
 
@@ -520,7 +526,8 @@ mod tests {
         let (r_s, _r_inv_s, n_prime_s, r_bits_s) =
             strict_compute_montgomery_params(&modulus).unwrap();
         let mont_strict = strict_to_montgomery(5u32, &modulus, &r_s);
-        let back_strict = strict_from_montgomery(mont_strict, &modulus, &n_prime_s, r_bits_s);
+        let back_strict =
+            strict_from_montgomery(mont_strict, &modulus, &n_prime_s, r_bits_s).unwrap();
         assert_eq!(back_strict, 5u32);
 
         // Test constrained versions
@@ -528,7 +535,7 @@ mod tests {
             constrained_compute_montgomery_params(&modulus).unwrap();
         let mont_constrained = constrained_to_montgomery(8u32, &modulus, &r_c);
         let back_constrained =
-            constrained_from_montgomery(mont_constrained, &modulus, &n_prime_c, r_bits_c);
+            constrained_from_montgomery(mont_constrained, &modulus, &n_prime_c, r_bits_c).unwrap();
         assert_eq!(back_constrained, 8u32);
     }
 }
@@ -728,7 +735,7 @@ macro_rules! montgomery_test_module {
                         for i in 0u8..13u8 {
                             let value = U256::from(i);
                             let montgomery_form = super::strict_mont::strict_to_montgomery(value, &modulus, &r);
-                            let back_to_normal = super::strict_mont::strict_from_montgomery(montgomery_form, &modulus, &n_prime, r_bits);
+                            let back_to_normal = super::strict_mont::strict_from_montgomery(montgomery_form, &modulus, &n_prime, r_bits).unwrap();
                             assert_eq!(back_to_normal, value, "Round-trip failed for {}", i);
                         }
                     });
@@ -739,7 +746,7 @@ macro_rules! montgomery_test_module {
                         for i in 0u8..13u8 {
                             let value = U256::from(i);
                             let montgomery_form = super::constrained_mont::constrained_to_montgomery(value.clone(), &modulus, &r);
-                            let back_to_normal = super::constrained_mont::constrained_from_montgomery(montgomery_form, &modulus, &n_prime, r_bits);
+                            let back_to_normal = super::constrained_mont::constrained_from_montgomery(montgomery_form, &modulus, &n_prime, r_bits).unwrap();
                             assert_eq!(back_to_normal, value, "Round-trip failed for {}", i);
                         }
                     });
@@ -750,7 +757,7 @@ macro_rules! montgomery_test_module {
                         for i in 0u8..13u8 {
                             let value = U256::from(i);
                             let montgomery_form = super::basic_to_montgomery(value, modulus, r);
-                            let back_to_normal = super::basic_from_montgomery(montgomery_form, modulus, n_prime, r_bits);
+                            let back_to_normal = super::basic_from_montgomery(montgomery_form, modulus, n_prime, r_bits).unwrap();
                             assert_eq!(back_to_normal, value, "Round-trip failed for {}", i);
                         }
                     });

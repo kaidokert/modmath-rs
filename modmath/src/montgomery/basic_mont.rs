@@ -74,8 +74,8 @@ where
     T: Copy
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::CheckedAdd<Output = T>
-        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Sub<Output = T>
@@ -174,8 +174,9 @@ where
     T: Copy
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -222,8 +223,9 @@ where
     T: Copy
         + const_num_traits::Zero
         + const_num_traits::One
-        + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -257,16 +259,16 @@ where
 /// Convert from Montgomery form (Basic): (a * R) -> a mod N
 /// Uses Montgomery reduction algorithm with R > N semantics.
 ///
-/// **Warning**: This function can overflow for large moduli where m * N exceeds
-/// the type width. For overflow-free reduction, use [`wide_redc`] (call as
-/// `wide_redc(a_mont, T::zero(), modulus, n_prime)`) which uses wide-REDC
-/// with R = 2^W.
-pub fn basic_from_montgomery<T>(a_mont: T, modulus: T, n_prime: T, r_bits: usize) -> T
+/// Returns `None` when the carrier `T` is too narrow to hold the `m * N`
+/// intermediate (which reaches up to R²). For overflow-free reduction, use
+/// [`wide_redc`] (call as `wide_redc(a_mont, T::zero(), modulus, n_prime)`)
+/// which uses wide-REDC with R = 2^W.
+pub fn basic_from_montgomery<T>(a_mont: T, modulus: T, n_prime: T, r_bits: usize) -> Option<T>
 where
     T: Copy
         + const_num_traits::One
-        + core::ops::Add<Output = T>
-        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialOrd
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
@@ -282,55 +284,60 @@ where
 
     // Fast path for R=1 (r_bits == 0): Montgomery reduction simplifies to conditional subtraction
     if r_bits == 0 {
-        return if a_mont >= modulus {
+        return Some(if a_mont >= modulus {
             a_mont - modulus
         } else {
             a_mont
-        };
+        });
     }
 
     let mask = (T::one() << r_bits) - T::one(); // mask = 2^r_bits - 1
 
     // Step 1: m = ((a_mont & mask) * N') & mask
-    let m = (a_mont & mask)
-        .checked_mul(n_prime)
-        .expect(crate::montgomery::OVERFLOW_MSG)
-        & mask;
+    // `(a_mont & mask) * N'` and the later `m * N` reach up to R² (both factors
+    // < R); on a carrier too narrow to hold R² the product overflows, so surface
+    // `None` rather than a wrapped, wrong reduction. Use
+    // wide_redc(a_mont, T::zero(), modulus, n_prime) for overflow-free reduction.
+    let (m_full, overflow) = (a_mont & mask).overflowing_mul(n_prime);
+    if overflow {
+        return None;
+    }
+    let m = m_full & mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
-    // m * N reaches up to R² (m < R, N < R); checked_mul turns a
-    // carrier-too-narrow product into a panic rather than a wrapped, wrong
-    // reduction. Use wide_redc(a_mont, T::zero(), modulus, n_prime) for
-    // overflow-free reduction.
-    let m_times_n = m
-        .checked_mul(modulus)
-        .expect(crate::montgomery::OVERFLOW_MSG);
-    // Same lost-carry guard as the constrained/strict siblings, via this
-    // flavor's `Copy`/`Add` profile (no wrapping/overflowing add without a
-    // bound cascade): on an Nct carrier `+` panics on overflow before the
-    // assert; on a Ct carrier it wraps and `sum < a_mont` catches it. Either
-    // way a dropped carry (`checked_mul` above guards only `m*N`) panics
-    // rather than silently corrupting the reduction.
-    let sum = a_mont + m_times_n;
-    assert!(sum >= a_mont, "{}", crate::montgomery::OVERFLOW_MSG);
+    let (m_times_n, mul_overflow) = m.overflowing_mul(modulus);
+    if mul_overflow {
+        return None;
+    }
+    let (sum, add_overflow) = a_mont.overflowing_add(m_times_n);
+    if add_overflow {
+        return None;
+    }
     let t = sum >> r_bits;
 
     // Step 3: Final reduction
-    if t >= modulus { t - modulus } else { t }
+    Some(if t >= modulus { t - modulus } else { t })
 }
 
 /// Montgomery multiplication (Basic): (a * R) * (b * R) -> (a * b * R) mod N
 ///
-/// **Warning**: This building-block function uses the R > N reduction path which
-/// can overflow for large moduli (see [`basic_from_montgomery`] warning). For
-/// overflow-free multiplication, use [`crate::basic::montgomery::mod_mul`]
-/// which uses wide-REDC internally.
-pub fn basic_montgomery_mul<T>(a_mont: T, b_mont: T, modulus: T, n_prime: T, r_bits: usize) -> T
+/// This building-block uses the R > N reduction path; it returns `None` for
+/// large moduli whose `m * N` intermediate overflows the carrier (see
+/// [`basic_from_montgomery`]). For overflow-free multiplication, use
+/// [`crate::basic::montgomery::mod_mul`] which uses wide-REDC internally.
+pub fn basic_montgomery_mul<T>(
+    a_mont: T,
+    b_mont: T,
+    modulus: T,
+    n_prime: T,
+    r_bits: usize,
+) -> Option<T>
 where
     T: Copy
         + const_num_traits::Zero
         + core::ops::Add<Output = T>
-        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + const_num_traits::One
         + PartialOrd
         + core::ops::Sub<Output = T>
@@ -1315,15 +1322,15 @@ mod tests {
 
     // The narrow REDC's `a_mont + m*N` can carry past the carrier even after
     // `m*N` fits: N=17, R=32 (r_bits=5), n'=15 → from_mont(1) needs 256, which
-    // overflows u8 (must panic); a u16 holds it and reduces to R⁻¹ = 8.
+    // overflows u8 (must return None); a u16 holds it and reduces to R⁻¹ = 8.
     #[test]
-    fn from_montgomery_narrow_carrier_lost_carry_panics() {
-        let overflowed = std::panic::catch_unwind(|| basic_from_montgomery(1u8, 17u8, 15u8, 5));
-        assert!(
-            overflowed.is_err(),
-            "u8 REDC overflow must panic, not silently corrupt to 0"
+    fn from_montgomery_narrow_carrier_lost_carry_returns_none() {
+        assert_eq!(
+            basic_from_montgomery(1u8, 17u8, 15u8, 5),
+            None,
+            "u8 REDC overflow must return None, not silently corrupt to 0"
         );
-        assert_eq!(basic_from_montgomery(1u16, 17u16, 15u16, 5), 8u16);
+        assert_eq!(basic_from_montgomery(1u16, 17u16, 15u16, 5), Some(8u16));
     }
     use fixed_bigint::FixedUInt;
 
@@ -1463,12 +1470,12 @@ mod tests {
         // Use values designed to need final subtraction in Montgomery reduction
         let high_value = 14u32; // Near maximum for this modulus
         let mont_high = basic_to_montgomery(high_value, modulus, r);
-        let result = basic_from_montgomery(mont_high, modulus, n_prime, r_bits);
+        let result = basic_from_montgomery(mont_high, modulus, n_prime, r_bits).unwrap();
         assert_eq!(result, high_value);
 
         // Test with maximum value - 1 to stress the >= check
         let mont_max = basic_to_montgomery(modulus - 1, modulus, r);
-        let result_max = basic_from_montgomery(mont_max, modulus, n_prime, r_bits);
+        let result_max = basic_from_montgomery(mont_max, modulus, n_prime, r_bits).unwrap();
         assert_eq!(result_max, modulus - 1);
     }
 
@@ -1486,8 +1493,8 @@ mod tests {
         let b_mont = basic_to_montgomery(b, modulus, r);
 
         // This may hit different code paths in Montgomery multiplication
-        let result_mont = basic_montgomery_mul(a_mont, b_mont, modulus, n_prime, r_bits);
-        let result = basic_from_montgomery(result_mont, modulus, n_prime, r_bits);
+        let result_mont = basic_montgomery_mul(a_mont, b_mont, modulus, n_prime, r_bits).unwrap();
+        let result = basic_from_montgomery(result_mont, modulus, n_prime, r_bits).unwrap();
 
         let expected = (a * b) % modulus;
         assert_eq!(result, expected);
