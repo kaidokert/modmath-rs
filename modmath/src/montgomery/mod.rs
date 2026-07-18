@@ -905,13 +905,12 @@ mod backend_montgomery_tests {
         heapless_bigint,
         fixed_bigint::FixedUInt,
         type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
-        // Off. The width bug is fixed (the precompute reads
-        // `modulus.bits_precision()`, not `size_of*8`), and HeaplessBigInt's CT
-        // montgomery is the CIOS path, covered by `cios::heapless_cios_montmul`
-        // (single- and multi-word). This schoolbook row stays off for two
-        // reasons unrelated to that fix: `test_montgomery_parameter_computation`
-        // verifies via plain `*`/`%` on the carrier (shape-panics), and the
-        // Nct wide-REDC multiply is not width-uniform on a runtime-len carrier.
+        // Off. HeaplessBigInt's CT montgomery goes through the CIOS path,
+        // covered by `cios::heapless_cios_montmul` (single- and multi-word).
+        // This schoolbook row stays off because
+        // `test_montgomery_parameter_computation` verifies via plain `*`/`%` on
+        // the carrier (shape-panics), and the Nct wide-REDC multiply is not
+        // width-uniform on a runtime-len carrier.
         strict: off,
         constrained: off,
         basic: off,

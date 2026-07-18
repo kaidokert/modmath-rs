@@ -27,9 +27,8 @@ function inverse(a, n)
 /// reference-based operations for division and subtraction.
 pub fn strict_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
-    // Overflowing mul/add (see `basic_mod_inv` + `Signed`): the EEA coefficient
-    // and r-sequence products are provably < modulus, so the wrapped value is
-    // exact and no panic path is emitted; a debug_assert self-checks the proof.
+    // Overflowing mul/add: EEA products stay < modulus, so the wrapped value is
+    // exact and panic-free (proof in the `signed` module note).
     T: const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
@@ -43,11 +42,9 @@ where
         + core::cmp::PartialOrd,
     for<'a> &'a T: core::ops::Div<&'a T, Output = T> + core::ops::Sub<T, Output = T>,
 {
-    // Seed the signed coefficients at the modulus width: on a runtime-width
-    // carrier `T::zero()` is width 0, and the signed magnitude arithmetic
-    // (canonicalization, magnitude subtraction) misbehaves when a width-0
-    // magnitude meets field-width values. `zero_with_precision_of` establishes
-    // the ring width; identity on fixed-width carriers.
+    // Seed coefficients at the modulus width: on a runtime-width carrier a
+    // width-0 `T::zero()`/`one()` corrupts the signed magnitude arithmetic.
+    // `zero_with_precision_of` is identity on fixed-width carriers.
     let mut t = Signed::new(T::zero_with_precision_of(modulus), false);
     let mut new_t = Signed::new(T::one_with_precision_of(modulus), false);
     // makes a clone of modulus
@@ -70,8 +67,7 @@ where
 
         // clone
         let tmp_r = T::zero_with_precision_of(modulus) + &new_r;
-        // `new_r * quotient <= r < modulus` (EEA), so the wrapped product is exact;
-        // debug-assert both the overflow flag and the domain bound.
+        // `new_r * quotient <= r < modulus` (EEA), so the wrapped product is exact.
         let (prod, _overflow) = new_r.overflowing_mul(quotient2);
         debug_assert!(
             !_overflow && prod <= r,
@@ -100,9 +96,7 @@ where
 /// reference-based operations.
 pub fn constrained_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
-    // Overflowing mul/add (see `basic_mod_inv` + `Signed`): the EEA coefficient
-    // and r-sequence products are provably < modulus, so the wrapped value is
-    // exact and no panic path is emitted; a debug_assert self-checks the proof.
+    // Overflowing mul/add: EEA products stay < modulus (see the `signed` note).
     T: const_num_traits::Zero
         + const_num_traits::One
         + Clone
@@ -131,8 +125,7 @@ where
         t = tmp_t;
 
         let tmp_r = new_r.clone();
-        // `new_r * quotient <= r < modulus` (EEA), so the wrapped product is exact;
-        // debug-assert both the overflow flag and the domain bound.
+        // `new_r * quotient <= r < modulus` (EEA), so the wrapped product is exact.
         let (prod, _overflow) = new_r.overflowing_mul(quotient);
         debug_assert!(
             !_overflow && prod <= r,
@@ -157,10 +150,8 @@ where
 /// Simple version that operates on values and copies them.
 pub fn basic_mod_inv<T>(a: T, modulus: T) -> Option<T>
 where
-    // `Signed<T>` takes the wrapped mul/add and debug-asserts no overflow, rather
-    // than a checked path: the coefficient products fit any carrier sized for the
-    // modulus (all magnitudes stay < modulus), so this is exact and panic-free.
-    // `Sub` stays plain (smaller from larger).
+    // `Signed<T>` overflowing mul/add: coefficient products stay < modulus, so
+    // exact and panic-free (see the `signed` note). `Sub` stays plain.
     T: const_num_traits::Zero
         + const_num_traits::One
         + Copy
@@ -393,10 +384,10 @@ mod bnum_inv_tests {
         basic: on,
     );
 
-    // Regression for the width-0 seed bug in the EEA inverses: on a runtime-width
-    // carrier (len < CAP) `zero()`/`one()`-seeded coefficients corrupted the
-    // inverse for a large fraction of residues. All three flavors now seed at the
-    // modulus width; cross-check every residue against the u32 oracle.
+    // On a runtime-width carrier (len < CAP), every EEA flavor must seed its
+    // coefficients at the modulus width, not from a width-0 `zero()`/`one()`
+    // (which corrupts the inverse for many residues). Cross-check every residue
+    // against the u32 oracle.
     #[test]
     fn mod_inv_all_flavors_runtime_width_full_range() {
         use fixed_bigint::HeaplessBigInt;
@@ -447,10 +438,9 @@ mod bnum_inv_tests {
         }
     }
 
-    // Multi-limb guard for num-bigint's FixedWidthBigUint (const-7 minimized its
-    // width handling): cross-check inv + schoolbook mul against a u128 oracle at
-    // a >1-limb odd modulus. The single-limb macro tests can't see a multi-limb
-    // width regression; this can.
+    // Multi-limb guard for FixedWidthBigUint's width handling: cross-check inv +
+    // schoolbook mul against a u128 oracle at a >1-limb odd modulus. The
+    // single-limb macro tests can't see a multi-limb width regression; this can.
     #[test]
     fn num_bigint_multilimb_matches_u128_oracle() {
         use num_bigint_patched::{BigUint, FixedWidthBigUint as FW};

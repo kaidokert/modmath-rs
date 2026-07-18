@@ -231,9 +231,8 @@ where
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self.negative, rhs.negative) {
-            // Same-sign magnitudes add; mixed sign is larger-minus-smaller, which
-            // can't underflow (plain `Sub`). The EEA recurrence keeps every
-            // magnitude < modulus (module note), so the carrier never overflows.
+            // Mixed-sign can't underflow (plain `Sub`); EEA keeps magnitudes
+            // < modulus (module note), so same-sign adds never overflow.
             (false, false) | (true, true) => {
                 let negative = self.negative;
                 let (value, _overflow) = self.value.overflowing_add(rhs.value);
@@ -279,8 +278,7 @@ where
     type Output = Self;
 
     fn mul(self, other: Self) -> Self::Output {
-        // `coefficient * quotient` is provably < modulus in EEA (module note),
-        // so the carrier never overflows; the wrapped value is the true product.
+        // Product is < modulus (module note), so the wrapped value is exact.
         let (value, _overflow) = self.value.overflowing_mul(other.value);
         debug_assert!(
             !_overflow,
@@ -305,7 +303,7 @@ where
     type Output = Self;
 
     fn mul(self, other: T) -> Self::Output {
-        // See `Mul for Signed`: the product is < modulus, so the wrapped value is exact.
+        // See `Mul for Signed`.
         let (value, _overflow) = self.value.overflowing_mul(other);
         debug_assert!(
             !_overflow,

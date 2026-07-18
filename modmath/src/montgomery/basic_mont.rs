@@ -296,8 +296,7 @@ where
     // Step 1: m = ((a_mont & mask) * N') & mask
     // `(a_mont & mask) * N'` and the later `m * N` reach up to R² (both factors
     // < R); on a carrier too narrow to hold R² the product overflows, so surface
-    // `None` rather than a wrapped, wrong reduction. Use
-    // wide_redc(a_mont, T::zero(), modulus, n_prime) for overflow-free reduction.
+    // `None` rather than a wrapped, wrong reduction.
     let (m_full, overflow) = (a_mont & mask).overflowing_mul(n_prime);
     if overflow {
         return None;
@@ -1210,10 +1209,10 @@ where
 /// Complete Montgomery modular exponentiation (Basic, CT, pre-reduced):
 /// base^exponent mod modulus, constant-time over `exponent` (and `base`).
 ///
-/// Precondition: `base < modulus`. No `Rem` bound.
+/// Precondition: `base < modulus`. No `Rem` bound. Infallible.
 ///
 /// Implements a fixed-iteration constant-time square-and-multiply:
-///   - Iterates over **every** bit position of the exponent type (not just
+///   - Iterates over the full exponent bit-width (`bits_precision`, not just
 ///     significant bits), so the loop count does not leak `bit_length(exp)`.
 ///   - Performs the squaring and the conditional multiply on **every**
 ///     iteration, with `subtle::conditional_select` choosing whether to keep
@@ -1226,9 +1225,6 @@ where
 /// `compute_r2_mod_n`) operates only on the modulus, which is public; using
 /// the NCT compute_* helpers there is intentional and does not leak any
 /// secret.
-///
-/// Complete Montgomery modular exponentiation (Basic, CT, pre-reduced,
-/// proven-odd modulus). **Infallible.** Precondition: `base < modulus`.
 #[cfg(test)] // retained as differential test oracle; absent from the shipped surface
 pub(crate) fn basic_montgomery_mod_exp_pr_odd_ct<T>(base: T, exponent: T, modulus: Odd<T>) -> T
 where

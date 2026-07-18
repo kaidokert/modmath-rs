@@ -22,10 +22,9 @@ use modmath::Field;
 type Fb256 = FixedUInt<u32, 8, Ct>;
 
 /// CT modular exponentiation through the shipped `Field<T, Ct>::exp`
-/// ladder — the surface that replaced the retired
-/// `montgomery::ct::pre_reduced` free-function. Modulus public (forced
-/// odd via `|= 1`, so `try_new_odd_ct`'s `CtOption` unwrap branches on a
-/// fixture-defined bit); base and exponent secret.
+/// ladder. Modulus public (forced odd via `|= 1`, so `try_new_odd_ct`'s
+/// `CtOption` unwrap branches on a fixture-defined bit); base and
+/// exponent secret.
 #[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__field_exp__u64__N1(
     base: *const u64,

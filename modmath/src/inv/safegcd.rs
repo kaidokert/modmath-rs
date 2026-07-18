@@ -310,10 +310,8 @@ where
     // defeats const-folding through multi-limb Shl impls, keeping
     // their index bounds-check panic path alive post-LTO (flagged by
     // the panic-free audit); a constant-amount shift folds clean.
-    // All working values operate at the modulus width so the top-bit mask,
-    // the ±1 sentinels, and the mod-reductions align on a runtime-width
-    // carrier — a narrow `value`/`one`/`zero` would place the mask and the
-    // sentinels at the wrong bit and the divsteps would not converge.
+    // All working values operate at the modulus width so the top-bit mask, the
+    // ±1 sentinels, and the mod-reductions align on a runtime-width carrier.
     let max = T::zero_with_precision_of(modulus).wrapping_sub(T::one());
     let top_bit_mask = max.clone().wrapping_sub(max.clone() >> 1);
     let m_half = modulus.clone() >> 1;

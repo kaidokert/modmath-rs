@@ -480,9 +480,9 @@ mod tests {
 
 // The CIOS driver's operating width is the modulus word count (public), not
 // the multiplier's — so a HeaplessBigInt operand narrower than the modulus
-// still reduces over the full modulus width. Regression against `n =
-// a.word_count()`, which under-iterated the reduction on a runtime-len carrier
-// (invisible on fixed carriers, where every operand is one width).
+// still reduces over the full modulus width. Guards the modulus-width (not
+// operand-width) iteration count on runtime-len carriers (fixed carriers, where
+// every operand is one width, can't expose the difference).
 #[cfg(test)]
 mod heapless_cios_montmul {
     use super::*;

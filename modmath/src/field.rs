@@ -1030,17 +1030,14 @@ where
 // Tests
 // ---------------------------------------------------------------------------
 
-// ── [24]/[D] Phase 0: personality-generic `FieldOps` surface ────────────────
-//
 // `Field<T, P>` splits its arithmetic across two per-personality inherent impls,
 // so code that runs one algorithm over *either* personality has no generic
-// method surface. `FieldOps` provides it. It is impl'd on a `FieldView` wrapper,
-// never directly on `Field` — a direct `impl FieldOps for Field<T, Nct>` makes
-// the forwarding `self.mul(..)` re-dispatch to the trait method (inherent
-// priority does not win when the trait is impl'd on the same type), infinitely
-// recursing. The wrapper's `self.0.mul(..)` targets `Field` (no `FieldOps` on
-// it), so it resolves to the inherent method. Every consumer's hand-rolled
-// verify shim already uses exactly this wrapper shape; this hoists it.
+// method surface. `FieldOps` provides it, impl'd on a `FieldView` wrapper rather
+// than directly on `Field`: a direct `impl FieldOps for Field<T, Nct>` makes the
+// forwarding `self.mul(..)` re-dispatch to the trait method (inherent priority
+// does not win when the trait is impl'd on the same type), infinitely recursing.
+// The wrapper's `self.0.mul(..)` targets `Field` (no `FieldOps` on it), so it
+// resolves to the inherent method.
 
 /// Personality-generic view of a Montgomery [`Field`]'s operation surface.
 /// `inv_fermat` normalizes the Ct field's `CtOption` to `Option` (verify inputs
@@ -1255,8 +1252,6 @@ where
     }
 }
 
-// ── [D] Phase 1: schoolbook reduction strategy under `FieldOps` ─────────────
-//
 // The Montgomery `Field` is one reduction strategy; `SchoolbookField` is the
 // other, exposed through the *same* `FieldOps` surface so verify code is
 // strategy-agnostic. Its residue carries ring-width by construction: `reduce`,
@@ -1323,7 +1318,7 @@ where
         Self: 'f;
 
     fn reduce<'f>(&'f self, raw: &T) -> SchoolbookResidue<'f, T> {
-        // Enter the ring: reduce, then establish ring width (hedge #3, here).
+        // Enter the ring: reduce, then widen to ring width.
         self.wrap((*raw % self.modulus).widen_to_precision_of(&self.modulus))
     }
     fn mul<'f>(
@@ -1403,8 +1398,7 @@ mod tests {
 
     // Nct `Field`/`Residue` API matrix: reduce/into_raw round-trip, add/sub/mul,
     // exp, and Fermat inverse (prime modulus), cross-checked against a u64
-    // oracle. Runs the crypto-facing high-level surface across every backend,
-    // which the hand-rolled FixedUInt-alias tests never did.
+    // oracle, across every backend.
     macro_rules! field_test_module {
         ($stem:ident, $type_path:path, $(type $td:ty = $te:ty;)?) => {
             paste::paste! {
@@ -1500,7 +1494,7 @@ mod tests {
 
     // Ct `FieldCt` matrix: the constant-time surface (reduce/mul + the
     // Bernstein-Yang `inv_safegcd_ct` RSA-blinding path), across Ct-personality
-    // carriers. Previously only hand-rolled on FixedUInt/U128 + reactive heapless.
+    // carriers.
     macro_rules! field_ct_test_module {
         ($stem:ident, $type_path:path, $(type $td:ty = $te:ty;)?) => {
             paste::paste! {
@@ -2195,9 +2189,8 @@ mod tests {
         assert!(!eq_ac);
     }
     // Full Field round-trip on HeaplessBigInt at CAP == len (modulus fills the
-    // carrier). Catches the type_bit_width proxy (precompute R width) and the
-    // CarryingMul value-width split — the full-CAP config ed25519 / 2048-bit RSA
-    // use. Passes as of modmath's bits_precision fix + fixed-bigint alpha.17.
+    // carrier): the R-width precompute and the CarryingMul value-width split at
+    // exact width — the full-CAP config ed25519 / 2048-bit RSA use.
     #[test]
     fn heapless_field_roundtrip() {
         use fixed_bigint::HeaplessBigInt;
@@ -2214,14 +2207,12 @@ mod tests {
         assert_eq!(f.into_raw(&f.mul(&a, &b)), w(15)); // 3*5=15 < modulus
     }
 
-    // Shift-left guard: the SUB-CAP config (len < CAP) that leaked all the way to
-    // ed25519/rsa. A modulus narrower than the carrier makes the field width
-    // (`bits_precision` = len*word) smaller than storage, so the whole wide-REDC
-    // precompute runs at value width on unused-capacity operands. Passes because
-    // HeaplessBigInt@len behaves bit-for-bit like FixedUInt<len> (fixed-bigint
-    // alpha.20) — this test exercises that with NO modmath accommodation. If a
-    // future carrier change reintroduces capacity-dependent arithmetic, it fails
-    // here, in modmath's CI, not two crates downstream.
+    // Sub-CAP config (len < CAP): a modulus narrower than the carrier makes the
+    // field width (`bits_precision` = len*word) smaller than storage, so the
+    // wide-REDC precompute runs at value width on unused-capacity operands.
+    // Relies on HeaplessBigInt@len behaving bit-for-bit like FixedUInt<len>;
+    // guards against a future carrier change reintroducing capacity-dependent
+    // arithmetic — caught here in modmath CI, not two crates downstream.
     #[test]
     fn heapless_field_roundtrip_subcap() {
         use fixed_bigint::HeaplessBigInt;
@@ -2271,8 +2262,7 @@ mod tests {
         }
     }
 
-    // Phase 1 [D]: schoolbook runs through the same `FieldOps` surface as
-    // Montgomery, and the two strategies agree.
+    // Schoolbook and Montgomery agree through the same `FieldOps` surface.
     #[test]
     fn schoolbook_strategy_via_fieldops() {
         type U = FixedUInt<u8, 4>;
@@ -2298,9 +2288,8 @@ mod tests {
         }
     }
 
-    // Phase 0 [24]: one generic body over `FieldOps` runs on both personalities,
-    // built directly and via the `FieldFor` selector. This is the surface that
-    // replaces the consumers' hand-rolled per-personality verify shims.
+    // One generic body over `FieldOps` runs on both personalities, built
+    // directly and via the `FieldFor` selector.
     #[test]
     fn fieldops_generic_over_personality() {
         fn check<F>(f: &F)
@@ -2365,12 +2354,11 @@ mod tests {
         );
     }
 
-    // Multi-word modulus (len 8) held sub-CAP (CAP 16): the ed25519 field
-    // (p = 2^255-19) / group-order shape krabitls deploys for Nct verify.
-    // The prior sub-CAP guard used a len-1 modulus; this exercises a multi-
-    // word modulus with full-width operands, where a capacity leak would
-    // diverge from the CAP==len carrier. Both carriers are HeaplessBigInt so
-    // any CAP-dependent arithmetic (not value-dependent) shows up as a diff.
+    // Multi-word modulus (len 8) held sub-CAP (CAP 16): an ed25519-field /
+    // group-order shape (p = 2^255-19). Exercises a multi-word modulus with
+    // full-width operands, where a capacity leak would diverge from the
+    // CAP==len carrier. Both carriers are HeaplessBigInt so any CAP-dependent
+    // arithmetic (not value-dependent) shows up as a diff.
     #[test]
     fn heapless_subcap_multiword_modulus_parity() {
         use fixed_bigint::HeaplessBigInt;

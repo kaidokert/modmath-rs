@@ -80,6 +80,3 @@ pub extern "C" fn ct_fix__cios_mont_mul__fb32__N8(
     let r = CiosMontMulCt::cios_mont_mul_ct(&a, &b, &m, &np);
     unsafe { *out = bb(*r.words()) }
 }
-
-// Modexp is tainted on the shipped `Field<T, Ct>::exp` path — see
-// `ct_fix__field_exp__*` in `fixtures_field`.

@@ -277,8 +277,7 @@ where
     // Step 1: m = ((a_mont & mask) * N') & mask
     // `(a_mont & mask) * N'` and the later `m * N` reach up to R² (both factors
     // < R); on a carrier too narrow to hold R² the product overflows, so surface
-    // `None` rather than a wrapped, wrong reduction. Route through wide-REDC for
-    // overflow-free reduction.
+    // `None` rather than a wrapped, wrong reduction.
     let a_low = &a_mont & &mask;
     let (product, overflow) = a_low.overflowing_mul(n_prime.clone());
     if overflow {

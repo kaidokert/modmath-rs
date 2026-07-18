@@ -297,8 +297,6 @@ where
 }
 
 /// Convert from Montgomery form (Strict): (a * R) -> a mod N
-/// Uses Montgomery reduction algorithm with reference-based operations
-/// to minimize copying of large integers.
 ///
 /// Returns `None` when the carrier `T` is too narrow to hold the `m * N`
 /// intermediate (which reaches up to R²); route through wide-REDC / CIOS for
