@@ -62,19 +62,14 @@ macro_rules! tri_u64 {
 // which the contract explicitly permits; secret-modulus exponentiation
 // is covered by the `Field::try_new_odd_ct`-based fixtures instead.
 unsafe extern "C" {
-    fn ct_fix__mod_exp_pr_odd__u64__N1(
-        base: *const u64,
-        e: *const u64,
-        m: *const u64,
-        out: *mut u64,
-    );
+    fn ct_fix__field_exp__u64__N1(base: *const u64, e: *const u64, m: *const u64, out: *mut u64);
 }
-ctgrind_fixture!(ct_fix__mod_exp_pr_odd__u64__N1, {
+ctgrind_fixture!(ct_fix__field_exp__u64__N1, {
     let (base, e, m) = (0u64, 0u64, 0u64);
     let mut out = 0u64;
     taint_val(&base);
     taint_val(&e);
-    unsafe { ct_fix__mod_exp_pr_odd__u64__N1(&base, &e, &m, &mut out) }
+    unsafe { ct_fix__field_exp__u64__N1(&base, &e, &m, &mut out) }
     untaint_val(&out);
     let _ = black_box(out);
 });
@@ -119,16 +114,16 @@ ctgrind_fixture!(ct_fix__cios_mont_mul__fb32__N8, {
 });
 
 unsafe extern "C" {
-    fn ct_fix__mod_exp_pr_odd__fb32__N8(base: *const W8, e: *const W8, m: *const W8, out: *mut W8);
+    fn ct_fix__field_exp__fb32__N8(base: *const W8, e: *const W8, m: *const W8, out: *mut W8);
 }
 // Modulus untainted — same public-modulus contract as the u64 variant
 // above.
-ctgrind_fixture!(ct_fix__mod_exp_pr_odd__fb32__N8, {
+ctgrind_fixture!(ct_fix__field_exp__fb32__N8, {
     let (base, e, m) = ([0u32; 8], [0u32; 8], [0u32; 8]);
     let mut out = [0u32; 8];
     taint_val(&base);
     taint_val(&e);
-    unsafe { ct_fix__mod_exp_pr_odd__fb32__N8(&base, &e, &m, &mut out) }
+    unsafe { ct_fix__field_exp__fb32__N8(&base, &e, &m, &mut out) }
     untaint_val(&out);
     let _ = black_box(out);
 });

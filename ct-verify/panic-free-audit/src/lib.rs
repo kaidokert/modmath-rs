@@ -24,7 +24,6 @@ use core::hint::black_box;
 
 use const_num_traits::Ct;
 use fixed_bigint::FixedUInt;
-use modmath::basic::montgomery::ct::pre_reduced as mont_ct_pr;
 use modmath::basic::montgomery::wide::ct as wide_ct;
 use modmath::{CiosMontMulCt, Field};
 
@@ -78,7 +77,7 @@ pub extern "C" fn panic_audit__cios_mont_mul_ct__fb32(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn panic_audit__mod_exp_pr_odd_ct__fb32(
+pub extern "C" fn panic_audit__field_exp__fb32(
     base: *const [u32; 8],
     e: *const [u32; 8],
     m: *const [u32; 8],
@@ -88,10 +87,12 @@ pub extern "C" fn panic_audit__mod_exp_pr_odd_ct__fb32(
     let e = Fb256::from(black_box(unsafe { *e }));
     let mut mw = black_box(unsafe { *m });
     mw[0] |= 1;
-    // SAFETY: low bit forced above.
-    let m = unsafe { modmath::Odd::new_unchecked(Fb256::from(mw)) };
-    let r = mont_ct_pr::mod_exp_odd(base, e, m);
-    unsafe { *out = black_box(*r.words()) }
+    // SAFETY: low bit forced above. Infallible `new_odd_ct` (no `.unwrap()`)
+    // keeps the panic-symbol audit clean.
+    let proof = unsafe { modmath::Odd::new_unchecked(Fb256::from(mw)) };
+    let f = Field::<Fb256, Ct>::new_odd_ct(proof);
+    let r = f.exp(&f.reduce(&base), &e);
+    unsafe { *out = black_box(*f.into_raw(&r).words()) }
 }
 
 /// The constructor a consumer calls with a secret modulus. The returned

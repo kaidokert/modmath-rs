@@ -317,8 +317,9 @@ const HELPER_ALLOWLIST: &[&str] = &[
     r"modmath5field50Field\$LT\$T\$C\$const_num_traits\.\.personality\.\.Ct\$GT\$3exp",
     r"modmath10montgomery10basic_mont11mod_exp2_ct",
     r"modmath10montgomery10basic_mont22compute_n_prime_newton",
-    r"modmath10montgomery10basic_mont34basic_montgomery_mod_exp_pr_odd_ct",
-    // NCT precompute reached from the mod_exp_pr_odd fixtures. Its
+    // NCT precompute reached from the `field_exp` fixtures via
+    // `Field::try_new_odd_ct` (the modexp fixtures migrated off the retired
+    // `montgomery::ct::pre_reduced` free-function). Its
     // rustdoc documents the modulus as public and the NCT compute_*
     // helpers as intentional; the branches here (including the
     // modulus == one compare that pulls in FixedUInt's PartialEq) are

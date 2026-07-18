@@ -11,7 +11,6 @@ use crate::bb;
 use const_num_traits::Ct;
 use fixed_bigint::FixedUInt;
 use modmath::CiosMontMulCt;
-use modmath::basic::montgomery::ct::pre_reduced as mont_ct_pr;
 use modmath::basic::montgomery::wide::ct as wide_ct;
 
 type Fb256 = FixedUInt<u32, 8, Ct>;
@@ -82,35 +81,7 @@ pub extern "C" fn ct_fix__cios_mont_mul__fb32__N8(
     unsafe { *out = bb(*r.words()) }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn ct_fix__mod_exp_pr_odd__u64__N1(
-    base: *const u64,
-    e: *const u64,
-    m: *const u64,
-    out: *mut u64,
-) {
-    let base = bb(unsafe { *base });
-    let e = bb(unsafe { *e });
-    let m = bb(unsafe { *m }) | 1;
-    // SAFETY: low bit forced above.
-    let m = unsafe { modmath::Odd::new_unchecked(m) };
-    let r = mont_ct_pr::mod_exp_odd(base, e, m);
-    unsafe { *out = bb(r) }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn ct_fix__mod_exp_pr_odd__fb32__N8(
-    base: *const [u32; 8],
-    e: *const [u32; 8],
-    m: *const [u32; 8],
-    out: *mut [u32; 8],
-) {
-    let base = Fb256::from(bb(unsafe { *base }));
-    let e = Fb256::from(bb(unsafe { *e }));
-    let mut mw = bb(unsafe { *m });
-    mw[0] |= 1;
-    // SAFETY: low bit forced above.
-    let m = unsafe { modmath::Odd::new_unchecked(Fb256::from(mw)) };
-    let r = mont_ct_pr::mod_exp_odd(base, e, m);
-    unsafe { *out = bb(*r.words()) }
-}
+// Modexp moved to the shipped `Field<T, Ct>::exp` surface — see
+// `ct_fix__field_exp__*` in `fixtures_field`. The retired
+// `montgomery::ct::pre_reduced` free-function is no longer part of the
+// public surface, so there is nothing to taint here.
