@@ -81,7 +81,5 @@ pub extern "C" fn ct_fix__cios_mont_mul__fb32__N8(
     unsafe { *out = bb(*r.words()) }
 }
 
-// Modexp moved to the shipped `Field<T, Ct>::exp` surface — see
-// `ct_fix__field_exp__*` in `fixtures_field`. The retired
-// `montgomery::ct::pre_reduced` free-function is no longer part of the
-// public surface, so there is nothing to taint here.
+// Modexp is tainted on the shipped `Field<T, Ct>::exp` path — see
+// `ct_fix__field_exp__*` in `fixtures_field`.

@@ -348,10 +348,8 @@ where
         .checked_mul(modulus.clone())
         .expect(crate::montgomery::OVERFLOW_MSG);
     let (sum, overflow) = a_mont.overflowing_add(m_times_n);
-    // A dropped carry here corrupts the reduction (the `checked_mul` above
-    // guards only `m*N`); the flag is already in hand — panic per the
-    // narrow-path contract instead of discarding it. Use wide-REDC for the
-    // overflow-free path.
+    // A dropped carry corrupts the reduction (the `checked_mul` above guards
+    // only `m*N`); the flag is in hand — panic per the narrow-path contract.
     assert!(!overflow, "{}", crate::montgomery::OVERFLOW_MSG);
     let t = sum >> r_bits; // Divide by R = 2^r_bits using bit shift
 

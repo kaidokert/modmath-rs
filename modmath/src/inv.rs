@@ -426,11 +426,8 @@ mod bnum_inv_tests {
         }
     }
 
-    // Regression: value narrower than a multi-limb modulus. `strict_mod_inv`
-    // seeded `new_r = a` at `a`'s (narrow) width while the coefficients were at
-    // modulus width, so `new_r.checked_mul(quotient)` overflowed and panicked
-    // once width(a) < width(modulus). The full-range test above can't see it —
-    // its moduli are single-limb, so a and m share a width.
+    // A one-limb value against a multi-limb modulus — the width(a) < width(m)
+    // path the single-limb moduli in the full-range test above can't exercise.
     #[test]
     fn strict_mod_inv_narrow_value_multiword_modulus() {
         use fixed_bigint::HeaplessBigInt;

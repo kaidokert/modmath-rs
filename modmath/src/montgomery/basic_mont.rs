@@ -320,9 +320,8 @@ where
         .checked_mul(modulus)
         .expect(crate::montgomery::OVERFLOW_MSG);
     let sum = a_mont + m_times_n;
-    // `+` panics on an Nct carrier's overflow but silently wraps on a Ct one;
-    // a dropped carry here corrupts the reduction just as a dropped `m*N` carry
-    // would, so catch the wrap (sum < a_mont) and panic per the same contract.
+    // `+` wraps on a Ct carrier (panics on Nct); a dropped carry corrupts the
+    // reduction, so catch the wrap (sum < a_mont) and panic per the same contract.
     assert!(sum >= a_mont, "{}", crate::montgomery::OVERFLOW_MSG);
     let t = sum >> r_bits;
 
@@ -1324,11 +1323,9 @@ mod tests {
     use const_num_traits::BitsPrecision;
     use const_num_traits::Ct;
 
-    // Regression: the narrow REDC's `a_mont + m*N` can carry past the carrier
-    // width even after `m*N` fits. N=17, R=32 (r_bits=5), n_prime=15: from_mont(1)
-    // needs a_mont + m*N = 1 + 255 = 256, overflowing u8. The dropped carry used
-    // to silently reduce to 0; it must panic (OVERFLOW_MSG) instead. A wider
-    // carrier holds the intermediate and reduces correctly to R⁻¹ mod N = 8.
+    // The narrow REDC's `a_mont + m*N` can carry past the carrier even after
+    // `m*N` fits: N=17, R=32 (r_bits=5), n'=15 → from_mont(1) needs 256, which
+    // overflows u8 (must panic); a u16 holds it and reduces to R⁻¹ = 8.
     #[test]
     fn from_montgomery_narrow_carrier_lost_carry_panics() {
         let overflowed = std::panic::catch_unwind(|| basic_from_montgomery(1u8, 17u8, 15u8, 5));

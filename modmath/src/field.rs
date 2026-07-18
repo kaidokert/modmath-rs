@@ -344,10 +344,9 @@ where
     /// The additive identity (0 in Montgomery form is 0).
     pub fn zero(&self) -> Residue<'_, T, P> {
         Residue {
-            // Seed at the ring width (`one()` is already `r_mod_n`, ring-width):
-            // a minimal-width `T::zero()` would be a narrow residue, which a
-            // width-sensitive op (e.g. CIOS mul) could misread on a runtime-width
-            // carrier — the seed hazard this surface exists to preclude.
+            // Ring width, not minimal `T::zero()`: a narrow residue would misfire
+            // a width-sensitive op (CIOS mul) on a runtime-width carrier. (`one()`
+            // is already `r_mod_n`.)
             mont: T::zero_with_precision_of(&self.modulus),
             _brand: PhantomData,
             _p: PhantomData,
@@ -1142,10 +1141,8 @@ where
         self.0.exp(base, e)
     }
     fn inv<'f>(&'f self, a: &Residue<'f, T, Nct>) -> Option<Residue<'f, T, Nct>> {
-        // Extended Euclid, not Fermat: `inv` is a general modular inverse, so it
-        // must be correct for composite moduli too (Fermat's `a^(m-2)` is only
-        // valid for prime `m`). The inherent `Field::inv_fermat` keeps the
-        // prime-only fast path for callers that know the modulus is prime.
+        // EEA, not Fermat: `inv` is a general (composite-correct) inverse; the
+        // prime-only Fermat fast path stays the inherent `Field::inv_fermat`.
         self.0.inv_eea(a)
     }
     fn one(&self) -> Residue<'_, T, Nct> {
@@ -1211,11 +1208,10 @@ where
         self.0.exp(base, e)
     }
     fn inv<'f>(&'f self, a: &Residue<'f, T, Ct>) -> Option<Residue<'f, T, Ct>> {
-        // safegcd, not Fermat: `inv` is a general modular inverse (correct for
-        // composite moduli), and safegcd is the CT general inverse. Collapses the
-        // CtOption existence bit (operand non-invertible) per the trait's CT
-        // contract; the inverse value stays constant-time. Callers who must not
-        // branch on existence use the inherent `Field::inv_safegcd_ct`.
+        // safegcd, not Fermat: the CT general (composite-correct) inverse.
+        // Collapses the CtOption existence bit per the trait's CT contract
+        // (value stays CT); callers needing the masked bit use the inherent
+        // `Field::inv_safegcd_ct`.
         self.0.inv_safegcd_ct(a).into_option()
     }
     fn one(&self) -> Residue<'_, T, Ct> {

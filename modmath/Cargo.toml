@@ -23,19 +23,11 @@ const-num-traits = { version = "0.2.1", default-features = false, features = ["c
 modmath-cios = { version = "0.1" }
 
 [dev-dependencies]
-# fixed-bigint 0.6 (registry) exposes HeaplessBigInt (fixed capacity, runtime
-# length) as a default, unconditional part of the crate — added to the backend
-# test matrix. `zeroize` on the carrier gives the matrix `Zeroize`/
-# `DefaultIsZeroes`, so the suite compiles under `--features zeroize` (which
-# gates `MontStorage` on `Zeroize`) — the column every real consumer builds.
-# Dev-only; harmless off.
+# `zeroize` lets the test matrix compile under `--features zeroize`, which gates
+# `MontStorage` on `Zeroize`.
 fixed-bigint = { version = "0.6.0", default-features = false, features = ["cios", "zeroize"] }
-# Third-party bigint backends. The `_patched` kaidokert forks carry
-# const-num-traits 0.2 + modmath-cios impls (proven end-to-end in the
-# krabitls backend-swap experiments), so their test matrices are live: bnum,
-# crypto-bigint, and num-bigint (heap-backed `FixedWidthBigUint`) are all
-# enabled below. Upstream (unforked) crates stay disabled (no const-num-traits
-# impls upstream); ibig is blocked architecturally.
+# `_patched` forks add the const-num-traits + modmath-cios impls upstream lacks,
+# so these backends can join the test matrix. ibig is blocked architecturally.
 bnum_patched = { package = "bnum", git = "https://github.com/kaidokert/bnum.git", tag = "v0.14.4-const-18", default-features = false, features = ["zeroize"] }
 crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.7.5-const-18", default-features = false, features = ["zeroize"] }
 # num-bigint = { package = "num-bigint", version = "0.4"}
