@@ -371,7 +371,11 @@ where
     /// `mont == x * R mod modulus`.
     pub fn residue_from_mont(&self, mont: T) -> Residue<'_, T, P> {
         Residue {
-            mont,
+            // Establish ring width even on this escape hatch: a narrow `mont`
+            // (e.g. `T::zero()`) would otherwise be a narrow residue a
+            // width-sensitive op could misread, breaking the surface's no-narrow
+            // -residue guarantee.
+            mont: mont.widen_to_precision_of(&self.modulus),
             _brand: PhantomData,
             _p: PhantomData,
         }

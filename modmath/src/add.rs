@@ -535,6 +535,34 @@ mod fixed_bigint_pr_tests {
         let a = U256::from(15u8);
         assert_eq!(basic_mod_add_pr(a, b, m), expected);
     }
+
+    // The `_pr` ops widen only the left operand `a` to the modulus width, not
+    // `b`. That is sufficient: `wrapping_add`/`overflowing_add` incorporate a
+    // narrower right operand at the (widened) left width, so a one-limb `b`
+    // against a full-width multi-limb modulus reduces correctly — including the
+    // carry/borrow branch where `a ± b` crosses the modulus width.
+    #[test]
+    fn narrow_b_against_full_width_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        let m = 65533u32; // full 2-limb: a ± b can cross the 16-bit width
+        let hm = H::from(m as u16);
+        for a in [65000u32, 65500, 65532, 40000] {
+            for b in [1u32, 50, 100, 255] {
+                let (ha, hb) = (H::from(a as u16), H::from(b as u8)); // b is one limb
+                assert_eq!(
+                    super::basic_mod_add_pr(ha, hb, hm),
+                    H::from(((a + b) % m) as u16),
+                    "add {a}+{b}"
+                );
+                assert_eq!(
+                    crate::sub::basic_mod_sub_pr(ha, hb, hm),
+                    H::from((((a + m) - b) % m) as u16),
+                    "sub {a}-{b}"
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
