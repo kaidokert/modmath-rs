@@ -5,6 +5,7 @@ use crate::inv::basic_mod_inv;
 use crate::parity::Parity;
 use crate::wide_mul::WideMul;
 use const_num_traits::Odd;
+use const_num_traits::WithPrecision;
 use subtle::Choice;
 
 /// Methods for computing N' in Montgomery parameter computation
@@ -37,11 +38,11 @@ fn compute_n_prime_trial_search<T>(modulus: T, r: T) -> Option<T>
 where
     T: Copy
         + const_num_traits::One
+        + core::ops::Add<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Rem<Output = T>,
 {
     // We need to find N' where modulus * N' ≡ R - 1 (mod R)
@@ -52,7 +53,12 @@ where
     // O(log R) alternatives for larger moduli.
     let mut n_prime = T::one();
     loop {
-        if (modulus * n_prime) % r == target {
+        if modulus
+            .checked_mul(n_prime)
+            .expect(crate::montgomery::OVERFLOW_MSG)
+            % r
+            == target
+        {
             return Some(n_prime);
         }
         n_prime = n_prime + T::one();
@@ -73,12 +79,13 @@ where
     T: Copy
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
-        + core::ops::Div<Output = T>,
+        + core::ops::Div<Output = T>
+        + const_num_traits::WithPrecision,
 {
     // We need to solve: modulus * N' ≡ -1 (mod R)
     // This is equivalent to: modulus * N' ≡ R - 1 (mod R)
@@ -106,11 +113,11 @@ fn compute_n_prime_hensels_lifting<T>(modulus: T, r: T, r_bits: usize) -> Option
 where
     T: Copy
         + const_num_traits::Zero
+        + core::ops::Add<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + const_num_traits::One
         + PartialEq
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Rem<Output = T>
         + core::ops::Shl<usize, Output = T>,
 {
@@ -135,7 +142,11 @@ where
         //     x_new = x - x - 1/modulus  (but we work mod powers of 2)
 
         let target_mod = T::one() << k; // 2^k
-        let check_val = (modulus * n_prime + T::one()) % target_mod;
+        let check_val = (modulus
+            .checked_mul(n_prime)
+            .expect(crate::montgomery::OVERFLOW_MSG)
+            + T::one())
+            % target_mod;
 
         if check_val != T::zero() {
             // Need to adjust n_prime
@@ -149,7 +160,10 @@ where
     }
 
     // Final check and adjustment to ensure modulus * N' ≡ -1 (mod R)
-    let final_check = (modulus * n_prime) % r;
+    let final_check = modulus
+        .checked_mul(n_prime)
+        .expect(crate::montgomery::OVERFLOW_MSG)
+        % r;
     let target = r - T::one(); // -1 mod R
 
     if final_check != target {
@@ -171,15 +185,18 @@ pub fn basic_compute_montgomery_params_with_method<T>(
 where
     T: Copy
         + const_num_traits::Zero
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Div<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Rem<Output = T>
-        + core::ops::Add<Output = T>,
+        + core::ops::Add<Output = T>
+        + const_num_traits::WithPrecision,
 {
     // Step 1: Find R = 2^k where R > modulus
     let mut r = T::one();
@@ -217,15 +234,18 @@ pub fn basic_compute_montgomery_params<T>(modulus: T) -> Option<(T, T, T, usize)
 where
     T: Copy
         + const_num_traits::Zero
+        + core::ops::Mul<Output = T>
         + const_num_traits::One
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Div<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
         + core::ops::Rem<Output = T>
-        + core::ops::Add<Output = T>,
+        + core::ops::Add<Output = T>
+        + const_num_traits::WithPrecision,
 {
     basic_compute_montgomery_params_with_method(modulus, NPrimeMethod::default())
 }
@@ -242,26 +262,10 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::Rem<Output = T>
         + crate::parity::Parity
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     crate::mul::basic_mod_mul(a, r, modulus)
-}
-
-/// Convert to Montgomery form (Basic, pre-reduced): a -> (a * R) mod N
-/// Precondition: `a < modulus` and `r < modulus`. No `Rem` bound.
-pub fn basic_to_montgomery_pr<T>(a: T, modulus: T, r: T) -> T
-where
-    T: core::cmp::PartialOrd
-        + Copy
-        + const_num_traits::Zero
-        + const_num_traits::One
-        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
-        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + core::ops::Shr<usize, Output = T>
-        + crate::parity::Parity
-        + crate::NonCt,
-{
-    crate::mul::basic_mod_mul_pr(a, r, modulus)
 }
 
 /// Convert from Montgomery form (Basic): (a * R) -> a mod N
@@ -275,9 +279,9 @@ pub fn basic_from_montgomery<T>(a_mont: T, modulus: T, n_prime: T, r_bits: usize
 where
     T: Copy
         + const_num_traits::One
-        + PartialOrd
-        + core::ops::Mul<Output = T>
         + core::ops::Add<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
+        + PartialOrd
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>
@@ -302,13 +306,24 @@ where
     let mask = (T::one() << r_bits) - T::one(); // mask = 2^r_bits - 1
 
     // Step 1: m = ((a_mont & mask) * N') & mask
-    let m = ((a_mont & mask) * n_prime) & mask;
+    let m = (a_mont & mask)
+        .checked_mul(n_prime)
+        .expect(crate::montgomery::OVERFLOW_MSG)
+        & mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
-    // WARNING: m * N can overflow for large moduli (m < R, N < R, so
-    // m*N can reach R^2). Use wide_redc(a_mont, T::zero(), modulus, n_prime)
-    // for overflow-free reduction.
-    let t = (a_mont + m * modulus) >> r_bits;
+    // m * N reaches up to R² (m < R, N < R); checked_mul turns a
+    // carrier-too-narrow product into a panic rather than a wrapped, wrong
+    // reduction. Use wide_redc(a_mont, T::zero(), modulus, n_prime) for
+    // overflow-free reduction.
+    let m_times_n = m
+        .checked_mul(modulus)
+        .expect(crate::montgomery::OVERFLOW_MSG);
+    let sum = a_mont + m_times_n;
+    // `+` wraps on a Ct carrier (panics on Nct); a dropped carry corrupts the
+    // reduction, so catch the wrap (sum < a_mont) and panic per the same contract.
+    assert!(sum >= a_mont, "{}", crate::montgomery::OVERFLOW_MSG);
+    let t = sum >> r_bits;
 
     // Step 3: Final reduction
     if t >= modulus { t - modulus } else { t }
@@ -324,10 +339,10 @@ pub fn basic_montgomery_mul<T>(a_mont: T, b_mont: T, modulus: T, n_prime: T, r_b
 where
     T: Copy
         + const_num_traits::Zero
+        + core::ops::Add<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + const_num_traits::One
         + PartialOrd
-        + core::ops::Mul<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Rem<Output = T>
         + core::ops::Shr<usize, Output = T>
@@ -336,7 +351,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + crate::parity::Parity
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     // Montgomery multiplication algorithm:
     // Input: a_mont, b_mont (both in Montgomery form), modulus N, N', r_bits
@@ -351,37 +367,9 @@ where
     basic_from_montgomery(product, modulus, n_prime, r_bits)
 }
 
-/// Montgomery multiplication (Basic, pre-reduced)
-/// Precondition: `a_mont < modulus` and `b_mont < modulus`. No `Rem` bound.
-pub fn basic_montgomery_mul_pr<T>(a_mont: T, b_mont: T, modulus: T, n_prime: T, r_bits: usize) -> T
-where
-    T: Copy
-        + const_num_traits::Zero
-        + const_num_traits::One
-        + PartialOrd
-        + core::ops::Mul<Output = T>
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>
-        + core::ops::Shr<usize, Output = T>
-        + core::ops::Shl<usize, Output = T>
-        + core::ops::BitAnd<Output = T>
-        + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
-        + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::parity::Parity
-        + crate::NonCt,
-{
-    let product = crate::mul::basic_mod_mul_pr(a_mont, b_mont, modulus);
-    basic_from_montgomery(product, modulus, n_prime, r_bits)
-}
-
 // ---------------------------------------------------------------------------
 // Wide-REDC private helpers (R = 2^W, full type width)
 // ---------------------------------------------------------------------------
-
-/// Bit width of type T (e.g. 32 for u32, 128 for a 4×32-limb bigint).
-pub const fn type_bit_width<T>() -> usize {
-    core::mem::size_of::<T>() * 8
-}
 
 /// Modular doubling: (val + val) mod modulus, handling overflow.
 ///
@@ -467,13 +455,16 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + const_num_traits::WrappingSub<Output = T>,
+        + const_num_traits::WrappingSub<Output = T>
+        + WithPrecision,
 {
     // For modulus == 1, any value mod 1 == 0
     if modulus == T::one() {
         return T::zero();
     }
-    let mut result = val;
+    // Seed the start value at the modulus width so mod_double's overflow
+    // flag fires at bit W, not the narrow value's width.
+    let mut result = val.widen_to_precision_of(&modulus);
     for _ in 0..w {
         result = mod_double(result, modulus);
     }
@@ -494,9 +485,12 @@ where
         + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeEq
-        + subtle::ConstantTimeLess,
+        + subtle::ConstantTimeLess
+        + WithPrecision,
 {
-    let mut result = val;
+    // Seed the start value at the modulus width so mod_double_ct's overflow
+    // flag fires at bit W, not the narrow value's width.
+    let mut result = val.widen_to_precision_of(&modulus);
     for _ in 0..w {
         result = mod_double_ct(result, modulus);
     }
@@ -517,7 +511,8 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + const_num_traits::WrappingSub<Output = T>,
+        + const_num_traits::WrappingSub<Output = T>
+        + const_num_traits::WithPrecision,
 {
     mod_exp2(T::one(), modulus, w)
 }
@@ -533,7 +528,8 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeLess,
+        + subtle::ConstantTimeLess
+        + const_num_traits::WithPrecision,
 {
     mod_exp2_ct(T::one(), modulus, w)
 }
@@ -549,7 +545,8 @@ where
         + const_num_traits::Zero
         + const_num_traits::One
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + const_num_traits::WrappingSub<Output = T>,
+        + const_num_traits::WrappingSub<Output = T>
+        + const_num_traits::WithPrecision,
 {
     mod_exp2(r_mod_n, modulus, w)
 }
@@ -564,7 +561,8 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeLess,
+        + subtle::ConstantTimeLess
+        + const_num_traits::WithPrecision,
 {
     mod_exp2_ct(r_mod_n, modulus, w)
 }
@@ -988,7 +986,9 @@ where
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + core::ops::Rem<Output = T>,
+        + core::ops::Rem<Output = T>
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     let m = modulus.get();
     basic_montgomery_mod_mul_pr_odd(reduce_mod(a, m), reduce_mod(b, m), modulus)
@@ -1009,7 +1009,9 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + Parity
-        + core::ops::Rem<Output = T>,
+        + core::ops::Rem<Output = T>
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_mul_odd(a, b, m))
 }
@@ -1024,7 +1026,7 @@ where
 ///
 /// Precondition (unchanged from the `Option`-returning sibling): `a < modulus`
 /// and `b < modulus`.
-pub fn basic_montgomery_mod_mul_pr_odd<T>(a: T, b: T, modulus: Odd<T>) -> T
+pub(crate) fn basic_montgomery_mod_mul_pr_odd<T>(a: T, b: T, modulus: Odd<T>) -> T
 where
     T: Copy
         + const_num_traits::Zero
@@ -1035,10 +1037,12 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
-        + const_num_traits::WrappingSub<Output = T>,
+        + const_num_traits::WrappingSub<Output = T>
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     let modulus = modulus.get();
-    let w = type_bit_width::<T>();
+    let w = modulus.bits_precision() as usize;
     let n_prime = compute_n_prime_newton(modulus, w);
     let r_mod_n = compute_r_mod_n(modulus, w);
     let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -1063,7 +1067,8 @@ where
 /// [`basic_montgomery_mod_mul_pr_odd`] that performs the parity proof at
 /// runtime — prefer the `_odd` form to keep the panic path out of the
 /// linked binary.
-pub fn basic_montgomery_mod_mul_pr<T>(a: T, b: T, modulus: T) -> Option<T>
+#[cfg(test)] // retained as differential test oracle; absent from the shipped surface
+pub(crate) fn basic_montgomery_mod_mul_pr<T>(a: T, b: T, modulus: T) -> Option<T>
 where
     T: Copy
         + const_num_traits::Zero
@@ -1075,7 +1080,9 @@ where
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + Parity,
+        + Parity
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_mul_pr_odd(a, b, m))
 }
@@ -1096,7 +1103,9 @@ where
         + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::Rem<Output = T>
-        + core::ops::ShrAssign<usize>,
+        + core::ops::ShrAssign<usize>
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     let m = modulus.get();
     basic_montgomery_mod_exp_pr_odd(reduce_mod(base, m), exponent, modulus)
@@ -1122,14 +1131,16 @@ where
         + const_num_traits::WrappingSub<Output = T>
         + Parity
         + core::ops::Rem<Output = T>
-        + core::ops::ShrAssign<usize>,
+        + core::ops::ShrAssign<usize>
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_odd(base, exponent, m))
 }
 
 /// Complete Montgomery modular exponentiation (Basic, pre-reduced,
 /// proven-odd modulus). **Infallible.** Precondition: `base < modulus`.
-pub fn basic_montgomery_mod_exp_pr_odd<T>(base: T, exponent: T, modulus: Odd<T>) -> T
+pub(crate) fn basic_montgomery_mod_exp_pr_odd<T>(base: T, exponent: T, modulus: Odd<T>) -> T
 where
     T: Copy
         + const_num_traits::Zero
@@ -1142,10 +1153,12 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + Parity
-        + core::ops::ShrAssign<usize>,
+        + core::ops::ShrAssign<usize>
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     let modulus = modulus.get();
-    let w = type_bit_width::<T>();
+    let w = modulus.bits_precision() as usize;
     let n_prime = compute_n_prime_newton(modulus, w);
     let r_mod_n = compute_r_mod_n(modulus, w);
     let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -1176,7 +1189,8 @@ where
 /// Precondition: `base < modulus`. No `Rem` bound. Returns None only if
 /// modulus is even or zero. Thin wrapper around
 /// [`basic_montgomery_mod_exp_pr_odd`].
-pub fn basic_montgomery_mod_exp_pr<T>(base: T, exponent: T, modulus: T) -> Option<T>
+#[cfg(test)] // retained as differential test oracle; absent from the shipped surface
+pub(crate) fn basic_montgomery_mod_exp_pr<T>(base: T, exponent: T, modulus: T) -> Option<T>
 where
     T: Copy
         + const_num_traits::Zero
@@ -1189,7 +1203,9 @@ where
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
         + Parity
-        + core::ops::ShrAssign<usize>,
+        + core::ops::ShrAssign<usize>
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_pr_odd(base, exponent, m))
 }
@@ -1216,7 +1232,8 @@ where
 ///
 /// Complete Montgomery modular exponentiation (Basic, CT, pre-reduced,
 /// proven-odd modulus). **Infallible.** Precondition: `base < modulus`.
-pub fn basic_montgomery_mod_exp_pr_odd_ct<T>(base: T, exponent: T, modulus: Odd<T>) -> T
+#[cfg(test)] // retained as differential test oracle; absent from the shipped surface
+pub(crate) fn basic_montgomery_mod_exp_pr_odd_ct<T>(base: T, exponent: T, modulus: Odd<T>) -> T
 where
     T: Copy
         + const_num_traits::Zero
@@ -1232,10 +1249,12 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::BitAnd<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeLess,
+        + subtle::ConstantTimeLess
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     let modulus = modulus.get();
-    let w = type_bit_width::<T>();
+    let w = modulus.bits_precision() as usize;
     let n_prime = compute_n_prime_newton(modulus, w);
     let r_mod_n = compute_r_mod_n(modulus, w);
     let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -1248,10 +1267,12 @@ where
 
     let mut result = one_mont;
 
-    // Constant-time square-and-multiply, MSB to LSB, fixed iteration count = w.
-    // Always squares; always computes the multiply; conditionally selects.
+    // Constant-time square-and-multiply, MSB to LSB. Iteration count is the
+    // exponent width (public shape); equals w on a fixed carrier, tracks the
+    // exponent independently of the modulus R width on a runtime-len carrier.
+    let exp_bits = exponent.bits_precision() as usize;
     let one = T::one();
-    for i in (0..w).rev() {
+    for i in (0..exp_bits).rev() {
         // Always square
         result = wide_montgomery_mul_ct(result, result, modulus, n_prime);
 
@@ -1271,7 +1292,8 @@ where
 
 /// Returns None if modulus is even or zero. Thin wrapper around
 /// [`basic_montgomery_mod_exp_pr_odd_ct`].
-pub fn basic_montgomery_mod_exp_pr_ct<T>(base: T, exponent: T, modulus: T) -> Option<T>
+#[cfg(test)] // retained as differential test oracle; absent from the shipped surface
+pub(crate) fn basic_montgomery_mod_exp_pr_ct<T>(base: T, exponent: T, modulus: T) -> Option<T>
 where
     T: Copy
         + const_num_traits::Zero
@@ -1288,7 +1310,9 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::BitAnd<Output = T>
         + subtle::ConditionallySelectable
-        + subtle::ConstantTimeLess,
+        + subtle::ConstantTimeLess
+        + const_num_traits::BitsPrecision
+        + const_num_traits::WithPrecision,
 {
     Odd::new(modulus).map(|m| basic_montgomery_mod_exp_pr_odd_ct(base, exponent, m))
 }
@@ -1296,7 +1320,21 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use const_num_traits::BitsPrecision;
     use const_num_traits::Ct;
+
+    // The narrow REDC's `a_mont + m*N` can carry past the carrier even after
+    // `m*N` fits: N=17, R=32 (r_bits=5), n'=15 → from_mont(1) needs 256, which
+    // overflows u8 (must panic); a u16 holds it and reduces to R⁻¹ = 8.
+    #[test]
+    fn from_montgomery_narrow_carrier_lost_carry_panics() {
+        let overflowed = std::panic::catch_unwind(|| basic_from_montgomery(1u8, 17u8, 15u8, 5));
+        assert!(
+            overflowed.is_err(),
+            "u8 REDC overflow must panic, not silently corrupt to 0"
+        );
+        assert_eq!(basic_from_montgomery(1u16, 17u16, 15u16, 5), 8u16);
+    }
     use fixed_bigint::FixedUInt;
 
     // -- Old basic_mont tests (param computation, N' methods, etc.) ----------
@@ -1592,14 +1630,6 @@ mod tests {
     // -- Wide REDC helper tests (moved from wide_mont.rs) --------------------
 
     #[test]
-    fn test_type_bit_width() {
-        assert_eq!(type_bit_width::<u8>(), 8);
-        assert_eq!(type_bit_width::<u16>(), 16);
-        assert_eq!(type_bit_width::<u32>(), 32);
-        assert_eq!(type_bit_width::<u64>(), 64);
-    }
-
-    #[test]
     fn test_mod_double() {
         // Normal case: 5+5=10, 10 < 13 -> 10
         assert_eq!(mod_double(5u8, 13), 10);
@@ -1663,7 +1693,7 @@ mod tests {
     #[test]
     fn test_wide_montgomery_roundtrip() {
         let modulus = 13u8;
-        let w = type_bit_width::<u8>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -1678,7 +1708,7 @@ mod tests {
     #[test]
     fn test_wide_montgomery_roundtrip_u32() {
         let modulus = 0xFFFF_FFF1u32; // large odd u32
-        let w = type_bit_width::<u32>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -1824,7 +1854,7 @@ mod tests {
         let modulus = !U128::from(0u64) - U128::from(58u64); // 2^128 - 59 (odd)
 
         // Round-trip test via wide helpers directly
-        let w = type_bit_width::<U128>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -2061,7 +2091,7 @@ mod tests {
     #[test]
     fn test_wide_mul_acc_dot_product_u32_mlkem_q() {
         let modulus = 3329u32;
-        let w = type_bit_width::<u32>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r2 = compute_r2_mod_n(compute_r_mod_n(modulus, w), modulus, w);
         let to_mont = |x: u32| {
@@ -2098,7 +2128,7 @@ mod tests {
         type U128Ct = FixedUInt<u32, 4, Ct>;
 
         let modulus = !U128::from(0u64) - U128::from(58u64);
-        let w = type_bit_width::<U128>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let modulus_ct: U128Ct = modulus.into();
         let n_prime_ct: U128Ct = n_prime.into();

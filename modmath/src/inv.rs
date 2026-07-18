@@ -25,37 +25,58 @@ function inverse(a, n)
 /// # Modular Inverse (Strict)
 /// Most constrained version that works with references. Requires
 /// reference-based operations for division and subtraction.
+///
+/// # Panics
+///
+/// Panics if `T` is too narrow to hold the extended-GCD intermediates
+/// (checked coefficient arithmetic overflows) — a carrier-precondition
+/// violation, distinct from the `None` return for a non-invertible input.
 pub fn strict_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
+    // Checked mul/add throughout (see `basic_mod_inv`): both the `Signed`
+    // coefficients and the raw `T` r-sequence refuse to rely on `*`'s
+    // implementation-defined overflow.
     T: const_num_traits::Zero
         + const_num_traits::One
         + PartialEq
-        + core::ops::Add<Output = T>
+        + const_num_traits::CheckedAdd<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
         + core::ops::Sub<Output = T>
+        + const_num_traits::WithPrecision
         + core::cmp::PartialOrd,
-    for<'a> T: core::ops::Mul<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
+    for<'a> T: core::ops::Sub<&'a T, Output = T>
         + core::ops::Add<&'a T, Output = T>
         + core::cmp::PartialOrd,
     for<'a> &'a T: core::ops::Div<&'a T, Output = T> + core::ops::Sub<T, Output = T>,
 {
-    let mut t = Signed::new(T::zero(), false);
-    let mut new_t = Signed::new(T::one(), false);
+    // Seed the signed coefficients at the modulus width: on a runtime-width
+    // carrier `T::zero()` is width 0, and the signed magnitude arithmetic
+    // (canonicalization, magnitude subtraction) misbehaves when a width-0
+    // magnitude meets field-width values. `zero_with_precision_of` establishes
+    // the ring width; identity on fixed-width carriers.
+    let mut t = Signed::new(T::zero_with_precision_of(modulus), false);
+    let mut new_t = Signed::new(T::one_with_precision_of(modulus), false);
     // makes a clone of modulus
-    let mut r = T::zero() + modulus;
-    let mut new_r = a;
+    let mut r = T::zero_with_precision_of(modulus) + modulus;
+    // Widen `a` to the modulus width too (as constrained/basic do): a narrow
+    // `new_r` overflows `checked_mul(quotient2)` once `width(a) < width(modulus)`.
+    let mut new_r = a.widen_to_precision_of(modulus);
 
     while new_r != T::zero() {
         let quotient = &r / &new_r;
+        // strict avoids a `Clone` bound: duplicate `quotient` via the same
+        // reference-add trick used for `r`/`t`, so each coefficient update can
+        // consume an owned copy through the checked multiply.
+        let quotient2 = T::zero_with_precision_of(modulus) + &quotient;
 
         // clone
-        let tmp_t = Signed::new(T::zero(), false) + &new_t;
-        new_t = t - new_t * &quotient;
+        let tmp_t = Signed::new(T::zero_with_precision_of(modulus), false) + &new_t;
+        new_t = t - new_t * quotient;
         t = tmp_t;
 
         // clone
-        let tmp_r = T::zero() + &new_r;
-        new_r = r - new_r * &quotient;
+        let tmp_r = T::zero_with_precision_of(modulus) + &new_r;
+        new_r = r - new_r.checked_mul(quotient2).expect(signed::OVERFLOW_MSG);
         r = tmp_r;
     }
 
@@ -76,23 +97,36 @@ where
 /// # Modular Inverse (Constrained)
 /// Version that works with references. Requires Clone and
 /// reference-based operations.
+///
+/// # Panics
+///
+/// Panics if `T` is too narrow to hold the extended-GCD intermediates
+/// (checked coefficient arithmetic overflows) — a carrier-precondition
+/// violation, distinct from the `None` return for a non-invertible input.
 pub fn constrained_mod_inv<T>(a: T, modulus: &T) -> Option<T>
 where
+    // Checked mul/add throughout (see `basic_mod_inv`): both the `Signed`
+    // coefficients and the raw `T` r-sequence refuse to rely on `*`'s
+    // implementation-defined overflow.
     T: const_num_traits::Zero
         + const_num_traits::One
         + Clone
         + PartialEq
         + core::cmp::PartialOrd
-        + core::ops::Add<Output = T>
+        + const_num_traits::CheckedAdd<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>,
+        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Add<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<T, Output = T> + core::ops::Div<&'a T, Output = T>,
 {
-    let mut t = Signed::new(T::zero(), false);
-    let mut new_t = Signed::new(T::one(), false);
+    // Seed the signed coefficients at the modulus width (as strict_mod_inv):
+    // on a runtime-width carrier `T::zero()`/`one()` are minimal-width and the
+    // signed magnitude arithmetic corrupts the inverse otherwise.
+    let mut t = Signed::new(T::zero_with_precision_of(modulus), false);
+    let mut new_t = Signed::new(T::one_with_precision_of(modulus), false);
     let mut r = modulus.clone();
-    let mut new_r = a;
+    let mut new_r = a.widen_to_precision_of(modulus);
 
     while new_r != T::zero() {
         let quotient = &r / &new_r;
@@ -102,7 +136,7 @@ where
         t = tmp_t;
 
         let tmp_r = new_r.clone();
-        new_r = r - new_r * quotient;
+        new_r = r - new_r.checked_mul(quotient).expect(signed::OVERFLOW_MSG);
         r = tmp_r;
     }
 
@@ -119,22 +153,37 @@ where
 
 /// # Modular Inverse (Basic)
 /// Simple version that operates on values and copies them.
+///
+/// # Panics
+///
+/// Panics if `T` is too narrow to hold the extended-GCD intermediates
+/// (checked coefficient arithmetic overflows) — a carrier-precondition
+/// violation, distinct from the `None` return for a non-invertible input.
 pub fn basic_mod_inv<T>(a: T, modulus: T) -> Option<T>
 where
+    // `Signed<T>` uses checked mul/add, not plain `*`/`+` whose overflow on
+    // `T` is implementation-defined. Products fit any carrier sized for the
+    // modulus, so this guards no live overflow — it refuses to rely on
+    // unspecified behavior, turning a too-narrow carrier into a clear panic
+    // rather than a wrong inverse. `Sub` stays plain (smaller from larger).
     T: const_num_traits::Zero
         + const_num_traits::One
         + Copy
         + PartialEq
         + core::ops::Div<Output = T>
-        + core::ops::Add<Output = T>
+        + const_num_traits::CheckedAdd<Output = T>
         + core::ops::Sub<Output = T>
-        + core::ops::Mul<Output = T>
+        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::WithPrecision
         + core::cmp::PartialOrd,
 {
-    let mut t = Signed::new(T::zero(), false);
-    let mut new_t = Signed::new(T::one(), false);
+    // Seed the signed coefficients at the modulus width (as strict_mod_inv):
+    // on a runtime-width carrier `T::zero()`/`one()` are minimal-width and the
+    // signed magnitude arithmetic corrupts the inverse otherwise.
+    let mut t = Signed::new(T::zero_with_precision_of(&modulus), false);
+    let mut new_t = Signed::new(T::one_with_precision_of(&modulus), false);
     let mut r = Signed::new(modulus, false);
-    let mut new_r = Signed::new(a, false);
+    let mut new_r = Signed::new(a.widen_to_precision_of(&modulus), false);
 
     while new_r != Signed::new(T::zero(), false) {
         let quotient = r / new_r;
@@ -294,14 +343,16 @@ mod bnum_inv_tests {
     //         basic: off, // Copy is not implemented, heap
     //     );
 
-    //     inv_test_module!(
-    //         num_bigint_patched,
-    //         num_bigint_patched::BigUint,
-    //         type U256 = num_bigint_patched::BigUint;
-    //         strict: on,
-    //         constrained: on,
-    //         basic: off, // Copy is not implemented, heap
-    //     );
+    // num-bigint `FixedWidthBigUint`: heap carrier, Nct, constrained/strict
+    // only (not `Copy`, so `basic: off`).
+    inv_test_module!(
+        num_bigint_patched,
+        num_bigint_patched::FixedWidthBigUint,
+        type U256 = num_bigint_patched::FixedWidthBigUint;
+        strict: on,
+        constrained: on,
+        basic: off,
+    );
 
     //     inv_test_module!(
     //         ibig,
@@ -337,4 +388,112 @@ mod bnum_inv_tests {
         constrained: on,
         basic: on,
     );
+
+    inv_test_module!(
+        heapless_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
+
+    // Regression for the width-0 seed bug in the EEA inverses: on a runtime-width
+    // carrier (len < CAP) `zero()`/`one()`-seeded coefficients corrupted the
+    // inverse for a large fraction of residues. All three flavors now seed at the
+    // modulus width; cross-check every residue against the u32 oracle.
+    #[test]
+    fn mod_inv_all_flavors_runtime_width_full_range() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        for m in [13u8, 17, 251] {
+            let hm = H::from(m);
+            for a in 1..m {
+                let ha = H::from(a);
+                let want = super::basic_mod_inv(a as u32, m as u32).map(|w| H::from(w as u8));
+                assert_eq!(super::basic_mod_inv(ha, hm), want, "basic inv({a}) mod {m}");
+                assert_eq!(
+                    super::constrained_mod_inv(ha, &hm),
+                    want,
+                    "constrained inv({a}) mod {m}"
+                );
+                assert_eq!(
+                    super::strict_mod_inv(ha, &hm),
+                    want,
+                    "strict inv({a}) mod {m}"
+                );
+            }
+        }
+    }
+
+    // A one-limb value against a multi-limb modulus — the width(a) < width(m)
+    // path the single-limb moduli in the full-range test above can't exercise.
+    #[test]
+    fn strict_mod_inv_narrow_value_multiword_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        // 521 is prime and spans two u8 limbs; each `a` is a single limb.
+        let m = 521u32;
+        let hm = H::from(m); // 2 limbs
+        for a in [2u8, 3, 7, 100, 255] {
+            let ha = H::from(a); // 1 limb — narrower than the modulus
+            let want = super::basic_mod_inv(a as u32, m).map(|w| H::from(w as u16));
+            assert_eq!(super::basic_mod_inv(ha, hm), want, "basic inv({a}) mod {m}");
+            assert_eq!(
+                super::constrained_mod_inv(ha, &hm),
+                want,
+                "constrained inv({a}) mod {m}"
+            );
+            assert_eq!(
+                super::strict_mod_inv(ha, &hm),
+                want,
+                "strict inv({a}) mod {m}"
+            );
+        }
+    }
+
+    // Multi-limb guard for num-bigint's FixedWidthBigUint (const-7 minimized its
+    // width handling): cross-check inv + schoolbook mul against a u128 oracle at
+    // a >1-limb odd modulus. The single-limb macro tests can't see a multi-limb
+    // width regression; this can.
+    #[test]
+    fn num_bigint_multilimb_matches_u128_oracle() {
+        use num_bigint_patched::{BigUint, FixedWidthBigUint as FW};
+        const N: usize = 4; // >= 128 bits even for u32 digits; holds m + EEA headroom
+        let m_u128: u128 = 1_180_591_620_717_411_303_451; // ~2^70, odd, multi-limb
+        let fw = |v: u128| FW::new(BigUint::from(v), N);
+        let m = fw(m_u128);
+        for a in [2u128, 3, 5, 65_537, 999_999_937, m_u128 - 1] {
+            for (label, gotv, wantv) in [
+                (
+                    "strict",
+                    super::strict_mod_inv(fw(a), &m),
+                    super::strict_mod_inv(a, &m_u128),
+                ),
+                (
+                    "constrained",
+                    super::constrained_mod_inv(fw(a), &m),
+                    super::constrained_mod_inv(a, &m_u128),
+                ),
+            ] {
+                match (gotv, wantv) {
+                    (Some(g), Some(w)) => assert_eq!(g, fw(w), "{label} inv({a})"),
+                    (None, None) => {}
+                    (g, w) => {
+                        panic!("{label} inv({a}): FW.is_some={} u128={w:?}", g.is_some())
+                    }
+                }
+            }
+        }
+        // Multi-limb schoolbook mul against the u128 oracle.
+        for (a, b) in [
+            (3u128, 5u128),
+            (123_456_789, 987_654_321),
+            (m_u128 - 1, m_u128 - 2),
+        ] {
+            let got = crate::mul::constrained_mod_mul(fw(a), &fw(b), &m);
+            let want = crate::mul::constrained_mod_mul(a, &b, &m_u128);
+            assert_eq!(got, fw(want), "mul({a},{b})");
+        }
+    }
 }

@@ -49,67 +49,6 @@ pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul as mod_mul;
 #[doc(inline)]
 pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul_odd as mod_mul_odd;
 
-/// Pre-reduced variants. Caller guarantees inputs are in `[0, m)`;
-/// the input `% m` reduction step is skipped.
-pub mod pre_reduced {
-    #[doc(inline)]
-    pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr as mod_exp;
-    #[doc(inline)]
-    pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr_odd as mod_exp_odd;
-    #[doc(inline)]
-    pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul_pr as mod_mul;
-    #[doc(inline)]
-    pub use crate::montgomery::basic_mont::basic_montgomery_mod_mul_pr_odd as mod_mul_odd;
-    #[doc(inline)]
-    pub use crate::montgomery::basic_mont::basic_montgomery_mul_pr as mul;
-    #[doc(inline)]
-    pub use crate::montgomery::basic_mont::basic_to_montgomery_pr as to_mont;
-}
-
-/// Constant-time variants. The complete-pipeline operations with
-/// branchless conditional-subtract finalize via
-/// `subtle::ConditionallySelectable`, removing the operand-magnitude
-/// side-channel on the final reduction step.
-///
-/// **Only pre-reduced entries are exposed.** CT-over-base
-/// requires a CT reduction primitive; `core::ops::Rem` is
-/// hardware-variable on common embedded targets, so any wrapper that
-/// internally reduced via `Rem` would leak the base magnitude.
-/// Callers needing CT-over-base should:
-///
-/// - reduce the base externally via a CT primitive (e.g.
-///   `Field::reduce` on the `Ct` personality, which composes the CT
-///   wide-REDC reduction), then dispatch to
-///   [`pre_reduced::mod_exp`](self::ct::pre_reduced::mod_exp); or
-/// - use the high-level [`Field<T, Ct>::exp`](crate::Field::exp)
-///   surface, which handles reduction + exponentiation as a single
-///   end-to-end CT pipeline.
-///
-/// There is no `mod_mul_ct` here because the underlying source crate
-/// hasn't published one (the CIOS path is the canonical CT-mul entry
-/// point — see
-/// [`cios_montgomery_mul_ct`](crate::montgomery::cios::cios_montgomery_mul_ct)).
-///
-/// # Operator contract
-///
-/// CT entry points never invoke plain `+` / `-` / `*` on the carrier,
-/// and since const-num-traits 0.2 they no longer *bound* them either:
-/// every overflow-relevant operation goes through an explicitly-named
-/// trait (`WrappingAdd`/`WrappingSub`/`WrappingMul`, `BorrowingSub`,
-/// `CtIsZero`, subtle's comparisons), each carrying its own `Output`.
-/// A backend can satisfy the entire CT surface without implementing
-/// `core::ops` arithmetic at all — panicking or mode-dispatched
-/// operator impls elsewhere in the carrier are irrelevant here.
-pub mod ct {
-    /// Pre-reduced CT variants. Precondition: `base < modulus`.
-    pub mod pre_reduced {
-        #[doc(inline)]
-        pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr_ct as mod_exp;
-        #[doc(inline)]
-        pub use crate::montgomery::basic_mont::basic_montgomery_mod_exp_pr_odd_ct as mod_exp_odd;
-    }
-}
-
 /// Wide-REDC primitives at the `R = 2^W` working width — by-value
 /// operands, `Copy`-bound `T`. These are the building blocks the
 /// [`mod_mul`] / [`mod_exp`] pipelines call internally; consumers

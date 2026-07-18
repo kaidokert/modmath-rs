@@ -2,8 +2,8 @@
 //!
 //! Holds the [`NPrimeMethod`] enum (shared by every flavor's
 //! `*_with_method` siblings), the wide-REDC param helpers
-//! ([`compute_n_prime_newton`], [`compute_r_mod_n`], [`compute_r2_mod_n`],
-//! [`type_bit_width`]), and the [`cios`] submodule with the
+//! ([`compute_n_prime_newton`], [`compute_r_mod_n`], [`compute_r2_mod_n`]),
+//! and the [`cios`] submodule with the
 //! interleaved-multiply-and-reduce primitives and their CT siblings.
 //!
 //! The R>N path's per-flavor implementations live in private
@@ -24,17 +24,23 @@ pub(crate) mod strict_mont;
 
 pub mod cios;
 
+/// The R>N schoolbook REDC forms a full-width `m * N` (up to R²) product; if
+/// the carrier can't hold it the reduction would silently wrap into a wrong
+/// result, so the checked multiplies panic instead. Sized moduli should route
+/// through wide-REDC / CIOS, which never forms this intermediate.
+pub(crate) const OVERFLOW_MSG: &str =
+    "montgomery R>N: carrier too narrow for the m*N intermediate; use wide-REDC / CIOS";
+
 // Flavor-neutral items live at this flat path: the NPrimeMethod enum
 // (shared by every flavor's `*_with_method` siblings), the wide-REDC
 // param helpers (`compute_n_prime_newton` etc., generic over any T:
-// WrappingMul + ...), and `type_bit_width`. Flavor-keyed R>N items are
+// WrappingMul + ...). Flavor-keyed R>N items are
 // surfaced through `modmath::{basic,constrained,strict}::montgomery::*`
 // and reach into `basic_mont` / `constrained_mont` / `strict_mont` via
 // the submodule paths instead of this flat re-export.
 #[rustfmt::skip]
 pub use basic_mont::{
     NPrimeMethod,
-    type_bit_width,
     compute_n_prime_newton,
     compute_r_mod_n,
     compute_r_mod_n_ct,
@@ -810,8 +816,8 @@ mod backend_montgomery_tests {
     montgomery_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: off, // fork gap: Montgomery n-prime path needs more &T reference ops than inv
-        constrained: off, // fork gap: Montgomery n-prime path needs more &T reference ops than inv
+        strict: off, // fork: n-prime path needs more &T reference ops (&T op T / &T op &T)
+        constrained: off, // fork: n-prime path needs more &T reference ops (&T op T / &T op &T)
         basic: on,
     );
 
@@ -824,14 +830,22 @@ mod backend_montgomery_tests {
     //         basic: off, // Copy is not implemented, heap allocation
     //     );
 
-    //     montgomery_test_module!(
-    //         num_bigint_patched,
-    //         num_bigint_patched::BigUint,
-    //         type U256 = num_bigint_patched::BigUint;
-    //         strict: off, // Complex trait bounds for Montgomery operations not fully compatible
-    //         constrained: on, // Fixed trait bounds - now works with patched libraries
-    //         basic: off, // Copy is not implemented, heap allocation
-    //     );
+    // num-bigint `FixedWidthBigUint`: heap carrier, Nct. `basic: off` — not
+    // `Copy`. `strict: off` — the *test macro's* strict rows assume `Copy`
+    // (they reuse `a`/`base` after moving into the mont fn, and the
+    // param-compute assertions do `% *modulus`), so they don't compile for a
+    // non-`Copy` carrier. The strict library free-functions are `Clone`-bounded
+    // and fine; this is a test-harness limitation, not a library one, and
+    // `constrained` already runs the full param-compute / mont-mul / mont-exp
+    // surface on the heap carrier.
+    montgomery_test_module!(
+        num_bigint_patched,
+        num_bigint_patched::FixedWidthBigUint,
+        type U256 = num_bigint_patched::FixedWidthBigUint;
+        strict: off,
+        constrained: on,
+        basic: off,
+    );
 
     //     montgomery_test_module!(
     //         ibig,
@@ -863,5 +877,21 @@ mod backend_montgomery_tests {
         strict: on,
         constrained: on,
         basic: on,
+    );
+
+    montgomery_test_module!(
+        heapless_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
+        // Off. The width bug is fixed (the precompute reads
+        // `modulus.bits_precision()`, not `size_of*8`), and HeaplessBigInt's CT
+        // montgomery is the CIOS path, covered by `cios::heapless_cios_montmul`
+        // (single- and multi-word). This schoolbook row stays off for two
+        // reasons unrelated to that fix: `test_montgomery_parameter_computation`
+        // verifies via plain `*`/`%` on the carrier (shape-panics), and the
+        // Nct wide-REDC multiply is not width-uniform on a runtime-len carrier.
+        strict: off,
+        constrained: off,
+        basic: off,
     );
 }
