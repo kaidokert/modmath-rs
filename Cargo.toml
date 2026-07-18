@@ -31,11 +31,3 @@ panic = "abort"
 debug = "line-tables-only"
 overflow-checks = false
 incremental = false
-
-# Transitional: bnum/crypto-bigint/num-bigint test-matrix forks still git-pin
-# const-num-traits to the alpha tag (crate-version 0.2.1, git source), which
-# hard-conflicts with the crates.io 0.2.1 the lib now uses. Redirect the git
-# source to the published crate so the whole graph unifies on one registry
-# const-num-traits. Remove once those forks re-pin to crates.io directly.
-[patch."https://github.com/kaidokert/num-traits.git"]
-const-num-traits = "0.2.1"

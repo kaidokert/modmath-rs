@@ -36,12 +36,12 @@ fixed-bigint = { version = "0.6.0", default-features = false, features = ["cios"
 # crypto-bigint, and num-bigint (heap-backed `FixedWidthBigUint`) are all
 # enabled below. Upstream (unforked) crates stay disabled (no const-num-traits
 # impls upstream); ibig is blocked architecturally.
-bnum_patched = { package = "bnum", git = "https://github.com/kaidokert/bnum.git", tag = "v0.14.4-const-17", default-features = false, features = ["zeroize"] }
-crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.7.5-const-17", default-features = false, features = ["zeroize"] }
+bnum_patched = { package = "bnum", git = "https://github.com/kaidokert/bnum.git", tag = "v0.14.4-const-18", default-features = false, features = ["zeroize"] }
+crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.7.5-const-18", default-features = false, features = ["zeroize"] }
 # num-bigint = { package = "num-bigint", version = "0.4"}
 # Heap-backed carrier (`FixedWidthBigUint`): Nct, constrained/strict only (not
 # `Copy`). Uses its own `num-traits` (default `std`) — no default-features override.
-num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git", tag = "v0.4.4-const-7" }
+num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git", tag = "v0.4.4-const-8" }
 # ibig = "0.3"
 # ibig_patched = { package = "ibig", git = "https://github.com/kaidokert/ibig-rs.git" , tag = "v0.3.6_patch" }
 paste = "1"
