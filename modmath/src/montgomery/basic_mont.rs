@@ -185,7 +185,6 @@ pub fn basic_compute_montgomery_params_with_method<T>(
 where
     T: Copy
         + const_num_traits::Zero
-        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -234,7 +233,6 @@ pub fn basic_compute_montgomery_params<T>(modulus: T) -> Option<(T, T, T, usize)
 where
     T: Copy
         + const_num_traits::Zero
-        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -319,9 +317,13 @@ where
     let m_times_n = m
         .checked_mul(modulus)
         .expect(crate::montgomery::OVERFLOW_MSG);
+    // Same lost-carry guard as the constrained/strict siblings, via this
+    // flavor's `Copy`/`Add` profile (no wrapping/overflowing add without a
+    // bound cascade): on an Nct carrier `+` panics on overflow before the
+    // assert; on a Ct carrier it wraps and `sum < a_mont` catches it. Either
+    // way a dropped carry (`checked_mul` above guards only `m*N`) panics
+    // rather than silently corrupting the reduction.
     let sum = a_mont + m_times_n;
-    // `+` wraps on a Ct carrier (panics on Nct); a dropped carry corrupts the
-    // reduction, so catch the wrap (sum < a_mont) and panic per the same contract.
     assert!(sum >= a_mont, "{}", crate::montgomery::OVERFLOW_MSG);
     let t = sum >> r_bits;
 

@@ -784,12 +784,14 @@ where
 
     /// Modular exponentiation — constant-time over `exp`.
     ///
-    /// Implements a fixed-iteration Montgomery ladder over the exponent's
-    /// declared width (`exp.bits_precision()` — a public shape, independent of
-    /// the secret value). Both square and multiply are
-    /// performed every iteration; the result is selected branchlessly. Loop
-    /// count does not depend on `exp`; per-iteration timing does not depend
-    /// on the bit pattern.
+    /// Implements a fixed-iteration Montgomery ladder over
+    /// `max(exp.bits_precision(), modulus.bits_precision())` bits — at least the
+    /// modulus width, both public shapes. The modulus floor matters on a
+    /// runtime-width carrier (`HeaplessBigInt`), where a value's `bits_precision`
+    /// tracks its length: without it a narrow secret exponent would shorten the
+    /// loop and leak its magnitude. Both square and multiply run every iteration
+    /// and the result is selected branchlessly, so the loop count and
+    /// per-iteration timing depend only on public widths, not the secret value.
     pub fn exp(&self, base: &Residue<'_, T, Ct>, exp: &T) -> Residue<'_, T, Ct>
     where
         T: CiosMontMulCt
@@ -799,7 +801,9 @@ where
             + core::ops::BitAnd<Output = T>
             + const_num_traits::BitsPrecision,
     {
-        let w = (*exp).bits_precision() as usize;
+        // Floor at the modulus width so a narrow secret exponent on a
+        // runtime-width carrier can't shorten the loop (a timing leak).
+        let w = ((*exp).bits_precision()).max(self.modulus.bits_precision()) as usize;
         let one = T::one();
         let mut result = self.r_mod_n;
 

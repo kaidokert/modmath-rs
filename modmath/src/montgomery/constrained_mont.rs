@@ -144,7 +144,6 @@ pub fn constrained_compute_montgomery_params_with_method<T>(
 where
     T: Clone
         + const_num_traits::Zero
-        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -201,7 +200,6 @@ pub fn constrained_compute_montgomery_params<T>(modulus: &T) -> Option<(T, T, T,
 where
     T: Clone
         + const_num_traits::Zero
-        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -345,7 +343,6 @@ pub fn constrained_montgomery_mod_mul_with_method<T>(
 where
     T: Clone
         + const_num_traits::Zero
-        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -388,7 +385,6 @@ pub fn constrained_montgomery_mod_mul<T>(a: T, b: &T, modulus: &T) -> Option<T>
 where
     T: Clone
         + const_num_traits::Zero
-        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -427,7 +423,6 @@ pub fn constrained_montgomery_mod_exp_with_method<T>(
 where
     T: Clone
         + const_num_traits::Zero
-        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
@@ -493,7 +488,6 @@ pub fn constrained_montgomery_mod_exp<T>(base: T, exponent: &T, modulus: &T) -> 
 where
     T: Clone
         + const_num_traits::Zero
-        + core::ops::Mul<Output = T>
         + const_num_traits::One
         + const_num_traits::CheckedAdd<Output = T>
         + const_num_traits::CheckedMul<Output = T>
