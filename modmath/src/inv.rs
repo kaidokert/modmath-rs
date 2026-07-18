@@ -58,7 +58,9 @@ where
     let mut new_t = Signed::new(T::one_with_precision_of(modulus), false);
     // makes a clone of modulus
     let mut r = T::zero_with_precision_of(modulus) + modulus;
-    let mut new_r = a;
+    // Widen `a` to the modulus width too (as constrained/basic do): a narrow
+    // `new_r` overflows `checked_mul(quotient2)` once `width(a) < width(modulus)`.
+    let mut new_r = a.widen_to_precision_of(modulus);
 
     while new_r != T::zero() {
         let quotient = &r / &new_r;
@@ -421,6 +423,35 @@ mod bnum_inv_tests {
                     "strict inv({a}) mod {m}"
                 );
             }
+        }
+    }
+
+    // Regression: value narrower than a multi-limb modulus. `strict_mod_inv`
+    // seeded `new_r = a` at `a`'s (narrow) width while the coefficients were at
+    // modulus width, so `new_r.checked_mul(quotient)` overflowed and panicked
+    // once width(a) < width(modulus). The full-range test above can't see it —
+    // its moduli are single-limb, so a and m share a width.
+    #[test]
+    fn strict_mod_inv_narrow_value_multiword_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        // 521 is prime and spans two u8 limbs; each `a` is a single limb.
+        let m = 521u32;
+        let hm = H::from(m); // 2 limbs
+        for a in [2u8, 3, 7, 100, 255] {
+            let ha = H::from(a); // 1 limb — narrower than the modulus
+            let want = super::basic_mod_inv(a as u32, m).map(|w| H::from(w as u16));
+            assert_eq!(super::basic_mod_inv(ha, hm), want, "basic inv({a}) mod {m}");
+            assert_eq!(
+                super::constrained_mod_inv(ha, &hm),
+                want,
+                "constrained inv({a}) mod {m}"
+            );
+            assert_eq!(
+                super::strict_mod_inv(ha, &hm),
+                want,
+                "strict inv({a}) mod {m}"
+            );
         }
     }
 

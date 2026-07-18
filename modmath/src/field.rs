@@ -344,7 +344,11 @@ where
     /// The additive identity (0 in Montgomery form is 0).
     pub fn zero(&self) -> Residue<'_, T, P> {
         Residue {
-            mont: T::zero(),
+            // Seed at the ring width (`one()` is already `r_mod_n`, ring-width):
+            // a minimal-width `T::zero()` would be a narrow residue, which a
+            // width-sensitive op (e.g. CIOS mul) could misread on a runtime-width
+            // carrier — the seed hazard this surface exists to preclude.
+            mont: T::zero_with_precision_of(&self.modulus),
             _brand: PhantomData,
             _p: PhantomData,
         }
@@ -1056,18 +1060,21 @@ pub trait FieldOps {
     /// The exponent is a **magnitude** (consumed as bits by square-and-multiply),
     /// so it stays a raw `Backend`, not a residue.
     fn exp<'f>(&'f self, base: &Self::Residue<'f>, e: &Self::Backend) -> Self::Residue<'f>;
-    /// Modular inverse, strategy-neutral: Montgomery backends compute it by
-    /// Fermat (`a^(m−2)`), schoolbook by extended Euclid — the trait names the
-    /// operation, not either algorithm.
+    /// General modular inverse — correct for any modulus, prime or composite.
+    /// Every backend uses a general algorithm (extended Euclid on Nct, safegcd
+    /// on Ct); the prime-only Fermat fast path is *not* used here (it would
+    /// return a wrong value for composite moduli). Callers that know the modulus
+    /// is prime and want the Fermat ladder use the inherent
+    /// [`Field::inv_fermat`].
     ///
     /// **CT contract.** The returned *value* is computed under the backend's
     /// personality (constant-time on a `Ct` backend). The `Option` itself is
     /// **not** constant-time: `None` is observable and means the operand is
-    /// non-invertible, i.e. `≡ 0` (or shares a factor with a composite modulus)
-    /// — a negligible-probability event callers already handle by resampling
-    /// (e.g. an ECDSA nonce). A caller that must not branch even on that bit
-    /// uses the inherent [`Field::inv_fermat`] on a `Ct` field, which returns a
-    /// masked [`subtle::CtOption`] and never collapses the existence flag.
+    /// non-invertible (`≡ 0`, or shares a factor with a composite modulus) — a
+    /// negligible-probability event callers already handle by resampling (e.g.
+    /// an ECDSA nonce). A caller that must not branch even on that bit uses the
+    /// inherent `Ct` inverse ([`Field::inv_safegcd_ct`]), which returns a masked
+    /// [`subtle::CtOption`] and never collapses the existence flag.
     fn inv<'f>(&'f self, a: &Self::Residue<'f>) -> Option<Self::Residue<'f>>;
     fn one(&self) -> Self::Residue<'_>;
     fn zero(&self) -> Self::Residue<'_>;
@@ -1135,7 +1142,11 @@ where
         self.0.exp(base, e)
     }
     fn inv<'f>(&'f self, a: &Residue<'f, T, Nct>) -> Option<Residue<'f, T, Nct>> {
-        self.0.inv_fermat(a)
+        // Extended Euclid, not Fermat: `inv` is a general modular inverse, so it
+        // must be correct for composite moduli too (Fermat's `a^(m-2)` is only
+        // valid for prime `m`). The inherent `Field::inv_fermat` keeps the
+        // prime-only fast path for callers that know the modulus is prime.
+        self.0.inv_eea(a)
     }
     fn one(&self) -> Residue<'_, T, Nct> {
         self.0.one()
@@ -1173,7 +1184,10 @@ where
         + core::ops::BitAnd<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingMul<Output = T>
-        + const_num_traits::WrappingSub<Output = T>,
+        + const_num_traits::WrappingSub<Output = T>
+        // `inv` routes to `inv_safegcd_ct` (composite-correct CT inverse).
+        + core::ops::BitOr<Output = T>,
+    <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
 {
     type Backend = T;
     type Residue<'f>
@@ -1197,10 +1211,12 @@ where
         self.0.exp(base, e)
     }
     fn inv<'f>(&'f self, a: &Residue<'f, T, Ct>) -> Option<Residue<'f, T, Ct>> {
-        // Collapses the CtOption existence bit (operand ≡ 0) per the trait's CT
-        // contract; the inverse value itself stays constant-time. Callers who
-        // must not branch on existence use the inherent `Field::inv_fermat`.
-        self.0.inv_fermat(a).into_option()
+        // safegcd, not Fermat: `inv` is a general modular inverse (correct for
+        // composite moduli), and safegcd is the CT general inverse. Collapses the
+        // CtOption existence bit (operand non-invertible) per the trait's CT
+        // contract; the inverse value stays constant-time. Callers who must not
+        // branch on existence use the inherent `Field::inv_safegcd_ct`.
+        self.0.inv_safegcd_ct(a).into_option()
     }
     fn one(&self) -> Residue<'_, T, Ct> {
         self.0.one()
@@ -1336,7 +1352,13 @@ where
         self.wrap(crate::sub::basic_mod_sub_pr(a.val, b.val, self.modulus))
     }
     fn exp<'f>(&'f self, base: &SchoolbookResidue<'f, T>, e: &T) -> SchoolbookResidue<'f, T> {
-        self.wrap(crate::exp::basic_mod_exp_pr(base.val, *e, self.modulus))
+        // Re-establish ring width: `basic_mod_exp_pr` returns a minimal-width
+        // `T::one()` for exponent 0 (loop skipped), which would be a narrow
+        // residue on a runtime-width carrier.
+        self.wrap(
+            crate::exp::basic_mod_exp_pr(base.val, *e, self.modulus)
+                .widen_to_precision_of(&self.modulus),
+        )
     }
     fn inv<'f>(&'f self, a: &SchoolbookResidue<'f, T>) -> Option<SchoolbookResidue<'f, T>> {
         // Extended Euclid, not Fermat — the strategy-neutral `inv` names the op.
@@ -2311,6 +2333,40 @@ mod tests {
         // via the FieldFor selector
         check(&<NctF as FieldFor>::field(NctF::from(13u8)).unwrap());
         check(&<CtF as FieldFor>::field(CtF::from(13u8)).unwrap());
+    }
+
+    // `FieldOps::inv` is a general modular inverse, so it must be correct on a
+    // composite (odd) modulus too. The Montgomery backends route to EEA (Nct) /
+    // safegcd (Ct), not Fermat — Fermat's `2^(15-2) mod 15 = 2` is wrong;
+    // `2 * 8 ≡ 1 (mod 15)`. Schoolbook (EEA) is the oracle.
+    #[test]
+    fn fieldops_inv_composite_modulus_agrees() {
+        type NctF = FixedUInt<u8, 4>;
+        type CtF = FixedUInt<u8, 4, Ct>;
+
+        let nct = FieldView(Field::<NctF>::new(NctF::from(15u8)).unwrap());
+        let a = nct.reduce(&NctF::from(2u8));
+        let inv = nct.inv(&a).expect("2 invertible mod 15");
+        assert_eq!(
+            nct.into_raw(&nct.mul(&a, &inv)),
+            NctF::from(1u8),
+            "Nct a·inv"
+        );
+        assert_eq!(nct.into_raw(&inv), NctF::from(8u8), "Nct inv(2 mod 15)");
+
+        let ct = FieldView(Field::<CtF, Ct>::new(CtF::from(15u8)).unwrap());
+        let a = ct.reduce(&CtF::from(2u8));
+        let inv = ct.inv(&a).expect("2 invertible mod 15");
+        assert_eq!(ct.into_raw(&ct.mul(&a, &inv)), CtF::from(1u8), "Ct a·inv");
+        assert_eq!(ct.into_raw(&inv), CtF::from(8u8), "Ct inv(2 mod 15)");
+
+        let sb = SchoolbookField::new(NctF::from(15u8)).unwrap();
+        let sa = sb.reduce(&NctF::from(2u8));
+        assert_eq!(
+            sb.into_raw(&sb.inv(&sa).expect("2 invertible mod 15")),
+            NctF::from(8u8),
+            "schoolbook inv(2 mod 15)"
+        );
     }
 
     // Multi-word modulus (len 8) held sub-CAP (CAP 16): the ed25519 field

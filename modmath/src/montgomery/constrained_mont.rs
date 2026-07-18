@@ -288,7 +288,12 @@ where
     let m_times_n = m
         .checked_mul(modulus.clone())
         .expect(crate::montgomery::OVERFLOW_MSG);
-    let temp_sum = a_mont.wrapping_add(m_times_n);
+    let temp_sum = a_mont.clone().wrapping_add(m_times_n);
+    // `wrapping_add` silently drops the carry; a lost carry corrupts the
+    // reduction (the `checked_mul` above guards only `m*N`). Catch the wrap
+    // (sum < a_mont) and panic per the narrow-path contract — use wide-REDC
+    // for overflow-free reduction.
+    assert!(temp_sum >= a_mont, "{}", crate::montgomery::OVERFLOW_MSG);
     let t = temp_sum >> r_bits;
 
     // Step 3: Final reduction
