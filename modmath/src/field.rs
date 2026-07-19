@@ -1403,7 +1403,6 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
-        + PartialEq
         + PartialOrd
         + crate::NonCt
         + const_num_traits::WithPrecision
