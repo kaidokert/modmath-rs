@@ -19,6 +19,8 @@ Implements:
 - Unsigned modular Montgomery exponentiation
 - Constant-time variants of the Montgomery and inverse paths, behind a
   `Ct` typestate
+- A width-safe `Field<T>` context and its `Residue` type (Nct + `Ct`
+  typestate) wrapping the above
 
 The code isn't intended to be fast or efficient, just as generic as possible
 to work with multiple implementations.
