@@ -44,8 +44,8 @@ Five members:
 - **`panic-free-audit`** — `#[no_mangle]` wrappers over the CT surface
   shaped like a deployed consumer: no `unwrap`, `Odd::new_unchecked` at
   the trust boundary, `CtOption` results observed through `black_box`
-  instead of extracted. `check.sh` cross-builds the staticlib and
-  asserts no `core::panicking` machinery was synthesized — for CT code
+  instead of extracted. The shared krabi-caliper panic audit cross-builds the
+  staticlib and asserts no reachable `core::panicking` call was synthesized — for CT code
   a reachable panic is both a DoS edge and a timing oracle. Its first
   run caught a live one: safegcd's runtime-amount `one << (n_bits − 1)`
   kept the multi-limb shift impl's bounds-check panic alive through
