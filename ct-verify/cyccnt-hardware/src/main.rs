@@ -95,13 +95,13 @@ unsafe extern "C" {
         np: *const [u32; 8],
         out: *mut [u32; 8],
     );
-    fn ct_fix__mod_exp_pr_odd__u64__N1(
+    fn ct_fix__field_exp__u64__N1(
         base: *const u64,
         e: *const u64,
         m: *const u64,
         out: *mut u64,
     );
-    fn ct_fix__mod_exp_pr_odd__fb32__N8(
+    fn ct_fix__field_exp__fb32__N8(
         base: *const [u32; 8],
         e: *const [u32; 8],
         m: *const [u32; 8],
@@ -227,7 +227,7 @@ fn fixture_cios256(v: &Mont256) -> bool {
 #[inline(never)]
 fn fixture_modexp64(v: &Exp64) -> bool {
     let mut out = 0;
-    unsafe { ct_fix__mod_exp_pr_odd__u64__N1(&v.base, &v.exp, &v.modulus, &mut out) };
+    unsafe { ct_fix__field_exp__u64__N1(&v.base, &v.exp, &v.modulus, &mut out) };
     let _ = black_box(out);
     true
 }
@@ -235,7 +235,7 @@ fn fixture_modexp64(v: &Exp64) -> bool {
 #[inline(never)]
 fn fixture_modexp256(v: &Exp256) -> bool {
     let mut out = [0; 8];
-    unsafe { ct_fix__mod_exp_pr_odd__fb32__N8(&v.base, &v.exp, &v.modulus, &mut out) };
+    unsafe { ct_fix__field_exp__fb32__N8(&v.base, &v.exp, &v.modulus, &mut out) };
     let _ = black_box(out);
     true
 }
