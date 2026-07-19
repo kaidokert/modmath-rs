@@ -1,6 +1,6 @@
 [package]
 name = "modmath"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 description = """
 Modular math implemented with traits.
@@ -16,23 +16,24 @@ keywords = ["numerics", "bignum"]
 c0nst = { version = "0.2", optional = true }
 subtle = { version = "2.6", default-features = false }
 zeroize = { version = "1", default-features = false, optional = true }
-const-num-traits = { version = "0.2", default-features = false, features = ["ct"] }
+const-num-traits = { version = "0.2.1", default-features = false, features = ["ct"] }
 # Leaf crate + registry-only (no path) so `CiosRowOps` has exactly one
 # identity everywhere — modmath, its test binaries, and fixed-bigint's
 # dev-dep all resolve the same copy.
 modmath-cios = { version = "0.1" }
 
 [dev-dependencies]
-fixed-bigint = { version = "0.5", default-features = false, features = ["cios"] }
-# Third-party bigint backends. The `_patched` kaidokert forks carry
-# const-num-traits 0.2 + modmath-cios impls (proven end-to-end in the
-# krabitls backend-swap experiments), so their test matrices are live
-# again. Upstream (unforked) crates and num-bigint/ibig stay disabled:
-# no const-num-traits impls upstream; ibig is blocked architecturally.
-bnum_patched = { package = "bnum", git = "https://github.com/kaidokert/bnum.git", tag = "v0.14.4-const-9", default-features = false }
-crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.7.5-const-10", default-features = false }
+# `zeroize` lets the test matrix compile under `--features zeroize`, which gates
+# `MontStorage` on `Zeroize`.
+fixed-bigint = { version = "0.6.0", default-features = false, features = ["cios", "zeroize"] }
+# `_patched` forks add the const-num-traits + modmath-cios impls upstream lacks,
+# so these backends can join the test matrix. ibig is blocked architecturally.
+bnum_patched = { package = "bnum", git = "https://github.com/kaidokert/bnum.git", tag = "v0.14.4-const-19", default-features = false, features = ["zeroize"] }
+crypto-bigint_patched = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.7.5-const-19", default-features = false, features = ["zeroize"] }
 # num-bigint = { package = "num-bigint", version = "0.4"}
-# num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git" , tag = "v0.4.6_patch" }
+# Heap-backed carrier (`FixedWidthBigUint`): Nct, constrained/strict only (not
+# `Copy`). Uses its own `num-traits` (default `std`) — no default-features override.
+num-bigint_patched = { package = "num-bigint", git = "https://github.com/kaidokert/num-bigint.git", tag = "v0.4.4-const-10" }
 # ibig = "0.3"
 # ibig_patched = { package = "ibig", git = "https://github.com/kaidokert/ibig-rs.git" , tag = "v0.3.6_patch" }
 paste = "1"

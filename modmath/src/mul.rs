@@ -1,4 +1,5 @@
 use crate::parity::Parity;
+use const_num_traits::WithPrecision;
 #[cfg(feature = "nightly")]
 use const_num_traits::{One, OverflowingAdd, OverflowingSub, Zero};
 
@@ -63,7 +64,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Rem<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     basic_mod_mul_pr(a % m, b % m, m)
 }
@@ -102,7 +104,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m_raw = T::nonzero_get(m);
     basic_mod_mul_pr(a.rem_nonzero(m), b.rem_nonzero(m), m_raw)
@@ -114,7 +117,7 @@ where
 /// Note: this only removes the division side-channel from the signature.
 /// The double-and-add loop still leaks `bit_length(b)`; for constant-time
 /// multiplication, use the Montgomery wide-REDC path.
-pub fn basic_mod_mul_pr<T>(mut a: T, mut b: T, m: T) -> T
+pub(crate) fn basic_mod_mul_pr<T>(a: T, mut b: T, m: T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
@@ -124,10 +127,14 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m1 = m;
-    let mut result = T::zero();
+    // Seed the doubling operand and accumulator at the modulus width so
+    // `a + a` / `result + a` overflow at bit W, not the narrow operand's.
+    let mut a = a.widen_to_precision_of(&m);
+    let mut result = T::zero_with_precision_of(&m);
 
     while b > T::zero() {
         if b.is_odd() {
@@ -167,7 +174,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: crate::parity::Parity,
@@ -189,7 +197,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     let m_raw = T::nonzero_get(m);
@@ -200,7 +209,7 @@ where
 /// # Modular Multiplication (Constrained, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound. See
 /// [`basic_mod_mul_pr`] for the CT caveat.
-pub fn constrained_mod_mul_pr<T>(mut a: T, b: &T, m: &T) -> T
+pub(crate) fn constrained_mod_mul_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: Clone
         + const_num_traits::Zero
@@ -209,11 +218,15 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     let mut b = b.clone();
-    let mut result = T::zero();
+    // Seed the doubling operand and accumulator at the modulus width so
+    // `a + a` / `result + a` overflow at bit W, not the narrow operand's.
+    let mut a = a.widen_to_precision_of(m);
+    let mut result = T::zero_with_precision_of(m);
 
     while b > T::zero() {
         if (&b).is_odd() {
@@ -256,7 +269,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     let m_raw = T::nonzero_get(m);
@@ -276,7 +290,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: crate::parity::Parity,
@@ -289,7 +304,7 @@ where
 /// # Modular Multiplication (Strict, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound. See
 /// [`basic_mod_mul_pr`] for the CT caveat.
-pub fn strict_mod_mul_pr<T>(mut a: T, b: &T, m: &T) -> T
+pub(crate) fn strict_mod_mul_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: Clone
         + const_num_traits::Zero
@@ -298,11 +313,15 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     let mut b = b.clone();
-    let mut result = T::zero();
+    // Seed the doubling operand and accumulator at the modulus width so
+    // `a + a` / `result + a` overflow at bit W, not the narrow operand's.
+    let mut a = a.widen_to_precision_of(m);
+    let mut result = T::zero_with_precision_of(m);
 
     while b > T::zero() {
         if (&b).is_odd() {
@@ -676,14 +695,16 @@ mod bnum_mul_tests {
     //         basic: off, // Copy cannot be implemented, heap allocation
     //     );
 
-    //     mul_test_module!(
-    //         num_bigint_patched,
-    //         num_bigint_patched::BigUint,
-    //         type U256 = num_bigint_patched::BigUint;
-    //         strict: on,
-    //         constrained: on,
-    //         basic: off, // Copy cannot be implemented, heap allocation
-    //     );
+    // num-bigint `FixedWidthBigUint`: heap carrier, Nct, constrained/strict
+    // only (not `Copy`, so `basic: off`).
+    mul_test_module!(
+        num_bigint_patched,
+        num_bigint_patched::FixedWidthBigUint,
+        type U256 = num_bigint_patched::FixedWidthBigUint;
+        strict: on,
+        constrained: on,
+        basic: off,
+    );
 
     //     mul_test_module!(
     //         ibig,
@@ -714,6 +735,35 @@ mod bnum_mul_tests {
         constrained: on,
         basic: on,
     );
+
+    mul_test_module!(
+        heapless_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u32, 4>;
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
+
+    // Operands occupy one byte, modulus spans two: the peasant loop doubles
+    // `a` and must overflow at the modulus width, not the operand's. Regression
+    // guard for the len(a) < len(m) case the single-word modules can't reach.
+    #[test]
+    fn heapless_narrow_operand_wide_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        let m: H = 1000u16.into();
+        let want: H = 104u16.into(); // 234 * 56 = 13104 ≡ 104 (mod 1000)
+        assert_eq!(super::basic_mod_mul(H::from(234u8), H::from(56u8), m), want);
+        assert_eq!(
+            super::constrained_mod_mul(H::from(234u8), &H::from(56u8), &m),
+            want
+        );
+        assert_eq!(
+            super::strict_mod_mul(H::from(234u8), &H::from(56u8), &m),
+            want
+        );
+    }
 }
 
 #[cfg(test)]

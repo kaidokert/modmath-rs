@@ -2,8 +2,8 @@
 //!
 //! Holds the [`NPrimeMethod`] enum (shared by every flavor's
 //! `*_with_method` siblings), the wide-REDC param helpers
-//! ([`compute_n_prime_newton`], [`compute_r_mod_n`], [`compute_r2_mod_n`],
-//! [`type_bit_width`]), and the [`cios`] submodule with the
+//! ([`compute_n_prime_newton`], [`compute_r_mod_n`], [`compute_r2_mod_n`]),
+//! and the [`cios`] submodule with the
 //! interleaved-multiply-and-reduce primitives and their CT siblings.
 //!
 //! The R>N path's per-flavor implementations live in private
@@ -27,14 +27,13 @@ pub mod cios;
 // Flavor-neutral items live at this flat path: the NPrimeMethod enum
 // (shared by every flavor's `*_with_method` siblings), the wide-REDC
 // param helpers (`compute_n_prime_newton` etc., generic over any T:
-// WrappingMul + ...), and `type_bit_width`. Flavor-keyed R>N items are
+// WrappingMul + ...). Flavor-keyed R>N items are
 // surfaced through `modmath::{basic,constrained,strict}::montgomery::*`
 // and reach into `basic_mont` / `constrained_mont` / `strict_mont` via
 // the submodule paths instead of this flat re-export.
 #[rustfmt::skip]
 pub use basic_mont::{
     NPrimeMethod,
-    type_bit_width,
     compute_n_prime_newton,
     compute_r_mod_n,
     compute_r_mod_n_ct,
@@ -257,24 +256,36 @@ mod tests {
         // 7 -> Montgomery (8) -> back to normal form (should be 7)
         let mont_7 = basic_to_montgomery(7u32, 13u32, r);
         assert_eq!(mont_7, 8u32); // Verify Montgomery form
-        assert_eq!(basic_from_montgomery(mont_7, 13u32, n_prime, r_bits), 7u32);
+        assert_eq!(
+            basic_from_montgomery(mont_7, 13u32, n_prime, r_bits).unwrap(),
+            7u32
+        );
 
         // 5 -> Montgomery (2) -> back to normal form (should be 5)
         let mont_5 = basic_to_montgomery(5u32, 13u32, r);
         assert_eq!(mont_5, 2u32); // Verify Montgomery form
-        assert_eq!(basic_from_montgomery(mont_5, 13u32, n_prime, r_bits), 5u32);
+        assert_eq!(
+            basic_from_montgomery(mont_5, 13u32, n_prime, r_bits).unwrap(),
+            5u32
+        );
 
         // Test edge cases
         let mont_0 = basic_to_montgomery(0u32, 13u32, r);
-        assert_eq!(basic_from_montgomery(mont_0, 13u32, n_prime, r_bits), 0u32);
+        assert_eq!(
+            basic_from_montgomery(mont_0, 13u32, n_prime, r_bits).unwrap(),
+            0u32
+        );
 
         let mont_1 = basic_to_montgomery(1u32, 13u32, r);
-        assert_eq!(basic_from_montgomery(mont_1, 13u32, n_prime, r_bits), 1u32);
+        assert_eq!(
+            basic_from_montgomery(mont_1, 13u32, n_prime, r_bits).unwrap(),
+            1u32
+        );
 
         // Test all values 0..13 for round-trip
         for i in 0u32..13u32 {
             let mont = basic_to_montgomery(i, 13u32, r);
-            let back = basic_from_montgomery(mont, 13u32, n_prime, r_bits);
+            let back = basic_from_montgomery(mont, 13u32, n_prime, r_bits).unwrap();
             assert_eq!(
                 back, i,
                 "Round-trip failed for {}: {} -> {} -> {}",
@@ -293,26 +304,27 @@ mod tests {
         let b_mont = basic_to_montgomery(5u32, 13u32, r); // 5 -> 2 (Montgomery form)
 
         // Montgomery multiplication: (7*R) * (5*R) -> (7*5*R) mod N
-        let result_mont = basic_montgomery_mul(a_mont, b_mont, 13u32, n_prime, r_bits);
+        let result_mont = basic_montgomery_mul(a_mont, b_mont, 13u32, n_prime, r_bits).unwrap();
 
         // Convert result back to normal form to verify
-        let result = basic_from_montgomery(result_mont, 13u32, n_prime, r_bits);
+        let result = basic_from_montgomery(result_mont, 13u32, n_prime, r_bits).unwrap();
         assert_eq!(result, 9u32); // 7 * 5 mod 13 = 35 mod 13 = 9
 
         // Test edge cases
         let zero_mont = basic_to_montgomery(0u32, 13u32, r);
         let any_mont = basic_to_montgomery(7u32, 13u32, r);
 
-        let zero_result = basic_montgomery_mul(zero_mont, any_mont, 13u32, n_prime, r_bits);
+        let zero_result =
+            basic_montgomery_mul(zero_mont, any_mont, 13u32, n_prime, r_bits).unwrap();
         assert_eq!(
-            basic_from_montgomery(zero_result, 13u32, n_prime, r_bits),
+            basic_from_montgomery(zero_result, 13u32, n_prime, r_bits).unwrap(),
             0u32
         );
 
         let one_mont = basic_to_montgomery(1u32, 13u32, r);
-        let one_result = basic_montgomery_mul(one_mont, any_mont, 13u32, n_prime, r_bits);
+        let one_result = basic_montgomery_mul(one_mont, any_mont, 13u32, n_prime, r_bits).unwrap();
         assert_eq!(
-            basic_from_montgomery(one_result, 13u32, n_prime, r_bits),
+            basic_from_montgomery(one_result, 13u32, n_prime, r_bits).unwrap(),
             7u32
         );
     }
@@ -472,6 +484,21 @@ mod tests {
         );
     }
 
+    // A carrier too narrow for the R>N reduction (R² overflows it) must make the
+    // constrained/strict Option pipelines return None, not panic. N=100003 → R=2^17,
+    // R²=2^34 overflows u32; a small modulus whose R² fits still computes.
+    #[test]
+    fn mod_mul_exp_return_none_when_carrier_too_narrow() {
+        let big = 100_003u32; // odd; R² overflows u32
+        assert_eq!(constrained_montgomery_mod_mul(2u32, &3u32, &big), None);
+        assert_eq!(strict_montgomery_mod_mul(2u32, &3u32, &big), None);
+        assert_eq!(constrained_montgomery_mod_exp(2u32, &5u32, &big), None);
+        assert_eq!(strict_montgomery_mod_exp(2u32, &5u32, &big), None);
+        // R² fits (R=16 for N=13): still computes. 7*5=35 ≡ 9 (mod 13).
+        assert_eq!(constrained_montgomery_mod_mul(7u32, &5u32, &13u32), Some(9));
+        assert_eq!(strict_montgomery_mod_mul(7u32, &5u32, &13u32), Some(9));
+    }
+
     #[test]
     fn test_conversion_functions_with_edge_cases() {
         // Test the conversion functions with additional edge cases
@@ -485,13 +512,13 @@ mod tests {
         // Test basic_from_montgomery with edge values
         let mont_zero = basic_to_montgomery(0u32, modulus, r);
         assert_eq!(
-            basic_from_montgomery(mont_zero, modulus, n_prime, r_bits),
+            basic_from_montgomery(mont_zero, modulus, n_prime, r_bits).unwrap(),
             0u32
         );
 
         let mont_max = basic_to_montgomery(modulus - 1, modulus, r);
         assert_eq!(
-            basic_from_montgomery(mont_max, modulus, n_prime, r_bits),
+            basic_from_montgomery(mont_max, modulus, n_prime, r_bits).unwrap(),
             modulus - 1
         );
 
@@ -499,7 +526,8 @@ mod tests {
         let (r_s, _r_inv_s, n_prime_s, r_bits_s) =
             strict_compute_montgomery_params(&modulus).unwrap();
         let mont_strict = strict_to_montgomery(5u32, &modulus, &r_s);
-        let back_strict = strict_from_montgomery(mont_strict, &modulus, &n_prime_s, r_bits_s);
+        let back_strict =
+            strict_from_montgomery(mont_strict, &modulus, &n_prime_s, r_bits_s).unwrap();
         assert_eq!(back_strict, 5u32);
 
         // Test constrained versions
@@ -507,7 +535,7 @@ mod tests {
             constrained_compute_montgomery_params(&modulus).unwrap();
         let mont_constrained = constrained_to_montgomery(8u32, &modulus, &r_c);
         let back_constrained =
-            constrained_from_montgomery(mont_constrained, &modulus, &n_prime_c, r_bits_c);
+            constrained_from_montgomery(mont_constrained, &modulus, &n_prime_c, r_bits_c).unwrap();
         assert_eq!(back_constrained, 8u32);
     }
 }
@@ -707,7 +735,7 @@ macro_rules! montgomery_test_module {
                         for i in 0u8..13u8 {
                             let value = U256::from(i);
                             let montgomery_form = super::strict_mont::strict_to_montgomery(value, &modulus, &r);
-                            let back_to_normal = super::strict_mont::strict_from_montgomery(montgomery_form, &modulus, &n_prime, r_bits);
+                            let back_to_normal = super::strict_mont::strict_from_montgomery(montgomery_form, &modulus, &n_prime, r_bits).unwrap();
                             assert_eq!(back_to_normal, value, "Round-trip failed for {}", i);
                         }
                     });
@@ -718,7 +746,7 @@ macro_rules! montgomery_test_module {
                         for i in 0u8..13u8 {
                             let value = U256::from(i);
                             let montgomery_form = super::constrained_mont::constrained_to_montgomery(value.clone(), &modulus, &r);
-                            let back_to_normal = super::constrained_mont::constrained_from_montgomery(montgomery_form, &modulus, &n_prime, r_bits);
+                            let back_to_normal = super::constrained_mont::constrained_from_montgomery(montgomery_form, &modulus, &n_prime, r_bits).unwrap();
                             assert_eq!(back_to_normal, value, "Round-trip failed for {}", i);
                         }
                     });
@@ -729,7 +757,7 @@ macro_rules! montgomery_test_module {
                         for i in 0u8..13u8 {
                             let value = U256::from(i);
                             let montgomery_form = super::basic_to_montgomery(value, modulus, r);
-                            let back_to_normal = super::basic_from_montgomery(montgomery_form, modulus, n_prime, r_bits);
+                            let back_to_normal = super::basic_from_montgomery(montgomery_form, modulus, n_prime, r_bits).unwrap();
                             assert_eq!(back_to_normal, value, "Round-trip failed for {}", i);
                         }
                     });
@@ -810,8 +838,8 @@ mod backend_montgomery_tests {
     montgomery_test_module!(
         crypto_bigint_patched,
         crypto_bigint_patched::U256,
-        strict: off, // fork gap: Montgomery n-prime path needs more &T reference ops than inv
-        constrained: off, // fork gap: Montgomery n-prime path needs more &T reference ops than inv
+        strict: off, // fork: n-prime path needs more &T reference ops (&T op T / &T op &T)
+        constrained: off, // fork: n-prime path needs more &T reference ops (&T op T / &T op &T)
         basic: on,
     );
 
@@ -824,14 +852,22 @@ mod backend_montgomery_tests {
     //         basic: off, // Copy is not implemented, heap allocation
     //     );
 
-    //     montgomery_test_module!(
-    //         num_bigint_patched,
-    //         num_bigint_patched::BigUint,
-    //         type U256 = num_bigint_patched::BigUint;
-    //         strict: off, // Complex trait bounds for Montgomery operations not fully compatible
-    //         constrained: on, // Fixed trait bounds - now works with patched libraries
-    //         basic: off, // Copy is not implemented, heap allocation
-    //     );
+    // num-bigint `FixedWidthBigUint`: heap carrier, Nct. `basic: off` — not
+    // `Copy`. `strict: off` — the *test macro's* strict rows assume `Copy`
+    // (they reuse `a`/`base` after moving into the mont fn, and the
+    // param-compute assertions do `% *modulus`), so they don't compile for a
+    // non-`Copy` carrier. The strict library free-functions are `Clone`-bounded
+    // and fine; this is a test-harness limitation, not a library one, and
+    // `constrained` already runs the full param-compute / mont-mul / mont-exp
+    // surface on the heap carrier.
+    montgomery_test_module!(
+        num_bigint_patched,
+        num_bigint_patched::FixedWidthBigUint,
+        type U256 = num_bigint_patched::FixedWidthBigUint;
+        strict: off,
+        constrained: on,
+        basic: off,
+    );
 
     //     montgomery_test_module!(
     //         ibig,
@@ -863,5 +899,20 @@ mod backend_montgomery_tests {
         strict: on,
         constrained: on,
         basic: on,
+    );
+
+    montgomery_test_module!(
+        heapless_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
+        // Off. HeaplessBigInt's CT montgomery goes through the CIOS path,
+        // covered by `cios::heapless_cios_montmul` (single- and multi-word).
+        // This schoolbook row stays off because
+        // `test_montgomery_parameter_computation` verifies via plain `*`/`%` on
+        // the carrier (shape-panics), and the Nct wide-REDC multiply is not
+        // width-uniform on a runtime-len carrier.
+        strict: off,
+        constrained: off,
+        basic: off,
     );
 }

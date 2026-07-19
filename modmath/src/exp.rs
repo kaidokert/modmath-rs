@@ -58,7 +58,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + Copy
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     if modulus == T::one() {
         return T::zero();
@@ -83,7 +84,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + Copy
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     let m_raw = T::nonzero_get(modulus);
     if m_raw == T::one() {
@@ -99,7 +101,7 @@ where
 /// Note: this only removes the division side-channel from the signature.
 /// The square-and-multiply loop still branches on `exp.is_odd()`; for a
 /// constant-time ladder, use the Montgomery wide-REDC path.
-pub fn basic_mod_exp_pr<T>(mut base: T, exponent: T, modulus: T) -> T
+pub(crate) fn basic_mod_exp_pr<T>(mut base: T, exponent: T, modulus: T) -> T
 where
     T: PartialOrd
         + const_num_traits::One
@@ -110,7 +112,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + Copy
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
 {
     // x mod 1 == 0 for every x, including 1. The square-and-multiply loop
     // below starts with `result = T::one()` and would return 1 in that case.
@@ -146,7 +149,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: crate::parity::Parity,
 {
@@ -170,7 +174,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     let m_raw = T::nonzero_get(modulus);
@@ -183,7 +188,7 @@ where
 /// # Modular Exponentiation (Constrained, pre-reduced)
 /// Precondition: if `*modulus > 1`, then `base < *modulus`. No `Rem` family bound.
 /// Returns `0` when `*modulus == 1`.
-pub fn constrained_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
+pub(crate) fn constrained_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
     T: Clone
         + PartialOrd
@@ -193,7 +198,8 @@ where
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::ShrAssign<usize>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> &'a T: crate::parity::Parity,
 {
     // See `basic_mod_exp_pr` for the modulus==1 rationale.
@@ -231,7 +237,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T> + core::ops::ShrAssign<usize>,
     for<'a> &'a T: crate::parity::Parity,
 {
@@ -254,7 +261,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::ShrAssign<usize>,
     for<'a> &'a T: crate::parity::Parity,
 {
@@ -268,7 +276,7 @@ where
 /// # Modular Exponentiation (Strict, pre-reduced)
 /// Precondition: if `*modulus > 1`, then `base < *modulus`. No `Rem` family bound.
 /// Returns `0` when `*modulus == 1`.
-pub fn strict_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
+pub(crate) fn strict_mod_exp_pr<T>(mut base: T, exponent: &T, modulus: &T) -> T
 where
     T: Clone
         + PartialOrd
@@ -277,7 +285,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::ShrAssign<usize>,
     for<'a> &'a T: crate::parity::Parity,
 {
@@ -640,14 +649,16 @@ mod bnum_exp_tests {
     //         basic: off, // Copy cannot be implemented, heap allocation
     //     );
 
-    //     exp_test_module!(
-    //         num_bigint_patched,
-    //         num_bigint_patched::BigUint,
-    //         type U256 = num_bigint_patched::BigUint;
-    //         strict: on,
-    //         constrained: on,
-    //         basic: off, // Copy cannot be implemented, heap allocation
-    //     );
+    // num-bigint `FixedWidthBigUint`: heap carrier, Nct, constrained/strict
+    // only (not `Copy`, so `basic: off`).
+    exp_test_module!(
+        num_bigint_patched,
+        num_bigint_patched::FixedWidthBigUint,
+        type U256 = num_bigint_patched::FixedWidthBigUint;
+        strict: on,
+        constrained: on,
+        basic: off,
+    );
 
     //     exp_test_module!(
     //         ibig,
@@ -674,6 +685,15 @@ mod bnum_exp_tests {
         fixed_bigint,
         fixed_bigint::FixedUInt,
         type U256 = fixed_bigint::FixedUInt<u8, 4>;
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
+
+    exp_test_module!(
+        heapless_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
         strict: on,
         constrained: on,
         basic: on,

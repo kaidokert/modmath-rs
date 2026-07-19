@@ -1,3 +1,4 @@
+use const_num_traits::WithPrecision;
 #[cfg(feature = "nightly")]
 use const_num_traits::{OverflowingAdd, OverflowingSub};
 
@@ -33,7 +34,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Rem<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     basic_mod_sub_pr(a % m, b % m, m)
 }
@@ -47,7 +49,8 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m_raw = T::nonzero_get(m);
     basic_mod_sub_pr(a.rem_nonzero(m), b.rem_nonzero(m), m_raw)
@@ -55,14 +58,17 @@ where
 
 /// # Modular Subtraction (Basic, pre-reduced)
 /// Precondition: `a < m` and `b < m`. No `Rem` bound.
-pub fn basic_mod_sub_pr<T>(a: T, b: T, m: T) -> T
+pub(crate) fn basic_mod_sub_pr<T>(a: T, b: T, m: T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
+    // Widen a to the modulus width so an underflowing a - b wraps at bit W.
+    let a = a.widen_to_precision_of(&m);
     let diff = a.wrapping_sub(b);
     if diff > a {
         // If we wrapped around (underflow)
@@ -81,7 +87,8 @@ where
         + Clone
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     let a_mod = &a % m;
@@ -98,7 +105,8 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m_raw = T::nonzero_get(m);
     let b_mod = b.clone().rem_nonzero(m);
@@ -107,14 +115,17 @@ where
 
 /// # Modular Subtraction (Constrained, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
-pub fn constrained_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
+pub(crate) fn constrained_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
+    // Widen a to the modulus width so an underflowing a - b wraps at bit W.
+    let a = a.widen_to_precision_of(m);
     let diff = a.clone().wrapping_sub(b.clone());
     if diff > a {
         // If we wrapped around (underflow)
@@ -133,7 +144,8 @@ where
         + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'b> T: core::ops::RemAssign<&'b T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
@@ -151,7 +163,8 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m_raw = T::nonzero_get(m);
     let b_mod = b.clone().rem_nonzero(m);
@@ -160,14 +173,18 @@ where
 
 /// # Modular Subtraction (Strict, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
-pub fn strict_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
+pub(crate) fn strict_mod_sub_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
+    // Widen a to the modulus width so the wrapped diff on underflow is
+    // 2^W - (b-a), which m + diff then reduces correctly.
+    let a = a.widen_to_precision_of(m);
     let (diff, overflow) = a.overflowing_sub(b.clone());
     if overflow {
         m.clone().overflowing_add(diff).0
@@ -381,14 +398,16 @@ mod bnum_sub_tests {
     //         basic: off, // Copy cannot be implemented, heap allocation
     //     );
 
-    //     sub_test_module!(
-    //         num_bigint_patched,
-    //         num_bigint_patched::BigUint,
-    //         type U256 = num_bigint_patched::BigUint;
-    //         strict: on,
-    //         constrained: on,
-    //         basic: off, // Copy cannot be implemented, heap allocation
-    //     );
+    // num-bigint `FixedWidthBigUint`: heap carrier, Nct, constrained/strict
+    // only (not `Copy`, so `basic: off`).
+    sub_test_module!(
+        num_bigint_patched,
+        num_bigint_patched::FixedWidthBigUint,
+        type U256 = num_bigint_patched::FixedWidthBigUint;
+        strict: on,
+        constrained: on,
+        basic: off,
+    );
 
     //     sub_test_module!(
     //         ibig,
@@ -419,6 +438,32 @@ mod bnum_sub_tests {
         constrained: on,
         basic: on,
     );
+
+    sub_test_module!(
+        heapless_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u32, 4>;
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
+
+    // Operands occupy one byte, modulus spans two: an underflowing a - b must
+    // wrap at the modulus width so the +m correction lands. Regression guard
+    // for the len(a) < len(m) case the single-word modules can't reach.
+    #[test]
+    fn heapless_narrow_operand_wide_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        let m: H = 1000u16.into();
+        let want: H = 998u16.into(); // (5 - 7) mod 1000
+        assert_eq!(super::basic_mod_sub(H::from(5u8), H::from(7u8), m), want);
+        assert_eq!(
+            super::constrained_mod_sub(H::from(5u8), &H::from(7u8), &m),
+            want
+        );
+        assert_eq!(super::strict_mod_sub(H::from(5u8), &H::from(7u8), &m), want);
+    }
 }
 
 #[cfg(test)]
