@@ -1370,6 +1370,127 @@ where
     }
 }
 
+/// Schoolbook modular arithmetic as a `FieldOps` strategy for **non-`Copy`**
+/// carriers — the heap/`Clone` verify path. Delegates to the `constrained_*`
+/// reference-based free functions (the same arithmetic the `Copy`
+/// [`SchoolbookField`] runs by value), so a `Clone` heap carrier drives verify
+/// without the `Copy`/Montgomery/CIOS surface. Nct/variable-time only (no
+/// `subtle`), so it cannot resolve for a constant-time path.
+#[derive(Clone, Debug)]
+pub struct SchoolbookFieldRef<T> {
+    modulus: T,
+}
+
+impl<T> SchoolbookFieldRef<T> {
+    /// Build a schoolbook field over `modulus`. Rejects `modulus < 2`.
+    pub fn new(modulus: T) -> Option<Self>
+    where
+        T: const_num_traits::One + PartialOrd,
+    {
+        (modulus > T::one()).then_some(SchoolbookFieldRef { modulus })
+    }
+
+    fn wrap<'f>(&self, val: T) -> SchoolbookResidue<'f, T> {
+        SchoolbookResidue {
+            val,
+            _brand: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<T> FieldOps for SchoolbookFieldRef<T>
+where
+    T: Clone
+        + const_num_traits::Zero
+        + const_num_traits::One
+        + PartialOrd
+        + crate::NonCt
+        + const_num_traits::WithPrecision
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Shr<usize, Output = T>
+        + core::ops::ShrAssign<usize>,
+    for<'a> T: core::ops::RemAssign<&'a T>
+        + core::ops::Add<&'a T, Output = T>
+        + core::ops::Sub<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
+        + core::ops::Sub<T, Output = T>
+        + core::ops::Div<&'a T, Output = T>
+        + crate::parity::Parity,
+{
+    type Backend = T;
+    type Residue<'f>
+        = SchoolbookResidue<'f, T>
+    where
+        Self: 'f;
+
+    fn reduce<'f>(&'f self, raw: &T) -> SchoolbookResidue<'f, T> {
+        // Enter the ring: reduce (by-ref), then widen to ring width.
+        self.wrap((raw % &self.modulus).widen_to_precision_of(&self.modulus))
+    }
+    fn mul<'f>(
+        &'f self,
+        a: &SchoolbookResidue<'f, T>,
+        b: &SchoolbookResidue<'f, T>,
+    ) -> SchoolbookResidue<'f, T> {
+        self.wrap(crate::mul::constrained_mod_mul(
+            a.val.clone(),
+            &b.val,
+            &self.modulus,
+        ))
+    }
+    fn add<'f>(
+        &'f self,
+        a: &SchoolbookResidue<'f, T>,
+        b: &SchoolbookResidue<'f, T>,
+    ) -> SchoolbookResidue<'f, T> {
+        self.wrap(crate::add::constrained_mod_add(
+            a.val.clone(),
+            &b.val,
+            &self.modulus,
+        ))
+    }
+    fn sub<'f>(
+        &'f self,
+        a: &SchoolbookResidue<'f, T>,
+        b: &SchoolbookResidue<'f, T>,
+    ) -> SchoolbookResidue<'f, T> {
+        self.wrap(crate::sub::constrained_mod_sub(
+            a.val.clone(),
+            &b.val,
+            &self.modulus,
+        ))
+    }
+    fn exp<'f>(&'f self, base: &SchoolbookResidue<'f, T>, e: &T) -> SchoolbookResidue<'f, T> {
+        // Re-establish ring width (as `SchoolbookField::exp`): exponent 0 skips
+        // the loop and yields a minimal-width `one`.
+        self.wrap(
+            crate::exp::constrained_mod_exp(base.val.clone(), e, &self.modulus)
+                .widen_to_precision_of(&self.modulus),
+        )
+    }
+    fn inv<'f>(&'f self, a: &SchoolbookResidue<'f, T>) -> Option<SchoolbookResidue<'f, T>> {
+        // Extended Euclid (strategy-neutral `inv`), not Fermat.
+        crate::inv::constrained_mod_inv(a.val.clone(), &self.modulus)
+            .map(|v| self.wrap(v.widen_to_precision_of(&self.modulus)))
+    }
+    fn one(&self) -> SchoolbookResidue<'_, T> {
+        self.wrap(T::one_with_precision_of(&self.modulus))
+    }
+    fn zero(&self) -> SchoolbookResidue<'_, T> {
+        self.wrap(T::zero_with_precision_of(&self.modulus))
+    }
+    fn into_raw(&self, a: &SchoolbookResidue<'_, T>) -> T {
+        a.val.clone()
+    }
+    fn modulus(&self) -> &T {
+        &self.modulus
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1489,8 +1610,104 @@ mod tests {
 
     // num-bigint (`FixedWidthBigUint`) is intentionally absent: the Montgomery
     // `Field`/CIOS path is `Copy`-bound (row ops copy limbs), and it is a
-    // heap-allocated non-`Copy` carrier. It rides the schoolbook + free-function
-    // Montgomery matrices instead.
+    // heap-allocated non-`Copy` carrier. It rides the `SchoolbookFieldRef` matrix
+    // below instead.
+
+    // SchoolbookFieldRef matrix: the non-`Copy` verify field. Same
+    // reduce/add/sub/mul/exp/inv surface as the Montgomery matrix, checked
+    // against a u64 oracle — but over `Clone` (incl. heap) carriers, so the
+    // num-bigint `FixedWidthBigUint` heap carrier the Montgomery matrix excludes
+    // runs here.
+    macro_rules! schoolbook_ref_test_module {
+        ($stem:ident, $type_path:path, $(type $td:ty = $te:ty;)?) => {
+            paste::paste! {
+                mod [<$stem _schoolbook_ref_tests>] {
+                    #[allow(unused_imports)]
+                    use $type_path;
+                    $( type $td = $te; )?
+                    use crate::{FieldOps, SchoolbookFieldRef};
+
+                    const M: u64 = 251; // prime, fits u8
+
+                    fn field() -> SchoolbookFieldRef<U256> {
+                        SchoolbookFieldRef::new(U256::from(251u8)).unwrap()
+                    }
+
+                    #[test]
+                    fn reduce_roundtrip() {
+                        let f = field();
+                        for raw in [0u8, 1, 2, 100, 250] {
+                            assert_eq!(
+                                f.into_raw(&f.reduce(&U256::from(raw))),
+                                U256::from(raw),
+                                "roundtrip {raw}"
+                            );
+                        }
+                    }
+
+                    #[test]
+                    fn add_sub_mul() {
+                        let f = field();
+                        for a in [3u8, 100, 250] {
+                            for b in [7u8, 200, 249] {
+                                let ra = f.reduce(&U256::from(a));
+                                let rb = f.reduce(&U256::from(b));
+                                let add = ((a as u64 + b as u64) % M) as u8;
+                                let sub = ((a as u64 + M - b as u64) % M) as u8;
+                                let mul = ((a as u64 * b as u64) % M) as u8;
+                                assert_eq!(f.into_raw(&f.add(&ra, &rb)), U256::from(add), "add {a}+{b}");
+                                assert_eq!(f.into_raw(&f.sub(&ra, &rb)), U256::from(sub), "sub {a}-{b}");
+                                assert_eq!(f.into_raw(&f.mul(&ra, &rb)), U256::from(mul), "mul {a}*{b}");
+                            }
+                        }
+                    }
+
+                    #[test]
+                    fn exp_matches_oracle() {
+                        let f = field();
+                        for base in [2u8, 7, 200] {
+                            for e in [0u8, 1, 5, 17] {
+                                let want = crate::exp::basic_mod_exp(base as u64, e as u64, M) as u8;
+                                let got = f.into_raw(&f.exp(&f.reduce(&U256::from(base)), &U256::from(e)));
+                                assert_eq!(got, U256::from(want), "exp {base}^{e}");
+                            }
+                        }
+                    }
+
+                    #[test]
+                    fn inv_roundtrip_and_zero() {
+                        let f = field();
+                        // Prime modulus: every nonzero residue is invertible.
+                        for a in [1u8, 2, 100, 250] {
+                            let ra = f.reduce(&U256::from(a));
+                            let inv = f.inv(&ra).expect("nonzero invertible mod prime");
+                            assert_eq!(f.into_raw(&f.mul(&ra, &inv)), U256::from(1u8), "inv {a}");
+                        }
+                        assert!(f.inv(&f.zero()).is_none(), "inv(0) is None");
+                    }
+                }
+            }
+        };
+    }
+
+    schoolbook_ref_test_module!(
+        fixed_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::FixedUInt<u8, 4>;
+    );
+    schoolbook_ref_test_module!(
+        heapless_bigint,
+        fixed_bigint::HeaplessBigInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
+    );
+    schoolbook_ref_test_module!(bnum_patched, bnum_patched::types::U256,);
+    schoolbook_ref_test_module!(crypto_bigint_patched, crypto_bigint_patched::U256,);
+    // Keystone row: the heap/`Clone` num-bigint carrier driving every FieldOps op.
+    schoolbook_ref_test_module!(
+        num_bigint_patched,
+        num_bigint_patched::FixedWidthBigUint,
+        type U256 = num_bigint_patched::FixedWidthBigUint;
+    );
 
     // Ct `FieldCt` matrix: the constant-time surface (reduce/mul + the
     // Bernstein-Yang `inv_safegcd_ct` RSA-blinding path), across Ct-personality
