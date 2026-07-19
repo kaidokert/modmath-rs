@@ -3,9 +3,9 @@
 
 use core::hint::black_box;
 use cortex_m_rt::entry;
-use embedded_measure::cortex_m::DwtCycleCounter;
-use embedded_measure::report::Field;
-use embedded_measure::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
+use krabi_caliper::cortex_m::DwtCycleCounter;
+use krabi_caliper::report::Field;
+use krabi_caliper::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
 
 const TRIALS: usize = 4;
 const BATCHES: usize = 1;
@@ -321,7 +321,7 @@ fn fixture_table(v: &u64) -> bool {
 
 #[entry]
 fn main() -> ! {
-    let mut reporter = embedded_measure::rtt::init_ct_compatible();
+    let mut reporter = krabi_caliper::rtt::init_ct_compatible();
     ct_fixtures::link_anchor();
     let mut peripherals = cortex_m::Peripherals::take().unwrap();
     let mut counter =
@@ -425,7 +425,7 @@ fn main() -> ! {
             suite: "modmath-cyccnt",
             target: "thumbv7em-none-eabihf",
             board: Some("stm32f407vg"),
-            unit: embedded_measure::Unit::CoreCycles,
+            unit: krabi_caliper::Unit::CoreCycles,
             frequency_hz: Some(16_000_000),
             warmup_blocks: 1,
             batches: BATCHES,

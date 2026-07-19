@@ -10,7 +10,7 @@ ABBA trial order. Positive fixtures have an absolute 32-cycle combined-spread
 limit. The EEA inverse and schoolbook exponentiation ABI fixtures are negative
 controls and must produce disjoint A/B ranges.
 
-The carrier uses `embedded-measure::PairedSuite` for DWT sampling, exact-path
+The carrier uses `krabi-caliper::PairedSuite` for DWT sampling, exact-path
 warmups, policy evaluation, versioned reporting, diagnostics, and totals. It
 emits lossless `EM_*` schema 1 records plus legacy `CT_*` records during host
 tooling migration.
@@ -19,13 +19,13 @@ Run the complete hardware gate from this directory with the shared Rust
 campaign runner:
 
 ```sh
-cargo embedded-measure run modmath-jtrace-f407
+cargo krabi-caliper run modmath-jtrace-f407
 ```
 
-The declarative profile in `embedded-measure.toml` owns the release build,
+The declarative profile in `krabi-caliper.toml` owns the release build,
 explicit SWD/J-Trace selection, RTT completion, deadline, ELF retention, raw
 logs, and JSON/Markdown results below
-`target/embedded-measure/modmath-jtrace-f407/`. The retained metadata includes
+`target/krabi-caliper/modmath-jtrace-f407/`. The retained metadata includes
 the exact `cargo build` and `probe-rs run` commands for direct reproduction.
 
 This timing-regression layer complements, rather than replaces, ctgrind and
