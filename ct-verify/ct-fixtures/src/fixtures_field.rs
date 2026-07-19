@@ -21,6 +21,41 @@ use modmath::Field;
 
 type Fb256 = FixedUInt<u32, 8, Ct>;
 
+/// CT modular exponentiation through the shipped `Field<T, Ct>::exp`
+/// ladder. Modulus public (forced odd via `|= 1`, so `try_new_odd_ct`'s
+/// `CtOption` unwrap branches on a fixture-defined bit); base and
+/// exponent secret.
+#[unsafe(no_mangle)]
+pub extern "C" fn ct_fix__field_exp__u64__N1(
+    base: *const u64,
+    e: *const u64,
+    m: *const u64,
+    out: *mut u64,
+) {
+    let base = bb(unsafe { *base });
+    let e = bb(unsafe { *e });
+    let m = bb(unsafe { *m }) | 1;
+    let f = Field::<u64, Ct>::try_new_odd_ct(m).unwrap();
+    let r = f.exp(&f.reduce(&base), &e);
+    unsafe { *out = bb(f.into_raw(&r)) }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ct_fix__field_exp__fb32__N8(
+    base: *const [u32; 8],
+    e: *const [u32; 8],
+    m: *const [u32; 8],
+    out: *mut [u32; 8],
+) {
+    let base = Fb256::from(bb(unsafe { *base }));
+    let e = Fb256::from(bb(unsafe { *e }));
+    let mut mw = bb(unsafe { *m });
+    mw[0] |= 1;
+    let f = Field::<Fb256, Ct>::try_new_odd_ct(Fb256::from(mw)).unwrap();
+    let r = f.exp(&f.reduce(&base), &e);
+    unsafe { *out = bb(*f.into_raw(&r).words()) }
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__field_inv_safegcd__u64__N1(m: *const u64, v: *const u64) -> u8 {
     let m = bb(unsafe { *m }) | 1;

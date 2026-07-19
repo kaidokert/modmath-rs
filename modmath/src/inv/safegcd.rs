@@ -65,7 +65,7 @@
 //! suitable for cases where the latency budget allows it (RSA blinding
 //! at 2048 bits is dominated by the main exponentiation anyway).
 
-use const_num_traits::{CtIsZero, CtParity, One, WrappingAdd, WrappingSub, Zero};
+use const_num_traits::{CtIsZero, CtParity, One, WithPrecision, WrappingAdd, WrappingSub, Zero};
 use modmath_cios::CiosRowOps;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeLess, CtOption};
 
@@ -223,9 +223,11 @@ where
 #[inline]
 fn neg_mod_ct<T>(x: &T, m: &T) -> T
 where
-    T: Clone + Zero + ConditionallySelectable + WrappingSub<Output = T> + CtIsZero,
+    T: Clone + ConditionallySelectable + WrappingSub<Output = T> + CtIsZero + Zero + WithPrecision,
 {
-    let zero = T::zero();
+    // Field-width zero, not `T::zero()`: on a runtime-width carrier the
+    // latter is narrow and would re-narrow d/e when selected.
+    let zero = T::zero_with_precision_of(m);
     let x_is_zero = x.ct_is_zero();
     let neg = m.clone().wrapping_sub(x.clone());
     T::conditional_select(&neg, &zero, x_is_zero)
@@ -289,11 +291,18 @@ where
         + One
         + WrappingAdd<Output = T>
         + WrappingSub<Output = T>
+        + WithPrecision
         + core::ops::Shr<usize, Output = T>
         + core::ops::BitOr<Output = T>,
     T::Word: CtParity,
 {
-    let n_bits = value.word_count() * core::mem::size_of::<T::Word>() * 8;
+    // Divstep count is a function of the operating (ring) width, not the
+    // particular value: a runtime-width carrier can hand us a `value` narrower
+    // than the modulus (e.g. inverting a small residue in a wide field), and
+    // counting its width alone would run too few divsteps to converge. Bound by
+    // the wider of the two operands, read via the canonical width accessor
+    // `bits_precision()` (not `word_count()`).
+    let n_bits = core::cmp::max(value.bits_precision(), modulus.bits_precision()) as usize;
     let total_steps = divsteps_total(n_bits);
     // Loop invariants for se_shr1 / half_mod_ct — hoisted so each
     // divstep doesn't redo a full-width shift. The mask is MAX − (MAX
@@ -301,8 +310,10 @@ where
     // defeats const-folding through multi-limb Shl impls, keeping
     // their index bounds-check panic path alive post-LTO (flagged by
     // the panic-free audit); a constant-amount shift folds clean.
-    let max = T::zero().wrapping_sub(T::one());
-    let top_bit_mask = max.wrapping_sub(max.clone() >> 1);
+    // All working values operate at the modulus width so the top-bit mask, the
+    // ±1 sentinels, and the mod-reductions align on a runtime-width carrier.
+    let max = T::zero_with_precision_of(modulus).wrapping_sub(T::one());
+    let top_bit_mask = max.clone().wrapping_sub(max.clone() >> 1);
     let m_half = modulus.clone() >> 1;
 
     let mut f = SignedExt {
@@ -310,11 +321,11 @@ where
         hi: 0,
     };
     let mut g = SignedExt {
-        lo: value.clone(),
+        lo: value.clone().widen_to_precision_of(modulus),
         hi: 0,
     };
-    let mut d = T::zero();
-    let mut e = T::one();
+    let mut d = T::zero_with_precision_of(modulus);
+    let mut e = T::one_with_precision_of(modulus);
     let mut delta: i64 = 1;
 
     for _ in 0..total_steps {
@@ -356,11 +367,23 @@ where
         e = half_mod_ct(&e, &m_half);
     }
 
-    // After total_steps divsteps, g == 0 and f == ±gcd. For the
-    // invertible case (gcd == 1), f is either +1 (lo == 1, hi == 0)
+    // After total_steps divsteps, g == 0 and f == ±gcd. A `None` below must
+    // therefore mean f == ±gcd with gcd > 1 (a genuine shared factor) — never
+    // that the divsteps failed to converge. If g != 0 here, the step count was
+    // too small for the operating width (a width desync), and the `None` would
+    // be a false "not coprime". Guard it in debug builds; stripped in release,
+    // so the shipped CT path is unaffected.
+    debug_assert!(
+        g.lo.ct_is_zero().unwrap_u8() == 1 && g.hi == 0,
+        "safegcd: divsteps did not converge (g != 0) — width desync, not a coprimality verdict"
+    );
+
+    // For the invertible case (gcd == 1), f is either +1 (lo == 1, hi == 0)
     // or -1 (lo all-ones, hi all-ones).
     let one = T::one();
-    let neg_one_lo = T::zero().wrapping_sub(T::one());
+    // -1 at the modulus width (all-ones), matching f.lo's width for the
+    // f == -1 sentinel check; a narrow `zero - one` would miscompare.
+    let neg_one_lo = max.clone();
 
     let f_is_one = f.lo.ct_eq(&one) & f.hi.ct_eq(&0u64);
     let f_is_neg_one = f.lo.ct_eq(&neg_one_lo) & f.hi.ct_eq(&u64::MAX);
@@ -386,6 +409,28 @@ where
 mod tests {
     use super::*;
     use crate::inv::basic_mod_inv;
+
+    #[test]
+    fn heapless_narrow_value_wide_modulus() {
+        // Runtime-width carrier: value occupies one word, modulus two.
+        // Divstep count and the shift mask must track the modulus width,
+        // not the value's, or the loop fails to converge and reports None.
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 8>;
+        for (v, m) in [(3u16, 511u16), (7, 65535), (2, 65521), (123, 40001)] {
+            let vh: H = v.into();
+            let mh: H = m.into();
+            let got = safegcd_inv_ct::<H>(&vh, &mh).into_option();
+            let want = safegcd_inv_ct::<u32>(&(v as u32), &(m as u32)).into_option();
+            match (got, want) {
+                (Some(g), Some(w)) => {
+                    let gw: u32 = (g.word(0) as u32) | ((g.word(1) as u32) << 8);
+                    assert_eq!(gw, w, "value={v} modulus={m}");
+                }
+                (a, b) => panic!("value={v} modulus={m}: heapless={a:?} u32={b:?}"),
+            }
+        }
+    }
 
     #[test]
     fn divsteps_total_matches_paper_bound() {

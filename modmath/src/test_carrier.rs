@@ -49,6 +49,20 @@ impl const_num_traits::Parity for &NcU64 {
     }
 }
 
+impl const_num_traits::CheckedAdd for NcU64 {
+    type Output = NcU64;
+    fn checked_add(self, v: Self) -> Option<Self> {
+        self.0.checked_add(v.0).map(NcU64)
+    }
+}
+
+impl const_num_traits::CheckedMul for NcU64 {
+    type Output = NcU64;
+    fn checked_mul(self, v: Self) -> Option<Self> {
+        self.0.checked_mul(v.0).map(NcU64)
+    }
+}
+
 impl const_num_traits::ops::wrapping::WrappingAdd for NcU64 {
     type Output = NcU64;
     fn wrapping_add(self, v: Self) -> Self {
@@ -60,6 +74,19 @@ impl const_num_traits::ops::wrapping::WrappingSub for NcU64 {
     type Output = NcU64;
     fn wrapping_sub(self, v: Self) -> Self {
         NcU64(self.0.wrapping_sub(v.0))
+    }
+}
+
+impl const_num_traits::BitsPrecision for NcU64 {
+    fn bits_precision(&self) -> u32 {
+        64
+    }
+}
+
+// Fixed-width newtype: width is the type, so widening is the identity.
+impl const_num_traits::WithPrecision for NcU64 {
+    fn widen_to_precision(self, _bits_precision: u32) -> Self {
+        self
     }
 }
 
@@ -75,6 +102,14 @@ impl const_num_traits::ops::overflowing::OverflowingSub for NcU64 {
     type Output = NcU64;
     fn overflowing_sub(self, v: Self) -> (Self, bool) {
         let (r, o) = self.0.overflowing_sub(v.0);
+        (NcU64(r), o)
+    }
+}
+
+impl const_num_traits::ops::overflowing::OverflowingMul for NcU64 {
+    type Output = NcU64;
+    fn overflowing_mul(self, v: Self) -> (Self, bool) {
+        let (r, o) = self.0.overflowing_mul(v.0);
         (NcU64(r), o)
     }
 }
@@ -257,6 +292,25 @@ mod tests {
             constrained_montgomery_mod_exp(NcU64(A), &NcU64(1000), &NcU64(M)).map(|v| v.0),
             constrained_montgomery_mod_exp(A, &1000u64, &M)
         );
+    }
+
+    #[test]
+    fn nc_u64_checked_add() {
+        use const_num_traits::CheckedAdd;
+        assert_eq!(NcU64(2).checked_add(NcU64(3)), Some(NcU64(5)));
+        assert_eq!(
+            NcU64(u64::MAX - 1).checked_add(NcU64(1)),
+            Some(NcU64(u64::MAX))
+        );
+        assert_eq!(NcU64(u64::MAX).checked_add(NcU64(1)), None);
+    }
+
+    #[test]
+    fn nc_u64_checked_mul() {
+        use const_num_traits::CheckedMul;
+        assert_eq!(NcU64(6).checked_mul(NcU64(7)), Some(NcU64(42)));
+        assert_eq!(NcU64(u64::MAX).checked_mul(NcU64(1)), Some(NcU64(u64::MAX)));
+        assert_eq!(NcU64(u64::MAX).checked_mul(NcU64(2)), None);
     }
 
     #[test]

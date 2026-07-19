@@ -1,3 +1,4 @@
+use const_num_traits::WithPrecision;
 #[cfg(feature = "nightly")]
 use const_num_traits::{OverflowingAdd, OverflowingSub};
 
@@ -33,7 +34,8 @@ where
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
         + core::ops::Rem<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     basic_mod_add_pr(a % m, b % m, m)
 }
@@ -53,7 +55,8 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m_raw = T::nonzero_get(m);
     basic_mod_add_pr(a.rem_nonzero(m), b.rem_nonzero(m), m_raw)
@@ -61,14 +64,17 @@ where
 
 /// # Modular Addition (Basic, pre-reduced)
 /// Precondition: `a < m` and `b < m`. No `Rem` bound.
-pub fn basic_mod_add_pr<T>(a: T, b: T, m: T) -> T
+pub(crate) fn basic_mod_add_pr<T>(a: T, b: T, m: T) -> T
 where
     T: core::cmp::PartialOrd
         + Copy
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
+    // Widen a to the modulus width so the carry from a + b fires at bit W.
+    let a = a.widen_to_precision_of(&m);
     let sum = a.wrapping_add(b);
     if sum >= m || sum < a {
         sum.wrapping_sub(m)
@@ -86,7 +92,8 @@ where
         + Clone
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
     let a_mod = &a % m;
@@ -106,7 +113,8 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m_raw = T::nonzero_get(m);
     let b_mod = b.clone().rem_nonzero(m);
@@ -115,14 +123,17 @@ where
 
 /// # Modular Addition (Constrained, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
-pub fn constrained_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
+pub(crate) fn constrained_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone
         + const_num_traits::ops::wrapping::WrappingAdd<Output = T>
         + const_num_traits::ops::wrapping::WrappingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
+    // Widen a to the modulus width so the carry from a + b fires at bit W.
+    let a = a.widen_to_precision_of(m);
     let sum = a.clone().wrapping_add(b.clone());
     if &sum >= m || sum < a {
         sum.wrapping_sub(m.clone())
@@ -140,7 +151,8 @@ where
         + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
     for<'b> T: core::ops::RemAssign<&'b T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
 {
@@ -162,7 +174,8 @@ where
         + const_num_traits::DivNonZero<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
     let m_raw = T::nonzero_get(m);
     let b_mod = b.clone().rem_nonzero(m);
@@ -171,14 +184,17 @@ where
 
 /// # Modular Addition (Strict, pre-reduced)
 /// Precondition: `a < *m` and `*b < *m`. No `Rem` family bound.
-pub fn strict_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
+pub(crate) fn strict_mod_add_pr<T>(a: T, b: &T, m: &T) -> T
 where
     T: core::cmp::PartialOrd
         + Clone
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + WithPrecision,
 {
+    // Widen a to the modulus width so the carry from a + b fires at bit W.
+    let a = a.widen_to_precision_of(m);
     let (sum, overflow) = a.overflowing_add(b.clone());
     if &sum >= m || overflow {
         sum.overflowing_sub(m.clone()).0
@@ -410,14 +426,16 @@ mod bnum_add_tests {
     //         basic: off, // Copy cannot be implemented, heap allocation
     //     );
 
-    //     add_test_module!(
-    //         num_bigint_patched,
-    //         num_bigint_patched::BigUint,
-    //         type U256 = num_bigint_patched::BigUint;
-    //         strict: on,
-    //         constrained: on,
-    //         basic: off, // Copy cannot be implemented, heap allocation
-    //     );
+    // num-bigint `FixedWidthBigUint`: heap carrier, Nct, constrained/strict
+    // only (not `Copy`, so `basic: off`).
+    add_test_module!(
+        num_bigint_patched,
+        num_bigint_patched::FixedWidthBigUint,
+        type U256 = num_bigint_patched::FixedWidthBigUint;
+        strict: on,
+        constrained: on,
+        basic: off,
+    );
 
     //     add_test_module!(
     //         ibig,
@@ -450,6 +468,38 @@ mod bnum_add_tests {
         constrained: on,
         basic: on,
     );
+
+    add_test_module!(
+        heapless_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u32, 4>;
+        strict: on,
+        constrained: on,
+        basic: on,
+    );
+
+    // Operands occupy one byte, modulus spans two: a runtime-width carrier
+    // must reduce at the modulus width, not wrap at the operand's. Regression
+    // guard for the len(a) < len(m) case the single-word modules can't reach.
+    #[test]
+    fn heapless_narrow_operand_wide_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        let m: H = 1000u16.into();
+        let want: H = 400u16.into();
+        assert_eq!(
+            super::basic_mod_add(H::from(200u8), H::from(200u8), m),
+            want
+        );
+        assert_eq!(
+            super::constrained_mod_add(H::from(200u8), &H::from(200u8), &m),
+            want
+        );
+        assert_eq!(
+            super::strict_mod_add(H::from(200u8), &H::from(200u8), &m),
+            want
+        );
+    }
 }
 
 #[cfg(test)]
@@ -484,6 +534,34 @@ mod fixed_bigint_pr_tests {
         assert_eq!(constrained_mod_add_pr(a, &b, &m), expected);
         let a = U256::from(15u8);
         assert_eq!(basic_mod_add_pr(a, b, m), expected);
+    }
+
+    // The `_pr` ops widen only the left operand `a` to the modulus width, not
+    // `b`. That is sufficient: `wrapping_add`/`overflowing_add` incorporate a
+    // narrower right operand at the (widened) left width, so a one-limb `b`
+    // against a full-width multi-limb modulus reduces correctly — including the
+    // carry/borrow branch where `a ± b` crosses the modulus width.
+    #[test]
+    fn narrow_b_against_full_width_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 4>;
+        let m = 65533u32; // full 2-limb: a ± b can cross the 16-bit width
+        let hm = H::from(m as u16);
+        for a in [65000u32, 65500, 65532, 40000] {
+            for b in [1u32, 50, 100, 255] {
+                let (ha, hb) = (H::from(a as u16), H::from(b as u8)); // b is one limb
+                assert_eq!(
+                    super::basic_mod_add_pr(ha, hb, hm),
+                    H::from(((a + b) % m) as u16),
+                    "add {a}+{b}"
+                );
+                assert_eq!(
+                    crate::sub::basic_mod_sub_pr(ha, hb, hm),
+                    H::from((((a + m) - b) % m) as u16),
+                    "sub {a}-{b}"
+                );
+            }
+        }
     }
 }
 

@@ -31,6 +31,27 @@
 //! flavor's `Copy` bound rules out heap-allocated backends; those use
 //! `constrained` or `strict`.
 //!
+//! ## Which surface to use (width safety)
+//!
+//! On a **runtime-width carrier** (a fixed-capacity, runtime-length bignum such
+//! as `HeaplessBigInt`), a value's stored width reflects its magnitude, not the
+//! ring it lives in — so a modular value must be established at the modulus
+//! ("ring") width or width-sensitive ops fire at the wrong bit and truncate.
+//! The [`FieldOps`] surface — Montgomery [`Field`]/[`FieldView`] and the
+//! schoolbook [`SchoolbookField`] strategy — carries the ring width as a **type
+//! invariant** of its [`Residue`], so a computation written against it cannot
+//! seed a narrow value. **Prefer it for anything on a runtime-width carrier, and
+//! for building your own reducer.**
+//!
+//! The raw-`T` schoolbook free functions ([`basic`]/[`constrained`]/[`strict`])
+//! are the low-level convenience layer: they reduce *their own* operands to the
+//! ring width internally, so a single `basic::mul(a, b, m)` is correct — but
+//! they operate on ring-membership-untyped `T`, so a **hand-rolled reducer** that
+//! seeds accumulators/coefficients from `T::zero()`/`one()` and grows them
+//! *outside* these calls re-opens the width-seed hazard. Such reducers belong on
+//! [`SchoolbookField`] (identities come from `field.zero()`/`one()`, which are
+//! ring-width by construction), not on raw `T`.
+//!
 //! [`Overflowing`]: https://docs.rs/num-traits/latest/num_traits/ops/overflowing
 //! [`subtle`]: https://crates.io/crates/subtle
 
@@ -56,7 +77,10 @@ pub mod basic;
 pub mod constrained;
 pub mod strict;
 
-pub use field::{Field, FieldCt, FieldNct, MontStorage, Residue, ResidueCt, ResidueNct};
+pub use field::{
+    Field, FieldCt, FieldFor, FieldNct, FieldOps, FieldView, MontStorage, Residue, ResidueCt,
+    ResidueNct, SchoolbookField, SchoolbookResidue,
+};
 pub use nonct::NonCt;
 pub use parity::Parity;
 pub use wide_mul::WideMul;
@@ -69,12 +93,11 @@ pub use exp::const_mod_exp;
 // (algorithm selector for R>N `*_with_method` computations, used through
 // `modmath::{basic,constrained,strict}::montgomery::compute_params_with_method`)
 // plus the precompute helpers (`compute_n_prime_newton`, `compute_r_mod_n`,
-// `compute_r2_mod_n`) and `type_bit_width`. The flavor-keyed wide-REDC
+// `compute_r2_mod_n`). The flavor-keyed wide-REDC
 // wrappers live under `modmath::{basic,constrained,strict}::montgomery::wide::*`.
 #[rustfmt::skip]
 pub use montgomery::{
     NPrimeMethod,
-    type_bit_width,
     compute_n_prime_newton,
     compute_r_mod_n,
     compute_r_mod_n_ct,

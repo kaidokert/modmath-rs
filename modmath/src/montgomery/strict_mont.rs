@@ -16,10 +16,9 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
+        + const_num_traits::CheckedMul<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>,
-    for<'a> &'a T: core::ops::Rem<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Rem<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
 {
     // We need to find N' where modulus * N' ≡ R - 1 (mod R)
     let target = r - &T::one(); // This is -1 mod R
@@ -30,8 +29,7 @@ where
     let mut n_prime = T::one();
     loop {
         // Check if (modulus * n_prime) % r == target
-        // Use references to avoid copying large integers
-        let product = modulus * &n_prime;
+        let product = modulus.clone().checked_mul(n_prime.clone())?;
         let remainder = &product % r;
         if remainder == target {
             return Some(n_prime);
@@ -58,13 +56,13 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
-        + core::ops::Add<Output = T>
-        + core::ops::Sub<Output = T>,
-    for<'a> T: core::ops::Mul<&'a T, Output = T>
-        + core::ops::Sub<&'a T, Output = T>
-        + core::ops::Add<&'a T, Output = T>,
+        + core::ops::Sub<Output = T>
+        + const_num_traits::WithPrecision,
+    for<'a> T: core::ops::Sub<&'a T, Output = T> + core::ops::Add<&'a T, Output = T>,
     for<'a> &'a T: core::ops::Sub<&'a T, Output = T>
         + core::ops::Div<&'a T, Output = T>
         + core::ops::Sub<T, Output = T>
@@ -98,12 +96,11 @@ where
         + const_num_traits::One
         + PartialEq
         + PartialOrd
+        + const_num_traits::CheckedMul<Output = T>
         + core::ops::Shl<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + for<'a> core::ops::Rem<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Sub<&'a T, Output = T>
-        + core::ops::Mul<&'a T, Output = T>
-        + core::ops::Rem<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::Sub<&'a T, Output = T> + core::ops::Rem<&'a T, Output = T>,
 {
     // Hensel's lifting for N' computation when R = 2^k
     // Start with base case: find N' such that modulus * N' ≡ -1 (mod 2)
@@ -121,7 +118,7 @@ where
         // This is the core of Hensel lifting: extending solutions modulo increasing powers
 
         let target_mod = T::one() << k; // 2^k
-        let temp_prod = modulus * &n_prime;
+        let temp_prod = modulus.clone().checked_mul(n_prime.clone())?;
         let (temp_sum, _overflow) = temp_prod.overflowing_add(T::one());
         let check_val = &temp_sum % &target_mod;
 
@@ -142,7 +139,8 @@ where
 
     // Verification: ensure the computed N' satisfies modulus * N' ≡ -1 (mod R)
     // This check validates the mathematical correctness of our Hensel lifting
-    let final_check = (modulus * &n_prime) % r;
+    let final_prod = modulus.clone().checked_mul(n_prime.clone())?;
+    let final_check = &final_prod % r;
     let target = r - &T::one(); // -1 mod R
 
     if final_check != target {
@@ -164,13 +162,15 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + core::ops::Add<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + core::ops::Sub<Output = T>
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Add<&'a T, Output = T>,
@@ -199,13 +199,15 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-        + core::ops::Add<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + core::ops::Sub<Output = T>
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
         + core::ops::Add<&'a T, Output = T>,
@@ -254,19 +256,30 @@ where
 }
 
 /// Montgomery multiplication (Strict): (a * R) * (b * R) -> (a * b * R) mod N
-/// Multiplies two values already in Montgomery form and returns result in Montgomery form
-pub fn strict_montgomery_mul<T>(a_mont: T, b_mont: &T, modulus: &T, n_prime: &T, r_bits: usize) -> T
+/// Multiplies two values already in Montgomery form and returns result in Montgomery form.
+///
+/// Returns `None` when the `m * N` reduction intermediate overflows the carrier
+/// (see [`strict_from_montgomery`]); route large moduli through wide-REDC / CIOS.
+pub fn strict_montgomery_mul<T>(
+    a_mont: T,
+    b_mont: &T,
+    modulus: &T,
+    n_prime: &T,
+    r_bits: usize,
+) -> Option<T>
 where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
         + PartialOrd
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + core::ops::Sub<Output = T>
         + core::ops::Shr<usize, Output = T>
         + core::ops::Shl<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::Mul<&'a T, Output = T>
         + core::ops::RemAssign<&'a T>
         + core::ops::Sub<&'a T, Output = T>,
@@ -284,9 +297,11 @@ where
 }
 
 /// Convert from Montgomery form (Strict): (a * R) -> a mod N
-/// Uses Montgomery reduction algorithm with reference-based operations
-/// to minimize copying of large integers
-pub fn strict_from_montgomery<T>(a_mont: T, modulus: &T, n_prime: &T, r_bits: usize) -> T
+///
+/// Returns `None` when the carrier `T` is too narrow to hold the `m * N`
+/// intermediate (which reaches up to R²); route through wide-REDC / CIOS for
+/// overflow-free reduction.
+pub fn strict_from_montgomery<T>(a_mont: T, modulus: &T, n_prime: &T, r_bits: usize) -> Option<T>
 where
     T: Clone
         + const_num_traits::Zero
@@ -296,8 +311,9 @@ where
         + core::ops::Shr<usize, Output = T>
         + core::ops::Sub<Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>,
-    for<'a> T: core::ops::Mul<&'a T, Output = T> + core::ops::Sub<&'a T, Output = T>,
-    for<'a> &'a T: core::ops::Mul<&'a T, Output = T> + core::ops::BitAnd<&'a T, Output = T>,
+    T: const_num_traits::ops::overflowing::OverflowingMul<Output = T>,
+    for<'a> T: core::ops::Sub<&'a T, Output = T>,
+    for<'a> &'a T: core::ops::BitAnd<&'a T, Output = T>,
 {
     // Montgomery reduction algorithm:
     // Input: a_mont (Montgomery form), N (modulus), N', r_bits
@@ -309,30 +325,40 @@ where
     // Fast path for R=1 (r_bits == 0): Montgomery reduction simplifies to conditional subtraction
     if r_bits == 0 {
         // When r_bits = 0, R = 1, so Montgomery reduction is just a_mont % modulus
-        return if &a_mont >= modulus {
+        return Some(if &a_mont >= modulus {
             a_mont - modulus
         } else {
             a_mont
-        };
+        });
     }
 
     let mask = (T::one() << r_bits) - T::one(); // mask = 2^r_bits - 1
 
     // Step 1: m = ((a_mont & mask) * N') & mask
-    // Only use low r_bits of a_mont, then mask result to low r_bits
+    // `(a_mont & mask) * N'` and the later `m * N` reach up to R² (both factors
+    // < R); on a carrier too narrow to hold R² the product overflows, so surface
+    // `None` rather than a wrapped, wrong reduction. Route through wide-REDC for
+    // overflow-free reduction.
     let a_low = &a_mont & &mask;
-    let product = &a_low * n_prime;
+    let (product, overflow) = a_low.overflowing_mul(n_prime.clone());
+    if overflow {
+        return None;
+    }
     let m = &product & &mask;
 
     // Step 2: t = (a_mont + m * N) >> r_bits
-    // Warning: m * N can overflow for large moduli (m < R, N < R, so m*N
-    // can reach R²). For overflow-free reduction, use wide-REDC.
-    let m_times_n = &m * modulus;
-    let (sum, _overflow) = a_mont.overflowing_add(m_times_n);
+    let (m_times_n, mul_overflow) = m.overflowing_mul(modulus.clone());
+    if mul_overflow {
+        return None;
+    }
+    let (sum, add_overflow) = a_mont.overflowing_add(m_times_n);
+    if add_overflow {
+        return None;
+    }
     let t = sum >> r_bits; // Divide by R = 2^r_bits using bit shift
 
     // Step 3: Final reduction
-    if &t >= modulus { t - modulus } else { t }
+    Some(if &t >= modulus { t - modulus } else { t })
 }
 
 /// Convert to Montgomery form (Strict): a -> (a * R) mod N
@@ -346,7 +372,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
         + core::ops::Shr<usize, Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>,
     for<'a> &'a T: core::ops::Rem<&'a T, Output = T>,
     for<'a> &'a T: crate::parity::Parity,
@@ -367,16 +394,18 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -393,6 +422,11 @@ where
     // Step 1: Compute Montgomery parameters using specified method
     let (r, _r_inv, n_prime, r_bits) =
         strict_compute_montgomery_params_with_method(modulus, method)?;
+    // The R>N reduction's intermediates (`a_low*N'`, `m*N`, and `a_mont+m*N`,
+    // all < R²) must fit the carrier. If R² overflows it, this modulus can't be
+    // reduced on this path — bail early. (`Field`/CIOS/wide-REDC handle sized
+    // moduli overflow-free.)
+    r.clone().checked_mul(r.clone())?;
 
     // Step 2: Convert inputs to Montgomery form
     let a_mont = strict_to_montgomery(a, modulus, &r);
@@ -404,15 +438,10 @@ where
     let product = crate::mul::strict_mod_mul(a_mont, &b_mont, modulus);
 
     // Apply Montgomery reduction once to get a*b*R mod N (still in Montgomery form)
-    let result_mont = strict_from_montgomery(product, modulus, &n_prime, r_bits);
+    let result_mont = strict_from_montgomery(product, modulus, &n_prime, r_bits)?;
 
     // Step 4: Convert final result back from Montgomery form to get (a * b) mod N
-    Some(strict_from_montgomery(
-        result_mont,
-        modulus,
-        &n_prime,
-        r_bits,
-    ))
+    strict_from_montgomery(result_mont, modulus, &n_prime, r_bits)
 }
 
 /// Complete Montgomery modular multiplication (Strict): A * B mod N
@@ -430,16 +459,18 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
         + core::ops::Shr<usize, Output = T>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
         + crate::NonCt
-        + for<'a> core::ops::Rem<&'a T, Output = T>,
+        + for<'a> core::ops::Rem<&'a T, Output = T>
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Mul<&'a T, Output = T>
         + core::ops::Sub<&'a T, Output = T>
@@ -470,6 +501,8 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -477,9 +510,9 @@ where
         + core::ops::ShrAssign<usize>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
@@ -497,6 +530,9 @@ where
     // Step 1: Compute Montgomery parameters using specified method
     let (r, _r_inv, n_prime, r_bits) =
         strict_compute_montgomery_params_with_method(modulus, method)?;
+    // R² must fit the carrier (see mod_mul): the reduction intermediates are all
+    // < R², so if R² overflows this modulus can't be reduced on this path — bail.
+    r.clone().checked_mul(r.clone())?;
 
     // Step 2: Reduce base and convert to Montgomery form
     base.rem_assign(modulus); // Reduce base first to ensure base < modulus
@@ -513,19 +549,19 @@ where
     while exp > T::zero() {
         // If exponent is odd, multiply result by current base power
         if (&exp).is_odd() {
-            result = strict_montgomery_mul(result, &base, modulus, &n_prime, r_bits);
+            result = strict_montgomery_mul(result, &base, modulus, &n_prime, r_bits)?;
         }
 
         // Square the base for next iteration
         exp >>= 1;
         if exp > T::zero() {
             let base_clone = &base + &T::zero(); // Clone base using references
-            base = strict_montgomery_mul(base, &base_clone, modulus, &n_prime, r_bits);
+            base = strict_montgomery_mul(base, &base_clone, modulus, &n_prime, r_bits)?;
         }
     }
 
     // Step 6: Convert result back from Montgomery form
-    Some(strict_from_montgomery(result, modulus, &n_prime, r_bits))
+    strict_from_montgomery(result, modulus, &n_prime, r_bits)
 }
 
 /// Montgomery-based modular exponentiation (Strict): base^exponent mod modulus
@@ -548,6 +584,8 @@ where
     T: Clone
         + const_num_traits::Zero
         + const_num_traits::One
+        + const_num_traits::CheckedMul<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
         + PartialEq
         + PartialOrd
         + core::ops::Shl<usize, Output = T>
@@ -555,9 +593,9 @@ where
         + core::ops::ShrAssign<usize>
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + const_num_traits::ops::overflowing::OverflowingSub<Output = T>
-        + core::ops::Add<Output = T>
         + core::ops::Sub<Output = T>
-        + crate::NonCt,
+        + crate::NonCt
+        + const_num_traits::WithPrecision,
     for<'a> T: core::ops::RemAssign<&'a T>
         + core::ops::Rem<&'a T, Output = T>
         + core::ops::Mul<&'a T, Output = T>
@@ -698,17 +736,17 @@ mod tests {
         // We know from the basic tests that 7 -> Montgomery form is 8
         // So 8 -> normal form should be 7
         let mont_form = 8u32; // This is 7 in Montgomery form
-        let normal_form = strict_from_montgomery(mont_form, &modulus, &n_prime, r_bits);
+        let normal_form = strict_from_montgomery(mont_form, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(normal_form, 7u32);
 
         // Test with 5 -> Montgomery (2) -> back to normal (should be 5)
         let mont_5 = 2u32; // This is 5 in Montgomery form
-        let normal_5 = strict_from_montgomery(mont_5, &modulus, &n_prime, r_bits);
+        let normal_5 = strict_from_montgomery(mont_5, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(normal_5, 5u32);
 
         // Test edge cases
         let mont_0 = 0u32; // 0 in Montgomery form is still 0
-        let normal_0 = strict_from_montgomery(mont_0, &modulus, &n_prime, r_bits);
+        let normal_0 = strict_from_montgomery(mont_0, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(normal_0, 0u32);
     }
 
@@ -720,16 +758,16 @@ mod tests {
 
         // Test conversion from Montgomery form back to normal form
         let mont_form = U256::from(8u32); // This is 7 in Montgomery form
-        let normal_form = strict_from_montgomery(mont_form, &modulus, &n_prime, r_bits);
+        let normal_form = strict_from_montgomery(mont_form, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(normal_form, U256::from(7u32));
 
         let mont_5 = U256::from(2u32); // This is 5 in Montgomery form
-        let normal_5 = strict_from_montgomery(mont_5, &modulus, &n_prime, r_bits);
+        let normal_5 = strict_from_montgomery(mont_5, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(normal_5, U256::from(5u32));
 
         // Test edge case
         let mont_0 = U256::from(0u32);
-        let normal_0 = strict_from_montgomery(mont_0, &modulus, &n_prime, r_bits);
+        let normal_0 = strict_from_montgomery(mont_0, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(normal_0, U256::from(0u32));
     }
 
@@ -748,7 +786,7 @@ mod tests {
             // Use basic function to convert to Montgomery form
             let mont = crate::montgomery::basic_mont::basic_to_montgomery(i, modulus, r);
             // Use strict function to convert back
-            let back = strict_from_montgomery(mont, &modulus, &n_prime, r_bits);
+            let back = strict_from_montgomery(mont, &modulus, &n_prime, r_bits).unwrap();
             assert_eq!(
                 back, i,
                 "Round-trip failed for {}: {} -> {} -> {}",
@@ -854,7 +892,7 @@ mod tests {
         // Test all values 0..13 for complete round-trip
         for i in 0u32..13u32 {
             let mont = strict_to_montgomery(i, &modulus, &r);
-            let back = strict_from_montgomery(mont, &modulus, &n_prime, r_bits);
+            let back = strict_from_montgomery(mont, &modulus, &n_prime, r_bits).unwrap();
             assert_eq!(
                 back, i,
                 "Complete round-trip failed for {}: {} -> {} -> {}",
@@ -1088,12 +1126,12 @@ mod tests {
         let a_mont = strict_to_montgomery(14u32, &modulus, &r); // Near maximum value
 
         // The from_montgomery reduction should trigger the t >= modulus branch
-        let result = strict_from_montgomery(a_mont, &modulus, &n_prime, r_bits);
+        let result = strict_from_montgomery(a_mont, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(result, 14u32);
 
         // Another case with maximum value
         let max_mont = strict_to_montgomery(14u32, &modulus, &r);
-        let result_max = strict_from_montgomery(max_mont, &modulus, &n_prime, r_bits);
+        let result_max = strict_from_montgomery(max_mont, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(result_max, 14u32);
     }
 
@@ -1139,7 +1177,7 @@ mod tests {
             // Test Montgomery operations with edge values
             let edge_val = 8u32; // Maximum value for this modulus
             let mont_edge = strict_to_montgomery(edge_val, &edge_modulus, &r);
-            let back = strict_from_montgomery(mont_edge, &edge_modulus, &n_prime, r_bits);
+            let back = strict_from_montgomery(mont_edge, &edge_modulus, &n_prime, r_bits).unwrap();
             assert_eq!(back, edge_val);
 
             // Test multiplication that might hit t >= modulus branch
@@ -1199,8 +1237,9 @@ mod tests {
         let b_mont = strict_to_montgomery(b, &modulus, &r);
 
         // Test Montgomery multiplication
-        let result_mont = strict_montgomery_mul(a_mont, &b_mont, &modulus, &n_prime, r_bits);
-        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+        let result_mont =
+            strict_montgomery_mul(a_mont, &b_mont, &modulus, &n_prime, r_bits).unwrap();
+        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits).unwrap();
 
         // Verify against regular multiplication
         let expected = (a * b) % modulus;
@@ -1220,21 +1259,24 @@ mod tests {
         // Test with zero
         let zero_mont = strict_to_montgomery(0u32, &modulus, &r);
         let a_mont = strict_to_montgomery(5u32, &modulus, &r);
-        let result_mont = strict_montgomery_mul(zero_mont, &a_mont, &modulus, &n_prime, r_bits);
-        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+        let result_mont =
+            strict_montgomery_mul(zero_mont, &a_mont, &modulus, &n_prime, r_bits).unwrap();
+        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(result, 0u32, "Montgomery multiplication with zero failed");
 
         // Test with one (Montgomery form)
         let one_mont = strict_to_montgomery(1u32, &modulus, &r);
-        let result_mont = strict_montgomery_mul(one_mont, &a_mont, &modulus, &n_prime, r_bits);
-        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+        let result_mont =
+            strict_montgomery_mul(one_mont, &a_mont, &modulus, &n_prime, r_bits).unwrap();
+        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits).unwrap();
         assert_eq!(result, 5u32, "Montgomery multiplication with one failed");
 
         // Test with maximum value less than modulus
         let max_val = modulus - 1;
         let max_mont = strict_to_montgomery(max_val, &modulus, &r);
-        let result_mont = strict_montgomery_mul(max_mont, &max_mont, &modulus, &n_prime, r_bits);
-        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+        let result_mont =
+            strict_montgomery_mul(max_mont, &max_mont, &modulus, &n_prime, r_bits).unwrap();
+        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits).unwrap();
         let expected = (max_val * max_val) % modulus;
         assert_eq!(
             result, expected,
@@ -1258,8 +1300,9 @@ mod tests {
         let b_mont = strict_to_montgomery(b, &modulus, &r);
 
         // This should not panic due to our modular multiplication fix
-        let result_mont = strict_montgomery_mul(a_mont, &b_mont, &modulus, &n_prime, r_bits);
-        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+        let result_mont =
+            strict_montgomery_mul(a_mont, &b_mont, &modulus, &n_prime, r_bits).unwrap();
+        let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits).unwrap();
 
         // Verify correctness
         let expected = crate::mul::strict_mod_mul(a, &b, &modulus);
@@ -1282,8 +1325,10 @@ mod tests {
                 let a_mont = strict_to_montgomery(*a, modulus, &r);
                 let b_mont = strict_to_montgomery(*b, modulus, &r);
 
-                let result_mont = strict_montgomery_mul(a_mont, &b_mont, modulus, &n_prime, r_bits);
-                let result = strict_from_montgomery(result_mont, modulus, &n_prime, r_bits);
+                let result_mont =
+                    strict_montgomery_mul(a_mont, &b_mont, modulus, &n_prime, r_bits).unwrap();
+                let result =
+                    strict_from_montgomery(result_mont, modulus, &n_prime, r_bits).unwrap();
 
                 let expected = (a * b) % modulus;
                 assert_eq!(
@@ -1309,8 +1354,9 @@ mod tests {
 
                 // Use our new function
                 let result_mont =
-                    strict_montgomery_mul(a_mont, &b_mont, &modulus, &n_prime, r_bits);
-                let result = strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits);
+                    strict_montgomery_mul(a_mont, &b_mont, &modulus, &n_prime, r_bits).unwrap();
+                let result =
+                    strict_from_montgomery(result_mont, &modulus, &n_prime, r_bits).unwrap();
 
                 // Compare with the expected result
                 let expected = (a * b) % modulus;

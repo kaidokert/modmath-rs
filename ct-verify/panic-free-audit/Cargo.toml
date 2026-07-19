@@ -20,7 +20,7 @@ panic-handler = []
 [dependencies]
 modmath = { path = "../../modmath" }
 # Registry, not path — same trait-identity rationale as ct-fixtures.
-fixed-bigint = { version = "0.5", default-features = false, features = ["cios"] }
+fixed-bigint = { version = "0.6", default-features = false, features = ["cios"] }
 const-num-traits = { version = "0.2", default-features = false, features = ["ct"] }
 subtle = { version = "2.6", default-features = false }
 

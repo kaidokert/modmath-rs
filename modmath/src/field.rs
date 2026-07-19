@@ -28,6 +28,24 @@
 //! shared by both algorithms (precompute, `new`, `zero`, `one`, the
 //! residue brand) live in the common `impl<T, P: Personality>` block.
 //!
+//! ## Width under each personality (runtime-width carriers)
+//!
+//! The two finalize strategies treat operand *width* differently on a
+//! runtime-width carrier (`HeaplessBigInt`), where stored length is a public
+//! shape parameter rather than value-derived:
+//!
+//! - **Ct (conditional-select finalize):** `conditional_select(x, x − m, ge)`
+//!   materializes both branches at the field width and selects between them, so
+//!   the result is always carried at the modulus width — the finalize
+//!   self-normalizes.
+//! - **Nct (compare-branch finalize):** `if x ≥ m { x − m } else { x }` returns
+//!   whichever branch at that branch's width; it does **not** widen a narrow
+//!   input. Correctness therefore depends on operands already sitting at the
+//!   modulus width, which the precompute/reduce path establishes via
+//!   [`WithPrecision`](const_num_traits::WithPrecision) seeding (see
+//!   `montgomery::basic_mont`). A residue entering narrower would fire its
+//!   carry/borrow at the wrong bit — the width-seed hazard that seeding closes.
+//!
 //! ## Branding
 //!
 //! Each `Field<T, P>` instance is implicitly tagged by its borrow lifetime
@@ -58,7 +76,6 @@ use crate::montgomery::basic_mont::{
 };
 use crate::montgomery::{
     CiosMontMul, CiosMontMulCt, compute_n_prime_newton, compute_r_mod_n, compute_r2_mod_n,
-    type_bit_width,
 };
 use crate::parity::Parity;
 use crate::wide_mul::WideMul;
@@ -218,7 +235,8 @@ where
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + MontStorage,
+        + MontStorage
+        + const_num_traits::WithPrecision,
 {
     /// Construct a new `Field` from an already-proven-odd modulus.
     ///
@@ -236,10 +254,13 @@ where
     /// [`new`]: Self::new
     pub fn new_odd(modulus: Odd<T>) -> Self
     where
-        T: PartialEq + PartialOrd + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>,
+        T: PartialEq
+            + PartialOrd
+            + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+            + const_num_traits::BitsPrecision,
     {
         let modulus = modulus.get();
-        let w = type_bit_width::<T>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = compute_r_mod_n(modulus, w);
         let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
@@ -273,10 +294,12 @@ where
     /// [`new_odd`]: Self::new_odd
     pub fn new_odd_ct(modulus: Odd<T>) -> Self
     where
-        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+        T: subtle::ConditionallySelectable
+            + subtle::ConstantTimeLess
+            + const_num_traits::BitsPrecision,
     {
         let modulus = modulus.get();
-        let w = type_bit_width::<T>();
+        let w = modulus.bits_precision() as usize;
         let n_prime = compute_n_prime_newton(modulus, w);
         let r_mod_n = crate::montgomery::compute_r_mod_n_ct(modulus, w);
         let r2_mod_n = crate::montgomery::compute_r2_mod_n_ct(r_mod_n, modulus, w);
@@ -303,7 +326,8 @@ where
         T: PartialEq
             + PartialOrd
             + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
-            + Parity,
+            + Parity
+            + const_num_traits::BitsPrecision,
     {
         Odd::new(modulus).map(Self::new_odd)
     }
@@ -320,7 +344,10 @@ where
     /// The additive identity (0 in Montgomery form is 0).
     pub fn zero(&self) -> Residue<'_, T, P> {
         Residue {
-            mont: T::zero(),
+            // Ring width, not minimal `T::zero()`: a narrow residue would misfire
+            // a width-sensitive op (CIOS mul) on a runtime-width carrier. (`one()`
+            // is already `r_mod_n`.)
+            mont: T::zero_with_precision_of(&self.modulus),
             _brand: PhantomData,
             _p: PhantomData,
         }
@@ -344,7 +371,11 @@ where
     /// `mont == x * R mod modulus`.
     pub fn residue_from_mont(&self, mont: T) -> Residue<'_, T, P> {
         Residue {
-            mont,
+            // Establish ring width even on this escape hatch: a narrow `mont`
+            // (e.g. `T::zero()`) would otherwise be a narrow residue a
+            // width-sensitive op could misread, breaking the surface's no-narrow
+            // -residue guarantee.
+            mont: mont.widen_to_precision_of(&self.modulus),
             _brand: PhantomData,
             _p: PhantomData,
         }
@@ -368,7 +399,8 @@ where
         + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
         + Parity
         + crate::NonCt
-        + MontStorage,
+        + MontStorage
+        + const_num_traits::WithPrecision,
 {
     /// Convert a raw value `< modulus` (or arbitrary value, which is then
     /// reduced) to Montgomery form. Returns a brand-tagged [`Residue`].
@@ -537,9 +569,9 @@ where
     where
         T: WideMul
             + core::ops::Div<Output = T>
-            + core::ops::Add<Output = T>
+            + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
             + core::ops::Sub<Output = T>
-            + core::ops::Mul<Output = T>,
+            + const_num_traits::ops::overflowing::OverflowingMul<Output = T>,
     {
         if a.mont == T::zero() {
             return None;
@@ -602,7 +634,8 @@ where
         + const_num_traits::WrappingMul<Output = T>
         + const_num_traits::WrappingAdd<Output = T>
         + const_num_traits::WrappingSub<Output = T>
-        + MontStorage,
+        + MontStorage
+        + const_num_traits::WithPrecision,
 {
     /// Construct a `Field<T, Ct>` from a **secret** modulus without a
     /// value-dependent branch on the parity check.
@@ -634,7 +667,10 @@ where
     /// [`CtParity`]: const_num_traits::CtParity
     pub fn try_new_odd_ct(modulus: T) -> subtle::CtOption<Self>
     where
-        T: const_num_traits::CtParity + subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+        T: const_num_traits::CtParity
+            + subtle::ConditionallySelectable
+            + subtle::ConstantTimeLess
+            + const_num_traits::BitsPrecision,
     {
         // Mask the parity check (no branch on the secret modulus). The
         // precompute below uses the CT path ([`Self::new_odd_ct`]) so
@@ -741,20 +777,26 @@ where
 
     /// Modular exponentiation — constant-time over `exp`.
     ///
-    /// Implements a fixed-iteration Montgomery ladder over all
-    /// `bit_length(T)` bits of the exponent. Both square and multiply are
-    /// performed every iteration; the result is selected branchlessly. Loop
-    /// count does not depend on `exp`; per-iteration timing does not depend
-    /// on the bit pattern.
+    /// Implements a fixed-iteration Montgomery ladder over
+    /// `max(exp.bits_precision(), modulus.bits_precision())` bits — at least the
+    /// modulus width, both public shapes. The modulus floor matters on a
+    /// runtime-width carrier (`HeaplessBigInt`), where a value's `bits_precision`
+    /// tracks its length: without it a narrow secret exponent would shorten the
+    /// loop and leak its magnitude. Both square and multiply run every iteration
+    /// and the result is selected branchlessly, so the loop count and
+    /// per-iteration timing depend only on public widths, not the secret value.
     pub fn exp(&self, base: &Residue<'_, T, Ct>, exp: &T) -> Residue<'_, T, Ct>
     where
         T: CiosMontMulCt
             + const_num_traits::CtIsZero
             + subtle::ConditionallySelectable
             + core::ops::Shr<usize, Output = T>
-            + core::ops::BitAnd<Output = T>,
+            + core::ops::BitAnd<Output = T>
+            + const_num_traits::BitsPrecision,
     {
-        let w = type_bit_width::<T>();
+        // Floor at the modulus width so a narrow secret exponent on a
+        // runtime-width carrier can't shorten the loop (a timing leak).
+        let w = ((*exp).bits_precision()).max(self.modulus.bits_precision()) as usize;
         let one = T::one();
         let mut result = self.r_mod_n;
 
@@ -804,9 +846,12 @@ where
     /// instead, which is a fixed-iteration Montgomery ladder.
     pub fn exp_public_exp(&self, base: &Residue<'_, T, Ct>, exp: &T) -> Residue<'_, T, Ct>
     where
-        T: CiosMontMulCt + core::ops::Shr<usize, Output = T> + core::ops::BitAnd<Output = T>,
+        T: CiosMontMulCt
+            + core::ops::Shr<usize, Output = T>
+            + core::ops::BitAnd<Output = T>
+            + const_num_traits::BitsPrecision,
     {
-        let w = type_bit_width::<T>();
+        let w = (*exp).bits_precision() as usize;
         let one = T::one();
         let zero = T::zero();
 
@@ -888,16 +933,16 @@ where
     /// iteration CT Montgomery ladder.
     ///
     /// **Requires `modulus` to be prime.** Constant-time over `a`'s
-    /// bits and zero-ness via the fixed `T::BITS`-iteration Montgomery
-    /// ladder in [`Self::exp`]. The loop count depends only on the
-    /// carrier type's bit width, not on `modulus - 2`'s significant
-    /// bit count or `a`'s value. Returns `CtOption::None`-masked for
-    /// the zero residue.
+    /// bits and zero-ness via the fixed-iteration Montgomery ladder in
+    /// [`Self::exp`]. The loop count is the exponent's declared width
+    /// (`(modulus - 2).bits_precision()`, a public shape), not
+    /// `modulus - 2`'s significant bit count or `a`'s value. Returns
+    /// `CtOption::None`-masked for the zero residue.
     ///
-    /// Cost: one full ladder over every bit of `T` (e.g. 256
-    /// square-and-multiply iterations for a 256-bit carrier over a
-    /// Curve25519 scalar field), regardless of whether `modulus - 2`
-    /// occupies the full carrier width. For composite moduli (RSA
+    /// Cost: one full ladder over the exponent's declared width (e.g.
+    /// 256 square-and-multiply iterations for a 256-bit field over a
+    /// Curve25519 scalar field), regardless of whether `modulus - 2`'s
+    /// significant bits fill that width. For composite moduli (RSA
     /// `n = p·q`) where Fermat doesn't apply, use
     /// [`Self::inv_safegcd_ct`] instead.
     pub fn inv_fermat(&self, a: &Residue<'_, T, Ct>) -> subtle::CtOption<Residue<'_, T, Ct>>
@@ -906,7 +951,8 @@ where
             + const_num_traits::CtIsZero
             + subtle::ConditionallySelectable
             + core::ops::Shr<usize, Output = T>
-            + core::ops::BitAnd<Output = T>,
+            + core::ops::BitAnd<Output = T>
+            + const_num_traits::BitsPrecision,
     {
         let a_is_nonzero = !a.mont.ct_is_zero();
         let two = T::one().wrapping_add(T::one());
@@ -984,6 +1030,346 @@ where
 // Tests
 // ---------------------------------------------------------------------------
 
+// `Field<T, P>` splits its arithmetic across two per-personality inherent impls,
+// so code that runs one algorithm over *either* personality has no generic
+// method surface. `FieldOps` provides it, impl'd on a `FieldView` wrapper rather
+// than directly on `Field`: a direct `impl FieldOps for Field<T, Nct>` makes the
+// forwarding `self.mul(..)` re-dispatch to the trait method (inherent priority
+// does not win when the trait is impl'd on the same type), infinitely recursing.
+// The wrapper's `self.0.mul(..)` targets `Field` (no `FieldOps` on it), so it
+// resolves to the inherent method.
+
+/// Personality-generic view of a Montgomery [`Field`]'s operation surface.
+/// `inv_fermat` normalizes the Ct field's `CtOption` to `Option` (verify inputs
+/// are public, so the branch leaks nothing). The residue carries ring-width as a
+/// type invariant, so a reducer written against this surface cannot inject a
+/// narrow value into a ring computation.
+pub trait FieldOps {
+    type Backend;
+    type Residue<'f>: Clone + PartialEq
+    where
+        Self: 'f;
+
+    fn reduce<'f>(&'f self, raw: &Self::Backend) -> Self::Residue<'f>;
+    fn mul<'f>(&'f self, a: &Self::Residue<'f>, b: &Self::Residue<'f>) -> Self::Residue<'f>;
+    fn add<'f>(&'f self, a: &Self::Residue<'f>, b: &Self::Residue<'f>) -> Self::Residue<'f>;
+    fn sub<'f>(&'f self, a: &Self::Residue<'f>, b: &Self::Residue<'f>) -> Self::Residue<'f>;
+    /// The exponent is a **magnitude** (consumed as bits by square-and-multiply),
+    /// so it stays a raw `Backend`, not a residue.
+    fn exp<'f>(&'f self, base: &Self::Residue<'f>, e: &Self::Backend) -> Self::Residue<'f>;
+    /// General modular inverse — correct for any modulus, prime or composite.
+    /// Every backend uses a general algorithm (extended Euclid on Nct, safegcd
+    /// on Ct); the prime-only Fermat fast path is *not* used here (it would
+    /// return a wrong value for composite moduli). Callers that know the modulus
+    /// is prime and want the Fermat ladder use the inherent
+    /// [`Field::inv_fermat`].
+    ///
+    /// **CT contract.** The returned *value* is computed under the backend's
+    /// personality (constant-time on a `Ct` backend). The `Option` itself is
+    /// **not** constant-time: `None` is observable and means the operand is
+    /// non-invertible (`≡ 0`, or shares a factor with a composite modulus) — a
+    /// negligible-probability event callers already handle by resampling (e.g.
+    /// an ECDSA nonce). A caller that must not branch even on that bit uses the
+    /// inherent `Ct` inverse ([`Field::inv_safegcd_ct`]), which returns a masked
+    /// [`subtle::CtOption`] and never collapses the existence flag.
+    fn inv<'f>(&'f self, a: &Self::Residue<'f>) -> Option<Self::Residue<'f>>;
+    fn one(&self) -> Self::Residue<'_>;
+    fn zero(&self) -> Self::Residue<'_>;
+    /// Converts the *residue* out of the field (not `self`), mirroring
+    /// [`Field::into_raw`]; the `&self` receiver is the field.
+    #[allow(clippy::wrong_self_convention)]
+    fn into_raw(&self, a: &Self::Residue<'_>) -> Self::Backend;
+    fn modulus(&self) -> &Self::Backend;
+}
+
+/// The `Backend -> Field` selector: given a modulus, build the personality-keyed
+/// field for it. Consumers bound on `T: FieldFor` write verify code once.
+pub trait FieldFor: Sized {
+    type Field: FieldOps<Backend = Self>;
+    fn field(modulus: Self) -> Option<Self::Field>;
+}
+
+/// Wrapper owning a [`Field`], so `FieldOps` is impl'd on *it* (not on `Field`
+/// directly) — the indirection that dodges the trait-shadows-inherent recursion.
+#[derive(Clone, Debug)]
+pub struct FieldView<T, P: Personality>(pub Field<T, P>);
+
+impl<T> FieldOps for FieldView<T, Nct>
+where
+    T: MontStorage
+        + WideMul
+        + CiosMontMul
+        + const_num_traits::HasPersonality<P = Nct>
+        + const_num_traits::One
+        + const_num_traits::Zero
+        + Copy
+        + PartialEq
+        + PartialOrd
+        + crate::parity::Parity
+        + const_num_traits::WithPrecision
+        + core::ops::ShrAssign<usize>
+        + core::ops::Div<Output = T>
+        + core::ops::Sub<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>,
+{
+    type Backend = T;
+    type Residue<'f>
+        = Residue<'f, T, Nct>
+    where
+        Self: 'f;
+
+    fn reduce<'f>(&'f self, raw: &T) -> Residue<'f, T, Nct> {
+        self.0.reduce(raw)
+    }
+    fn mul<'f>(&'f self, a: &Residue<'f, T, Nct>, b: &Residue<'f, T, Nct>) -> Residue<'f, T, Nct> {
+        self.0.mul(a, b)
+    }
+    fn add<'f>(&'f self, a: &Residue<'f, T, Nct>, b: &Residue<'f, T, Nct>) -> Residue<'f, T, Nct> {
+        self.0.add(a, b)
+    }
+    fn sub<'f>(&'f self, a: &Residue<'f, T, Nct>, b: &Residue<'f, T, Nct>) -> Residue<'f, T, Nct> {
+        self.0.sub(a, b)
+    }
+    fn exp<'f>(&'f self, base: &Residue<'f, T, Nct>, e: &T) -> Residue<'f, T, Nct> {
+        self.0.exp(base, e)
+    }
+    fn inv<'f>(&'f self, a: &Residue<'f, T, Nct>) -> Option<Residue<'f, T, Nct>> {
+        // EEA, not Fermat: `inv` is a general (composite-correct) inverse; the
+        // prime-only Fermat fast path stays the inherent `Field::inv_fermat`.
+        self.0.inv_eea(a)
+    }
+    fn one(&self) -> Residue<'_, T, Nct> {
+        self.0.one()
+    }
+    fn zero(&self) -> Residue<'_, T, Nct> {
+        self.0.zero()
+    }
+    fn into_raw(&self, a: &Residue<'_, T, Nct>) -> T {
+        self.0.into_raw(a)
+    }
+    fn modulus(&self) -> &T {
+        self.0.modulus()
+    }
+}
+
+impl<T> FieldOps for FieldView<T, Ct>
+where
+    T: MontStorage
+        + WideMul
+        + CiosMontMulCt
+        + const_num_traits::HasPersonality<P = Ct>
+        + const_num_traits::One
+        + const_num_traits::Zero
+        + Copy
+        + PartialEq
+        + PartialOrd
+        + const_num_traits::WithPrecision
+        + const_num_traits::CtIsZero
+        + const_num_traits::BitsPrecision
+        + subtle::ConditionallySelectable
+        + subtle::ConstantTimeEq
+        + subtle::ConstantTimeLess
+        + core::ops::ShrAssign<usize>
+        + core::ops::Shr<usize, Output = T>
+        + core::ops::BitAnd<Output = T>
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
+        // `inv` routes to `inv_safegcd_ct` (composite-correct CT inverse).
+        + core::ops::BitOr<Output = T>,
+    <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+{
+    type Backend = T;
+    type Residue<'f>
+        = Residue<'f, T, Ct>
+    where
+        Self: 'f;
+
+    fn reduce<'f>(&'f self, raw: &T) -> Residue<'f, T, Ct> {
+        self.0.reduce(raw)
+    }
+    fn mul<'f>(&'f self, a: &Residue<'f, T, Ct>, b: &Residue<'f, T, Ct>) -> Residue<'f, T, Ct> {
+        self.0.mul(a, b)
+    }
+    fn add<'f>(&'f self, a: &Residue<'f, T, Ct>, b: &Residue<'f, T, Ct>) -> Residue<'f, T, Ct> {
+        self.0.add(a, b)
+    }
+    fn sub<'f>(&'f self, a: &Residue<'f, T, Ct>, b: &Residue<'f, T, Ct>) -> Residue<'f, T, Ct> {
+        self.0.sub(a, b)
+    }
+    fn exp<'f>(&'f self, base: &Residue<'f, T, Ct>, e: &T) -> Residue<'f, T, Ct> {
+        self.0.exp(base, e)
+    }
+    fn inv<'f>(&'f self, a: &Residue<'f, T, Ct>) -> Option<Residue<'f, T, Ct>> {
+        // safegcd, not Fermat: the CT general (composite-correct) inverse.
+        // Collapses the CtOption existence bit per the trait's CT contract
+        // (value stays CT); callers needing the masked bit use the inherent
+        // `Field::inv_safegcd_ct`.
+        self.0.inv_safegcd_ct(a).into_option()
+    }
+    fn one(&self) -> Residue<'_, T, Ct> {
+        self.0.one()
+    }
+    fn zero(&self) -> Residue<'_, T, Ct> {
+        self.0.zero()
+    }
+    fn into_raw(&self, a: &Residue<'_, T, Ct>) -> T {
+        self.0.into_raw(a)
+    }
+    fn modulus(&self) -> &T {
+        self.0.modulus()
+    }
+}
+
+impl<T> FieldFor for T
+where
+    T: const_num_traits::HasPersonality
+        + Copy
+        + PartialEq
+        + PartialOrd
+        + crate::parity::Parity
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::BitsPrecision
+        + const_num_traits::One
+        + const_num_traits::Zero
+        + const_num_traits::WithPrecision
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingMul<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
+        // `Field::new` (below) is bounded on `MontStorage`, which is `zeroize`-gated
+        // to require `Zeroize`. Without this the blanket is vacuous with `zeroize`
+        // off but unsatisfiable with it on — every real consumer sets `zeroize`.
+        + MontStorage,
+    FieldView<T, <T as const_num_traits::HasPersonality>::P>: FieldOps<Backend = T>,
+{
+    type Field = FieldView<T, <T as const_num_traits::HasPersonality>::P>;
+    fn field(modulus: T) -> Option<Self::Field> {
+        Field::<T, <T as const_num_traits::HasPersonality>::P>::new(modulus).map(FieldView)
+    }
+}
+
+// The Montgomery `Field` is one reduction strategy; `SchoolbookField` is the
+// other, exposed through the *same* `FieldOps` surface so verify code is
+// strategy-agnostic. Its residue carries ring-width by construction: `reduce`,
+// `zero`, `one` seed at the modulus width, and the pre-reduced `_pr` ops
+// preserve it. Schoolbook is variable-time (the `>= m` branch), so it is
+// Nct-only — the Ct strategy is always Montgomery.
+
+/// A plain (non-Montgomery) residue in `[0, m)`, carried at the ring width.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SchoolbookResidue<'f, T> {
+    val: T,
+    _brand: core::marker::PhantomData<&'f ()>,
+}
+
+/// Schoolbook (double-and-add / peasant) modular arithmetic as a `FieldOps`
+/// strategy. `Copy` carriers only (the `basic` flavor); the modulus is stored
+/// at its own (ring) width.
+#[derive(Clone, Debug)]
+pub struct SchoolbookField<T> {
+    modulus: T,
+}
+
+impl<T> SchoolbookField<T> {
+    /// Build a schoolbook field over `modulus`. Rejects `modulus < 2`.
+    pub fn new(modulus: T) -> Option<Self>
+    where
+        T: const_num_traits::One + PartialOrd,
+    {
+        (modulus > T::one()).then_some(SchoolbookField { modulus })
+    }
+
+    fn wrap<'f>(&self, val: T) -> SchoolbookResidue<'f, T> {
+        SchoolbookResidue {
+            val,
+            _brand: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<T> FieldOps for SchoolbookField<T>
+where
+    T: Copy
+        + const_num_traits::Zero
+        + const_num_traits::One
+        + PartialEq
+        + PartialOrd
+        + crate::parity::Parity
+        + crate::NonCt
+        + const_num_traits::WithPrecision
+        + const_num_traits::WrappingAdd<Output = T>
+        + const_num_traits::WrappingSub<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingAdd<Output = T>
+        + const_num_traits::ops::overflowing::OverflowingMul<Output = T>
+        + core::ops::Rem<Output = T>
+        + core::ops::Div<Output = T>
+        + core::ops::Sub<Output = T>
+        + core::ops::Shr<usize, Output = T>
+        + core::ops::ShrAssign<usize>,
+{
+    type Backend = T;
+    type Residue<'f>
+        = SchoolbookResidue<'f, T>
+    where
+        Self: 'f;
+
+    fn reduce<'f>(&'f self, raw: &T) -> SchoolbookResidue<'f, T> {
+        // Enter the ring: reduce, then widen to ring width.
+        self.wrap((*raw % self.modulus).widen_to_precision_of(&self.modulus))
+    }
+    fn mul<'f>(
+        &'f self,
+        a: &SchoolbookResidue<'f, T>,
+        b: &SchoolbookResidue<'f, T>,
+    ) -> SchoolbookResidue<'f, T> {
+        self.wrap(crate::mul::basic_mod_mul_pr(a.val, b.val, self.modulus))
+    }
+    fn add<'f>(
+        &'f self,
+        a: &SchoolbookResidue<'f, T>,
+        b: &SchoolbookResidue<'f, T>,
+    ) -> SchoolbookResidue<'f, T> {
+        self.wrap(crate::add::basic_mod_add_pr(a.val, b.val, self.modulus))
+    }
+    fn sub<'f>(
+        &'f self,
+        a: &SchoolbookResidue<'f, T>,
+        b: &SchoolbookResidue<'f, T>,
+    ) -> SchoolbookResidue<'f, T> {
+        self.wrap(crate::sub::basic_mod_sub_pr(a.val, b.val, self.modulus))
+    }
+    fn exp<'f>(&'f self, base: &SchoolbookResidue<'f, T>, e: &T) -> SchoolbookResidue<'f, T> {
+        // Re-establish ring width: `basic_mod_exp_pr` returns a minimal-width
+        // `T::one()` for exponent 0 (loop skipped), which would be a narrow
+        // residue on a runtime-width carrier.
+        self.wrap(
+            crate::exp::basic_mod_exp_pr(base.val, *e, self.modulus)
+                .widen_to_precision_of(&self.modulus),
+        )
+    }
+    fn inv<'f>(&'f self, a: &SchoolbookResidue<'f, T>) -> Option<SchoolbookResidue<'f, T>> {
+        // Extended Euclid, not Fermat — the strategy-neutral `inv` names the op.
+        crate::inv::basic_mod_inv(a.val, self.modulus)
+            .map(|v| self.wrap(v.widen_to_precision_of(&self.modulus)))
+    }
+    fn one(&self) -> SchoolbookResidue<'_, T> {
+        self.wrap(T::one_with_precision_of(&self.modulus))
+    }
+    fn zero(&self) -> SchoolbookResidue<'_, T> {
+        self.wrap(T::zero_with_precision_of(&self.modulus))
+    }
+    fn into_raw(&self, a: &SchoolbookResidue<'_, T>) -> T {
+        a.val
+    }
+    fn modulus(&self) -> &T {
+        &self.modulus
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1009,6 +1395,161 @@ mod tests {
     fn u16ct(n: u16) -> U16Ct {
         U16Ct::from(n)
     }
+
+    // Nct `Field`/`Residue` API matrix: reduce/into_raw round-trip, add/sub/mul,
+    // exp, and Fermat inverse (prime modulus), cross-checked against a u64
+    // oracle, across every backend.
+    macro_rules! field_test_module {
+        ($stem:ident, $type_path:path, $(type $td:ty = $te:ty;)?) => {
+            paste::paste! {
+                mod [<$stem _field_tests>] {
+                    #[allow(unused_imports)]
+                    use $type_path;
+                    $( type $td = $te; )?
+                    use crate::Field;
+
+                    const M: u64 = 251; // prime, fits u8
+
+                    fn field() -> Field<U256> {
+                        Field::new(U256::from(251u8)).unwrap()
+                    }
+
+                    #[test]
+                    fn reduce_roundtrip() {
+                        let f = field();
+                        for raw in [0u8, 1, 2, 100, 250] {
+                            assert_eq!(
+                                f.into_raw(&f.reduce(&U256::from(raw))),
+                                U256::from(raw),
+                                "roundtrip {raw}"
+                            );
+                        }
+                    }
+
+                    #[test]
+                    fn add_sub_mul() {
+                        let f = field();
+                        for a in [3u8, 100, 250] {
+                            for b in [7u8, 200, 249] {
+                                let ra = f.reduce(&U256::from(a));
+                                let rb = f.reduce(&U256::from(b));
+                                let add = ((a as u64 + b as u64) % M) as u8;
+                                let sub = ((a as u64 + M - b as u64) % M) as u8;
+                                let mul = ((a as u64 * b as u64) % M) as u8;
+                                assert_eq!(f.into_raw(&f.add(&ra, &rb)), U256::from(add), "add {a}+{b}");
+                                assert_eq!(f.into_raw(&f.sub(&ra, &rb)), U256::from(sub), "sub {a}-{b}");
+                                assert_eq!(f.into_raw(&f.mul(&ra, &rb)), U256::from(mul), "mul {a}*{b}");
+                            }
+                        }
+                    }
+
+                    #[test]
+                    fn exp_matches_oracle() {
+                        let f = field();
+                        for base in [2u8, 7, 200] {
+                            for e in [0u8, 1, 5, 17] {
+                                let want = crate::exp::basic_mod_exp(base as u64, e as u64, M) as u8;
+                                let got = f.into_raw(&f.exp(&f.reduce(&U256::from(base)), &U256::from(e)));
+                                assert_eq!(got, U256::from(want), "exp {base}^{e}");
+                            }
+                        }
+                    }
+
+                    #[test]
+                    fn inv_fermat_roundtrip() {
+                        let f = field();
+                        for a in [1u8, 2, 100, 250] {
+                            let ra = f.reduce(&U256::from(a));
+                            let inv = f.inv_fermat(&ra).expect("prime modulus invertible");
+                            assert_eq!(f.into_raw(&f.mul(&ra, &inv)), U256::from(1u8), "inv {a}");
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    field_test_module!(
+        fixed_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::FixedUInt<u8, 4>;
+    );
+
+    field_test_module!(
+        heapless_bigint,
+        fixed_bigint::HeaplessBigInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u8, 4>;
+    );
+
+    // bnum / crypto-bigint expose a ready `U256`; the type-path import *is* the
+    // alias, so no `type U256 =`.
+    field_test_module!(bnum_patched, bnum_patched::types::U256,);
+
+    field_test_module!(crypto_bigint_patched, crypto_bigint_patched::U256,);
+
+    // num-bigint (`FixedWidthBigUint`) is intentionally absent: the Montgomery
+    // `Field`/CIOS path is `Copy`-bound (row ops copy limbs), and it is a
+    // heap-allocated non-`Copy` carrier. It rides the schoolbook + free-function
+    // Montgomery matrices instead.
+
+    // Ct `FieldCt` matrix: the constant-time surface (reduce/mul + the
+    // Bernstein-Yang `inv_safegcd_ct` RSA-blinding path), across Ct-personality
+    // carriers.
+    macro_rules! field_ct_test_module {
+        ($stem:ident, $type_path:path, $(type $td:ty = $te:ty;)?) => {
+            paste::paste! {
+                mod [<$stem _field_ct_tests>] {
+                    #[allow(unused_imports)]
+                    use $type_path;
+                    $( type $td = $te; )?
+                    use crate::FieldCt;
+
+                    const M: u64 = 251; // prime, fits u8
+
+                    #[test]
+                    fn ct_reduce_mul() {
+                        let f = FieldCt::<U256>::new(U256::from(251u8)).unwrap();
+                        for raw in [0u8, 1, 100, 250] {
+                            assert_eq!(f.into_raw(&f.reduce(&U256::from(raw))), U256::from(raw));
+                        }
+                        for (a, b) in [(7u8, 5u8), (200, 199), (250, 2)] {
+                            let ra = f.reduce(&U256::from(a));
+                            let rb = f.reduce(&U256::from(b));
+                            let mul = ((a as u64 * b as u64) % M) as u8;
+                            assert_eq!(f.into_raw(&f.mul(&ra, &rb)), U256::from(mul), "mul {a}*{b}");
+                        }
+                    }
+
+                    #[test]
+                    fn ct_inv_safegcd_roundtrip() {
+                        let f = FieldCt::<U256>::new(U256::from(251u8)).unwrap();
+                        for a in [1u8, 2, 100, 250] {
+                            let ra = f.reduce(&U256::from(a));
+                            let inv = f.inv_safegcd_ct(&ra);
+                            assert_eq!(inv.is_some().unwrap_u8(), 1, "inv exists {a}");
+                            assert_eq!(
+                                f.into_raw(&f.mul(&ra, &inv.unwrap())),
+                                U256::from(1u8),
+                                "v*inv==1 for {a}"
+                            );
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    field_ct_test_module!(
+        fixed_bigint,
+        fixed_bigint::FixedUInt,
+        type U256 = fixed_bigint::FixedUInt<u8, 4, const_num_traits::Ct>;
+    );
+
+    field_ct_test_module!(
+        heapless_bigint,
+        fixed_bigint::HeaplessBigInt,
+        type U256 = fixed_bigint::HeaplessBigInt<u8, 4, const_num_traits::Ct>;
+    );
 
     #[test]
     fn round_trip_small() {
@@ -1646,5 +2187,312 @@ mod tests {
         let eq_ac: bool = a.ct_eq(&c).into();
         assert!(eq_ab);
         assert!(!eq_ac);
+    }
+    // Full Field round-trip on HeaplessBigInt at CAP == len (modulus fills the
+    // carrier): the R-width precompute and the CarryingMul value-width split at
+    // exact width — the full-CAP config ed25519 / 2048-bit RSA use.
+    #[test]
+    fn heapless_field_roundtrip() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u32, 2, const_num_traits::Nct>;
+        let modulus = H::from_limbs([7u32, 1], 2); // 2^32 + 7, odd, fills CAP=2
+        let w = |v: u32| H::from_limbs([v, 0], 2);
+        let f: Field<H> = Field::new(modulus).unwrap();
+        for raw in [3u32, 5, 200, 255, 1_000_000] {
+            let r = f.reduce(&w(raw));
+            assert_eq!(f.into_raw(&r), w(raw), "round trip {raw}");
+        }
+        let a = f.reduce(&w(3));
+        let b = f.reduce(&w(5));
+        assert_eq!(f.into_raw(&f.mul(&a, &b)), w(15)); // 3*5=15 < modulus
+    }
+
+    // Sub-CAP config (len < CAP): a modulus narrower than the carrier makes the
+    // field width (`bits_precision` = len*word) smaller than storage, so the
+    // wide-REDC precompute runs at value width on unused-capacity operands.
+    // Relies on HeaplessBigInt@len behaving bit-for-bit like FixedUInt<len>;
+    // guards against a future carrier change reintroducing capacity-dependent
+    // arithmetic — caught here in modmath CI, not two crates downstream.
+    #[test]
+    fn heapless_field_roundtrip_subcap() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 8, const_num_traits::Nct>; // modulus 35 -> len 1 < CAP 8
+        let f: Field<H> = Field::new(H::from(35u8)).unwrap();
+        // reduce/into_raw is the identity.
+        for raw in [0u8, 1, 4, 17, 34] {
+            assert_eq!(
+                f.into_raw(&f.reduce(&H::from(raw))),
+                H::from(raw),
+                "round trip {raw}"
+            );
+        }
+        // 4 * 4 = 16 mod 35.
+        let a = f.reduce(&H::from(4u8));
+        assert_eq!(f.into_raw(&f.mul(&a, &a)), H::from(16u8));
+    }
+
+    // CT safegcd inverse on a runtime-width carrier where the residue is
+    // narrower than the modulus (small blinding factor in a wide RSA field).
+    // The divstep count and shift mask must track the modulus width; a value-
+    // width count silently masks valid inverses to None. Scaled-down proxy for
+    // the 2048-bit RSA-blinding inverse; composite modulus, since Fermat can't
+    // invert mod p·q.
+    #[test]
+    fn heapless_inv_safegcd_ct_narrow_value_wide_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u8, 8, Ct>; // modulus fills 2 words, operands 1
+        let f = FieldCt::new(65535u16.into()).unwrap(); // 3·5·17·257
+        for raw in [2u8, 4, 7, 8, 11] {
+            let r = f.reduce(&H::from(raw));
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(inv.is_some().unwrap_u8(), 1, "expected inverse for {raw}");
+            assert_eq!(
+                f.into_raw(&f.mul(&r, &inv.unwrap())),
+                H::from(1u8),
+                "{raw} * inv != 1 mod 65535"
+            );
+        }
+        for raw in [3u8, 5, 15, 17] {
+            let r = f.reduce(&H::from(raw));
+            assert_eq!(
+                f.inv_safegcd_ct(&r).is_some().unwrap_u8(),
+                0,
+                "expected None for non-coprime {raw} mod 65535"
+            );
+        }
+    }
+
+    // Schoolbook and Montgomery agree through the same `FieldOps` surface.
+    #[test]
+    fn schoolbook_strategy_via_fieldops() {
+        type U = FixedUInt<u8, 4>;
+        let sb = SchoolbookField::new(U::from(13u8)).unwrap();
+        let a = sb.reduce(&U::from(3u8));
+        let b = sb.reduce(&U::from(5u8));
+        assert_eq!(sb.into_raw(&sb.mul(&a, &b)), U::from(2u8)); // 15 % 13
+        assert_eq!(sb.into_raw(&sb.add(&a, &b)), U::from(8u8));
+        assert_eq!(sb.into_raw(&sb.sub(&b, &a)), U::from(2u8));
+        assert_eq!(sb.into_raw(&sb.exp(&a, &U::from(3u8))), U::from(1u8)); // 27 % 13
+        let inv = sb.inv(&a).expect("3 invertible mod 13");
+        assert_eq!(sb.into_raw(&sb.mul(&a, &inv)), U::from(1u8));
+        // schoolbook and Montgomery agree, both through FieldOps
+        let mont = FieldView(Field::<U>::new(U::from(13u8)).unwrap());
+        for x in [1u8, 2, 7, 11, 12] {
+            let rs = sb.reduce(&U::from(x));
+            let rm = mont.reduce(&U::from(x));
+            assert_eq!(
+                sb.into_raw(&sb.mul(&rs, &rs)),
+                mont.into_raw(&mont.mul(&rm, &rm)),
+                "sq({x})"
+            );
+        }
+    }
+
+    // One generic body over `FieldOps` runs on both personalities, built
+    // directly and via the `FieldFor` selector.
+    #[test]
+    fn fieldops_generic_over_personality() {
+        fn check<F>(f: &F)
+        where
+            F: FieldOps,
+            F::Backend: From<u8> + PartialEq + core::fmt::Debug,
+        {
+            let a = f.reduce(&F::Backend::from(3u8));
+            let b = f.reduce(&F::Backend::from(5u8));
+            assert_eq!(f.into_raw(&f.mul(&a, &b)), F::Backend::from(2u8)); // 15 % 13
+            assert_eq!(f.into_raw(&f.add(&a, &b)), F::Backend::from(8u8)); // 8
+            assert_eq!(f.into_raw(&f.sub(&b, &a)), F::Backend::from(2u8)); // 2
+            assert_eq!(
+                f.into_raw(&f.exp(&a, &F::Backend::from(3u8))),
+                F::Backend::from(1u8)
+            ); // 27 % 13
+            let inv = f.inv(&a).expect("3 invertible mod 13");
+            assert_eq!(f.into_raw(&f.mul(&a, &inv)), F::Backend::from(1u8));
+            assert_eq!(f.modulus(), &F::Backend::from(13u8));
+        }
+        type NctF = FixedUInt<u8, 4>;
+        type CtF = FixedUInt<u8, 4, Ct>;
+        // direct construction
+        check(&FieldView(Field::<NctF>::new(NctF::from(13u8)).unwrap()));
+        check(&FieldView(Field::<CtF, Ct>::new(CtF::from(13u8)).unwrap()));
+        // via the FieldFor selector
+        check(&<NctF as FieldFor>::field(NctF::from(13u8)).unwrap());
+        check(&<CtF as FieldFor>::field(CtF::from(13u8)).unwrap());
+    }
+
+    // `FieldOps::inv` is a general modular inverse, so it must be correct on a
+    // composite (odd) modulus too. The Montgomery backends route to EEA (Nct) /
+    // safegcd (Ct), not Fermat — Fermat's `2^(15-2) mod 15 = 2` is wrong;
+    // `2 * 8 ≡ 1 (mod 15)`. Schoolbook (EEA) is the oracle.
+    #[test]
+    fn fieldops_inv_composite_modulus_agrees() {
+        type NctF = FixedUInt<u8, 4>;
+        type CtF = FixedUInt<u8, 4, Ct>;
+
+        let nct = FieldView(Field::<NctF>::new(NctF::from(15u8)).unwrap());
+        let a = nct.reduce(&NctF::from(2u8));
+        let inv = nct.inv(&a).expect("2 invertible mod 15");
+        assert_eq!(
+            nct.into_raw(&nct.mul(&a, &inv)),
+            NctF::from(1u8),
+            "Nct a·inv"
+        );
+        assert_eq!(nct.into_raw(&inv), NctF::from(8u8), "Nct inv(2 mod 15)");
+
+        let ct = FieldView(Field::<CtF, Ct>::new(CtF::from(15u8)).unwrap());
+        let a = ct.reduce(&CtF::from(2u8));
+        let inv = ct.inv(&a).expect("2 invertible mod 15");
+        assert_eq!(ct.into_raw(&ct.mul(&a, &inv)), CtF::from(1u8), "Ct a·inv");
+        assert_eq!(ct.into_raw(&inv), CtF::from(8u8), "Ct inv(2 mod 15)");
+
+        let sb = SchoolbookField::new(NctF::from(15u8)).unwrap();
+        let sa = sb.reduce(&NctF::from(2u8));
+        assert_eq!(
+            sb.into_raw(&sb.inv(&sa).expect("2 invertible mod 15")),
+            NctF::from(8u8),
+            "schoolbook inv(2 mod 15)"
+        );
+    }
+
+    // Multi-word modulus (len 8) held sub-CAP (CAP 16): an ed25519-field /
+    // group-order shape (p = 2^255-19). Exercises a multi-word modulus with
+    // full-width operands, where a capacity leak would diverge from the
+    // CAP==len carrier. Both carriers are HeaplessBigInt so any CAP-dependent
+    // arithmetic (not value-dependent) shows up as a diff.
+    #[test]
+    fn heapless_subcap_multiword_modulus_parity() {
+        use fixed_bigint::HeaplessBigInt;
+        use modmath_cios::CiosRowOps as _;
+        const P: [u32; 8] = [
+            0xFFFF_FFED,
+            0xFFFF_FFFF,
+            0xFFFF_FFFF,
+            0xFFFF_FFFF,
+            0xFFFF_FFFF,
+            0xFFFF_FFFF,
+            0xFFFF_FFFF,
+            0x7FFF_FFFF,
+        ];
+        const A: [u32; 8] = [
+            0x1234_5678,
+            0x9abc_def0,
+            0x0f1e_2d3c,
+            0x4b5a_6978,
+            0x1122_3344,
+            0x5566_7788,
+            0x99aa_bbcc,
+            0x1357_9bdf,
+        ];
+        const B: [u32; 8] = [
+            0xdead_beef,
+            0xcafe_babe,
+            0xfeed_face,
+            0x0bad_c0de,
+            0x8899_aabb,
+            0xccdd_eeff,
+            0x0011_2233,
+            0x2468_ace0,
+        ];
+        type Full = HeaplessBigInt<u32, 8>; // CAP == len
+        type Sub = HeaplessBigInt<u32, 16>; // CAP > len (deployment carrier)
+        let mfull = Full::from_limbs(P, 8);
+        let mut p16 = [0u32; 16];
+        p16[..8].copy_from_slice(&P);
+        let msub = Sub::from_limbs(p16, 8);
+        let full = |a: [u32; 8]| Full::from_limbs(a, 8);
+        let sub = |a: [u32; 8]| {
+            let mut w = [0u32; 16];
+            w[..8].copy_from_slice(&a);
+            Sub::from_limbs(w, 8)
+        };
+        let eq = |a: &Full, b: &Sub| (0..8).all(|i| a.word(i) == b.word(i));
+        let eqo = |a: &Option<Full>, b: &Option<Sub>| match (a, b) {
+            (Some(x), Some(y)) => eq(x, y),
+            (None, None) => true,
+            _ => false,
+        };
+        assert!(
+            eq(
+                &crate::basic::add(full(A), full(B), mfull),
+                &crate::basic::add(sub(A), sub(B), msub)
+            ),
+            "add"
+        );
+        assert!(
+            eq(
+                &crate::basic::sub(full(A), full(B), mfull),
+                &crate::basic::sub(sub(A), sub(B), msub)
+            ),
+            "sub"
+        );
+        assert!(
+            eq(
+                &crate::basic::mul(full(A), full(B), mfull),
+                &crate::basic::mul(sub(A), sub(B), msub)
+            ),
+            "mul"
+        );
+        assert!(
+            eq(
+                &crate::basic::exp(full(A), full(B), mfull),
+                &crate::basic::exp(sub(A), sub(B), msub)
+            ),
+            "exp"
+        );
+        assert!(
+            eqo(
+                &crate::inv::basic_mod_inv(full(A), mfull),
+                &crate::inv::basic_mod_inv(sub(A), msub)
+            ),
+            "basic_inv"
+        );
+        assert!(
+            eqo(
+                &crate::inv::strict_mod_inv(full(A), &mfull),
+                &crate::inv::strict_mod_inv(sub(A), &msub)
+            ),
+            "strict_inv"
+        );
+        let ff: Field<Full> = Field::new(mfull).unwrap();
+        let fs: Field<Sub> = Field::new(msub).unwrap();
+        assert!(
+            eq(
+                &ff.into_raw(&ff.mul(&ff.reduce(&full(A)), &ff.reduce(&full(B)))),
+                &fs.into_raw(&fs.mul(&fs.reduce(&sub(A)), &fs.reduce(&sub(B)))),
+            ),
+            "montgomery mul"
+        );
+        assert!(
+            eq(
+                &ff.into_raw(&ff.exp(&ff.reduce(&full(A)), &full(B))),
+                &fs.into_raw(&fs.exp(&fs.reduce(&sub(A)), &sub(B))),
+            ),
+            "montgomery exp"
+        );
+    }
+
+    // CT safegcd inverse where the modulus FILLS the carrier (top bit set):
+    // the full-CAP RSA deployment shape (2048-bit N in a 2048-bit carrier),
+    // scaled to a 128-bit carrier. Guards the se_shr1 top-bit mask — it must
+    // sit at the modulus's top bit, not the low word's. A narrow mask masks
+    // every coprime inverse to None at multi-word widths (invisible to the
+    // single-word inv tests).
+    #[test]
+    fn heapless_inv_safegcd_ct_full_cap_modulus() {
+        use fixed_bigint::HeaplessBigInt;
+        type H = HeaplessBigInt<u32, 4, Ct>; // 128-bit carrier, modulus fills it
+        let modulus = H::from_limbs([0x1234_5679, 0x1357_9bdf, 0x2468_ace0, 0x8000_0001], 4);
+        let f = FieldCt::new(modulus).unwrap();
+        // Powers of two are coprime to any odd modulus; the inverse must exist.
+        for v in [2u8, 4, 8, 16, 32] {
+            let r = f.reduce(&H::from(v));
+            let inv = f.inv_safegcd_ct(&r);
+            assert_eq!(inv.is_some().unwrap_u8(), 1, "expected inverse for {v}");
+            assert_eq!(
+                f.into_raw(&f.mul(&r, &inv.unwrap())),
+                H::from(1u8),
+                "{v} * inv != 1 in full-cap field"
+            );
+        }
     }
 }

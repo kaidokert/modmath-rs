@@ -1,4 +1,16 @@
+use const_num_traits::ops::overflowing::{OverflowingAdd, OverflowingMul};
 use core::cmp::Ordering;
+
+// `Signed<T>` magnitude arithmetic takes the wrapped product/sum and
+// `debug_assert!`s that it did not overflow, rather than paying for a checked
+// path. The math guarantees no overflow: in the extended-Euclid loop that drives
+// `Signed`, every `coefficient * quotient` and every magnitude sum is provably
+// < modulus (consecutive Bézout coefficients alternate sign, so the running
+// magnitude stays below the modulus; `quotient * |t_i|` is bounded by it too),
+// and the modulus is itself a `T`, so it fits the carrier. The compiler can't
+// see that, so `overflowing_*` gives us the exact value plus a flag we assert is
+// never set — the proof is checked in debug builds, and release keeps panic
+// machinery out of the variable-time inverse.
 
 /// Partial signed implementation for modular inverse calculations
 ///
@@ -213,14 +225,23 @@ where
 
 impl<T> core::ops::Add for Signed<T>
 where
-    T: core::ops::Add<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
+    T: OverflowingAdd<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
 {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self.negative, rhs.negative) {
-            (false, false) => Self::new_unchecked(self.value + rhs.value, false),
-            (true, true) => Self::new_unchecked(self.value + rhs.value, true),
+            // Mixed-sign can't underflow (plain `Sub`); EEA keeps magnitudes
+            // < modulus (module note), so same-sign adds never overflow.
+            (false, false) | (true, true) => {
+                let negative = self.negative;
+                let (value, _overflow) = self.value.overflowing_add(rhs.value);
+                debug_assert!(
+                    !_overflow,
+                    "Signed add magnitude overflow: EEA bound violated"
+                );
+                Self::new_unchecked(value, negative)
+            }
             (false, true) | (true, false) => {
                 if self.value >= rhs.value {
                     Self::new_unchecked(self.value - rhs.value, self.negative)
@@ -234,7 +255,7 @@ where
 
 impl<T> core::ops::Sub for Signed<T>
 where
-    T: core::ops::Add<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
+    T: OverflowingAdd<Output = T> + core::ops::Sub<Output = T> + core::cmp::PartialOrd,
 {
     type Output = Self;
 
@@ -252,13 +273,19 @@ where
 /// a non-negative magnitude. Using signed types will break this assumption.
 impl<T> core::ops::Mul for Signed<T>
 where
-    T: core::ops::Mul<Output = T>,
+    T: OverflowingMul<Output = T>,
 {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self::Output {
+        // Product is < modulus (module note), so the wrapped value is exact.
+        let (value, _overflow) = self.value.overflowing_mul(other.value);
+        debug_assert!(
+            !_overflow,
+            "Signed mul magnitude overflow: EEA bound violated"
+        );
         Self {
-            value: self.value * other.value,
+            value,
             negative: self.negative != other.negative,
         }
     }
@@ -271,32 +298,19 @@ where
 /// represent a non-negative value to maintain correctness.
 impl<T> core::ops::Mul<T> for Signed<T>
 where
-    T: core::ops::Mul<Output = T>,
+    T: OverflowingMul<Output = T>,
 {
     type Output = Self;
 
     fn mul(self, other: T) -> Self::Output {
+        // See `Mul for Signed`.
+        let (value, _overflow) = self.value.overflowing_mul(other);
+        debug_assert!(
+            !_overflow,
+            "Signed mul magnitude overflow: EEA bound violated"
+        );
         Self {
-            value: self.value * other,
-            negative: self.negative,
-        }
-    }
-}
-
-/// Multiplication of Signed<T> with a reference to an unsigned value &T.
-///
-/// # Requirements
-/// Both `T` and `other` must be unsigned types. The `other` parameter should
-/// represent a non-negative value to maintain correctness.
-impl<'a, T> core::ops::Mul<&'a T> for Signed<T>
-where
-    T: core::ops::Mul<&'a T, Output = T> + 'a,
-{
-    type Output = Self;
-
-    fn mul(self, other: &'a T) -> Self::Output {
-        Self {
-            value: self.value * other,
+            value,
             negative: self.negative,
         }
     }
@@ -317,9 +331,8 @@ where
 }
 
 #[cfg(test)]
-// op_ref allowed: the by-ref arms deliberately exercise the `Add<&T>` /
-// `Mul<&T>` impls; "fixing" `a * &b` to `a * b` would switch which impl
-// is under test.
+// op_ref allowed: the by-ref arms deliberately exercise the `Add<&T>`
+// impls; "fixing" `a + &b` to `a + b` would switch which impl is under test.
 #[allow(clippy::op_ref)]
 mod signed_tests {
     use super::Signed;
@@ -756,18 +769,6 @@ mod signed_tests {
         let a = Signed::new(3u32, true); // -3
         let result = a * 5u32; // -3 * 5 = -15
         assert_eq!(result.value, 15u32);
-        assert!(result.negative);
-
-        // Test Mul<&T> - positive Signed * &T
-        let a = Signed::new(8u32, false); // +8
-        let result = a * &3u32; // +8 * 3 = +24
-        assert_eq!(result.value, 24u32);
-        assert!(!result.negative);
-
-        // Test Mul<&T> - negative Signed * &T
-        let a = Signed::new(9u32, true); // -9
-        let result = a * &2u32; // -9 * 2 = -18
-        assert_eq!(result.value, 18u32);
         assert!(result.negative);
     }
 
