@@ -3,7 +3,7 @@
 
 use core::hint::black_box;
 use cortex_m_rt::entry;
-use krabi_caliper::cortex_m::DwtCycleCounter;
+use krabi_caliper::cortex_m::DwtMeasurementPlatform;
 use krabi_caliper::report::Field;
 use krabi_caliper::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
 
@@ -95,12 +95,7 @@ unsafe extern "C" {
         np: *const [u32; 8],
         out: *mut [u32; 8],
     );
-    fn ct_fix__field_exp__u64__N1(
-        base: *const u64,
-        e: *const u64,
-        m: *const u64,
-        out: *mut u64,
-    );
+    fn ct_fix__field_exp__u64__N1(base: *const u64, e: *const u64, m: *const u64, out: *mut u64);
     fn ct_fix__field_exp__fb32__N8(
         base: *const [u32; 8],
         e: *const [u32; 8],
@@ -321,12 +316,15 @@ fn fixture_table(v: &u64) -> bool {
 
 #[entry]
 fn main() -> ! {
-    let mut reporter = krabi_caliper::rtt::init_ct_compatible();
+    let mut reporter = krabi_caliper::protocol::rtt::init_ct_compatible();
     ct_fixtures::link_anchor();
     let mut peripherals = cortex_m::Peripherals::take().unwrap();
-    let mut counter =
-        DwtCycleCounter::enable(&mut peripherals.DCB, &mut peripherals.DWT, Some(16_000_000))
-            .unwrap();
+    let mut platform = DwtMeasurementPlatform::enable(
+        &mut peripherals.DCB,
+        &mut peripherals.DWT,
+        Some(16_000_000),
+    )
+    .unwrap();
 
     let mont64_a = Mont64 {
         a: 5,
@@ -419,7 +417,7 @@ fn main() -> ! {
     ];
     let summary_fields = [Field::u64("diagnostics", 1)];
     let mut suite = PairedSuite::<_, _, TRIALS>::start(
-        &mut counter,
+        &mut platform,
         &mut reporter,
         PairedSuiteConfig {
             suite: "modmath-cyccnt",
