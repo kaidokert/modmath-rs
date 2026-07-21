@@ -7,7 +7,6 @@ members = [
     "ct-verify/ct-fixtures",
     "ct-verify/ct-ctgrind",
     "ct-verify/ct-driver",
-    "ct-verify/cyccnt-hardware",
     "ct-verify/panic-free-audit",
 ]
 
