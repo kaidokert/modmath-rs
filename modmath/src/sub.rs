@@ -124,14 +124,19 @@ where
         + crate::NonCt
         + WithPrecision,
 {
-    // Widen a to the modulus width so an underflowing a - b wraps at bit W.
+    // Widen a to the modulus width so the residue lands at ring width.
     let a = a.widen_to_precision_of(m);
-    let diff = a.clone().wrapping_sub(b.clone());
-    if diff > a {
-        // If we wrapped around (underflow)
-        diff.wrapping_add(m.clone())
+    // Compare-then-subtract so the subtrahend never exceeds the minuend and no
+    // `wrapping_*` crosses the carrier width. A width-crossing `wrapping_sub` +
+    // `wrapping_add(m)` pair assumes two's-complement wrap, which a lenient heap
+    // carrier — e.g. num-bigint's `FixedWidthBigUint`, whose `wrapping_add` keeps
+    // the full value rather than masking — does not honor.
+    if a >= *b {
+        a.wrapping_sub(b.clone())
     } else {
-        diff
+        // a < b < m, so a + (m - b) stays in [0, m): no width-crossing wrap.
+        let m_minus_b = m.clone().wrapping_sub(b.clone());
+        a.wrapping_add(m_minus_b)
     }
 }
 
@@ -182,14 +187,18 @@ where
         + crate::NonCt
         + WithPrecision,
 {
-    // Widen a to the modulus width so the wrapped diff on underflow is
-    // 2^W - (b-a), which m + diff then reduces correctly.
+    // Widen a to the modulus width so the residue lands at ring width.
     let a = a.widen_to_precision_of(m);
-    let (diff, overflow) = a.overflowing_sub(b.clone());
-    if overflow {
-        m.clone().overflowing_add(diff).0
+    // Compare-then-subtract (see `constrained_mod_sub_pr`): the subtrahend never
+    // exceeds the minuend, so no `overflowing_*` crosses the carrier width — the
+    // lenient-heap-carrier hazard the old `overflowing_sub` + `overflowing_add(m)`
+    // pair had.
+    if a >= *b {
+        a.overflowing_sub(b.clone()).0
     } else {
-        diff
+        // a < b < m, so a + (m - b) stays in [0, m).
+        let m_minus_b = m.clone().overflowing_sub(b.clone()).0;
+        a.overflowing_add(m_minus_b).0
     }
 }
 
@@ -344,6 +353,20 @@ macro_rules! sub_test_module {
                     let a = U256::from(10u8);
                     crate::maybe_test!($constrained, assert_eq!(super::constrained_mod_sub(a, &b, &m), result));
                     let a = U256::from(10u8);
+                    crate::maybe_test!($basic, assert_eq!(super::basic_mod_sub(a, b, m), result));
+
+                    // Underflow (a < b): 5 - 10 mod 20 = 15. Exercises the
+                    // borrow-correction path on every backend — the case a lenient
+                    // heap carrier's wrapping arithmetic gets wrong if the mod-sub
+                    // relies on two's-complement width wrap.
+                    let a = U256::from(5u8);
+                    let b = U256::from(10u8);
+                    let m = U256::from(20u8);
+                    let result = U256::from(15u8);
+                    crate::maybe_test!($strict, assert_eq!(super::strict_mod_sub(a, &b, &m), result));
+                    let a = U256::from(5u8);
+                    crate::maybe_test!($constrained, assert_eq!(super::constrained_mod_sub(a, &b, &m), result));
+                    let a = U256::from(5u8);
                     crate::maybe_test!($basic, assert_eq!(super::basic_mod_sub(a, b, m), result));
                 }
             }
