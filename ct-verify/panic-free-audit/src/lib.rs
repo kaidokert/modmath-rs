@@ -4,7 +4,7 @@
 //! point the way a deployed consumer would — no `unwrap`, no `expect`,
 //! `Odd::new_unchecked` at the trust boundary, `CtOption` results
 //! observed through `black_box` instead of extracted. After
-//! cross-building with the workspace release profile, `check.sh`
+//! cross-building with the workspace release profile, krabi-caliper
 //! asserts the resulting archive contains no `core::panicking`
 //! machinery: for CT code a reachable panic is both a DoS edge and a
 //! timing oracle (the panic formatting path's cost depends on the
@@ -14,11 +14,14 @@
 //! through and DCE the body wholesale (same hygiene as ct-fixtures).
 
 // no_std + the local #[panic_handler] only under the `panic-handler`
-// feature (the cross-built audit shape, enabled by check.sh) — host-side
+// feature (the cross-built audit shape, enabled by krabi-caliper) — host-side
 // workspace builds (clippy, tests) link std, which supplies its own.
 #![cfg_attr(feature = "panic-handler", no_std)]
 #![allow(non_snake_case)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
+
+#[cfg(feature = "neg-controls")]
+mod neg_controls;
 
 use core::hint::black_box;
 

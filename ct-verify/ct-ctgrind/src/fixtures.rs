@@ -7,8 +7,11 @@
 //! reach any panic path (see the fixture-side docs on forced-odd
 //! moduli).
 
-use crate::macros::{ctgrind_fixture, taint_val, untaint_val};
 use core::hint::black_box;
+use krabi_caliper::ctgrind_fixture;
+
+krabi_caliper::ctgrind_standard_controls!();
+use krabi_caliper::host::ctgrind::{taint_val, untaint_val};
 
 // ============================================================================
 // Core primitives — u64 carrier.

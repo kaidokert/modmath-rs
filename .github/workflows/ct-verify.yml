@@ -120,5 +120,19 @@ jobs:
         with:
           key: panic-audit-${{ matrix.triple }}
 
+      - name: Install krabi-caliper
+        run: cargo install krabi-caliper --version 0.1.0 --features cli,campaign
+
       - name: Run panic-free audit
-        run: ./ct-verify/panic-free-audit/check.sh ${{ matrix.triple }}
+        run: |
+          cargo krabi-caliper panic-audit \
+            --workspace . \
+            --package panic-free-audit \
+            --target ${{ matrix.triple }} \
+            --features panic-handler \
+            --negative-features neg-controls \
+            --owned-symbol '.*' \
+            --expect-negative panic_audit__neg__bounds_check \
+            --expect-negative panic_audit__neg__unwrap \
+            --expect-negative panic_audit__neg__expect \
+            --json target/panic-audit/${{ matrix.triple }}.json
