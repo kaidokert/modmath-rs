@@ -7,9 +7,9 @@ members = [
     "ct-verify/ct-fixtures",
     "ct-verify/ct-ctgrind",
     "ct-verify/ct-driver",
-    "ct-verify/cyccnt-hardware",
     "ct-verify/panic-free-audit",
 ]
+exclude = ["ct-verify/cyccnt-hardware"]
 
 # Bare `cargo build` (and the CI cross-compiles to thumb targets) should
 # build the library crates only — the ct-verify harness is host-side std
