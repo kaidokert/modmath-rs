@@ -6,6 +6,7 @@ use cortex_m_rt::entry;
 use krabi_caliper::cortex_m::DwtMeasurementPlatform;
 use krabi_caliper::report::Field;
 use krabi_caliper::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
+use stm32f4xx_hal::{pac, prelude::*};
 
 const TRIALS: usize = 4;
 const BATCHES: usize = 1;
@@ -319,10 +320,14 @@ fn main() -> ! {
     let mut reporter = krabi_caliper::protocol::rtt::init_ct_compatible();
     ct_fixtures::link_anchor();
     let mut peripherals = cortex_m::Peripherals::take().unwrap();
+    // Stay within the F407's zero-wait-state flash range. This shortens wall
+    // time without introducing ART cache/prefetch jitter into cycle evidence.
+    let dp = pac::Peripherals::take().unwrap();
+    let _clocks = dp.RCC.constrain().cfgr.sysclk(30.MHz()).freeze();
     let mut platform = DwtMeasurementPlatform::enable(
         &mut peripherals.DCB,
         &mut peripherals.DWT,
-        Some(16_000_000),
+        Some(30_000_000),
     )
     .unwrap();
 
@@ -424,7 +429,7 @@ fn main() -> ! {
             target: "thumbv7em-none-eabihf",
             board: Some("stm32f407vg"),
             unit: krabi_caliper::Unit::CoreCycles,
-            frequency_hz: Some(16_000_000),
+            frequency_hz: Some(30_000_000),
             warmup_blocks: 1,
             batches: BATCHES,
             positive_max_spread: MAX_POSITIVE_SPREAD as u64,
