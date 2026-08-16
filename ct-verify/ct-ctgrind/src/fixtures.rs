@@ -192,6 +192,47 @@ ctgrind_fixture!(ct_fix__field_cswap_eq__fb32__N8, {
     let _ = black_box(r);
 });
 
+// In-place field ops. Operands secret, modulus public (the RCB / scalar-mul
+// use case runs over a public curve prime). Same taint model as field_exp.
+macro_rules! in_place_u64 {
+    ($name:ident) => {
+        unsafe extern "C" {
+            fn $name(a: *const u64, b: *const u64, m: *const u64, out: *mut u64);
+        }
+        ctgrind_fixture!($name, {
+            let (a, b, m) = (0u64, 0u64, 0u64);
+            let mut out = 0u64;
+            taint_val(&a);
+            taint_val(&b);
+            unsafe { $name(&a, &b, &m, &mut out) }
+            untaint_val(&out);
+            let _ = black_box(out);
+        });
+    };
+}
+
+in_place_u64!(ct_fix__field_add_into__u64__N1);
+in_place_u64!(ct_fix__field_sub_into__u64__N1);
+in_place_u64!(ct_fix__field_mul_into__u64__N1);
+
+unsafe extern "C" {
+    fn ct_fix__field_inplace_chain__fb32__N8(
+        a: *const W8,
+        b: *const W8,
+        m: *const W8,
+        out: *mut W8,
+    );
+}
+ctgrind_fixture!(ct_fix__field_inplace_chain__fb32__N8, {
+    let (a, b, m) = ([0u32; 8], [0u32; 8], [0u32; 8]);
+    let mut out = [0u32; 8];
+    taint_val(&a);
+    taint_val(&b);
+    unsafe { ct_fix__field_inplace_chain__fb32__N8(&a, &b, &m, &mut out) }
+    untaint_val(&out);
+    let _ = black_box(out);
+});
+
 // ============================================================================
 // Asymmetric fixtures — only the secret slot is tainted; the public
 // operands are constants on the symbol side.
