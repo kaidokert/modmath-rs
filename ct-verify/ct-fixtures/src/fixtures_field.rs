@@ -102,6 +102,86 @@ pub extern "C" fn ct_fix__field_blind_path__fb32__N8(
     bb(inv.is_some().unwrap_u8())
 }
 
+/// In-place field ops (`add_into` / `sub_into` / `mul_into`). Modulus
+/// public — the RCB / scalar-mul use case that motivates the in-place
+/// form runs over a public curve prime; the residue operands are the
+/// secrets. Granular u64 fixtures isolate each op's finalize.
+#[unsafe(no_mangle)]
+pub extern "C" fn ct_fix__field_add_into__u64__N1(
+    a: *const u64,
+    b: *const u64,
+    m: *const u64,
+    out: *mut u64,
+) {
+    let a = bb(unsafe { *a });
+    let b = bb(unsafe { *b });
+    let m = bb(unsafe { *m }) | 1;
+    let f = Field::<u64, Ct>::try_new_odd_ct(m).unwrap();
+    let (ra, rb) = (f.reduce(&a), f.reduce(&b));
+    let mut r = f.reduce(&a);
+    f.add_into(&mut r, &ra, &rb);
+    unsafe { *out = bb(f.into_raw(&r)) }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ct_fix__field_sub_into__u64__N1(
+    a: *const u64,
+    b: *const u64,
+    m: *const u64,
+    out: *mut u64,
+) {
+    let a = bb(unsafe { *a });
+    let b = bb(unsafe { *b });
+    let m = bb(unsafe { *m }) | 1;
+    let f = Field::<u64, Ct>::try_new_odd_ct(m).unwrap();
+    let (ra, rb) = (f.reduce(&a), f.reduce(&b));
+    let mut r = f.reduce(&a);
+    f.sub_into(&mut r, &ra, &rb);
+    unsafe { *out = bb(f.into_raw(&r)) }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ct_fix__field_mul_into__u64__N1(
+    a: *const u64,
+    b: *const u64,
+    m: *const u64,
+    out: *mut u64,
+) {
+    let a = bb(unsafe { *a });
+    let b = bb(unsafe { *b });
+    let m = bb(unsafe { *m }) | 1;
+    let f = Field::<u64, Ct>::try_new_odd_ct(m).unwrap();
+    let (ra, rb) = (f.reduce(&a), f.reduce(&b));
+    let mut r = f.reduce(&a);
+    f.mul_into(&mut r, &ra, &rb);
+    unsafe { *out = bb(f.into_raw(&r)) }
+}
+
+/// The buffer-cycling flow the in-place ops were built for: two scratch
+/// buffers cycle through `mul_into` → `add_into` → `sub_into`, each op
+/// reading a buffer a prior op wrote. Covers the multi-limb carrier where
+/// a data-dependent slot reuse would show up.
+#[unsafe(no_mangle)]
+pub extern "C" fn ct_fix__field_inplace_chain__fb32__N8(
+    a: *const [u32; 8],
+    b: *const [u32; 8],
+    m: *const [u32; 8],
+    out: *mut [u32; 8],
+) {
+    let a = Fb256::from(bb(unsafe { *a }));
+    let b = Fb256::from(bb(unsafe { *b }));
+    let mut mw = bb(unsafe { *m });
+    mw[0] |= 1;
+    let f = Field::<Fb256, Ct>::try_new_odd_ct(Fb256::from(mw)).unwrap();
+    let (ra, rb) = (f.reduce(&a), f.reduce(&b));
+    let mut t = f.reduce(&a);
+    let mut u = f.reduce(&b);
+    f.mul_into(&mut t, &ra, &rb); // t = a*b
+    f.add_into(&mut u, &t, &ra); // u = t + a  (t fed back)
+    f.sub_into(&mut t, &u, &rb); // t = u - b  (u fed back)
+    unsafe { *out = bb(*f.into_raw(&t).words()) }
+}
+
 /// Ladder-support primitives: `Residue::cswap` on a tainted choice plus
 /// `Residue::ct_eq` on the swapped values.
 #[unsafe(no_mangle)]

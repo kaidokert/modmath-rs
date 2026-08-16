@@ -483,6 +483,50 @@ where
         }
     }
 
+    /// In-place `(a + b) mod modulus`: writes the result into `out`.
+    ///
+    /// Same math as [`add`](Self::add). The `_into` form lets a caller
+    /// chaining many field ops (e.g. RCB complete addition) cycle a fixed
+    /// set of `Residue` buffers instead of materializing a fresh returned
+    /// `Residue` per step. Under the `zeroize` feature every `Residue`
+    /// carries scope-end drop glue, which pins each returned temporary in
+    /// its own stack slot; reusing buffers caps the live set at the buffer
+    /// count. `out` must be distinct from `a` and `b` — the borrow checker
+    /// enforces it.
+    pub fn add_into<'f>(
+        &'f self,
+        out: &mut Residue<'f, T, Nct>,
+        a: &Residue<'f, T, Nct>,
+        b: &Residue<'f, T, Nct>,
+    ) {
+        out.mont = crate::add::basic_mod_add_pr(a.mont, b.mont, self.modulus);
+    }
+
+    /// In-place `(a - b) mod modulus`. See [`add_into`](Self::add_into) for
+    /// the buffer-cycling rationale.
+    pub fn sub_into<'f>(
+        &'f self,
+        out: &mut Residue<'f, T, Nct>,
+        a: &Residue<'f, T, Nct>,
+        b: &Residue<'f, T, Nct>,
+    ) {
+        out.mont = crate::sub::basic_mod_sub_pr(a.mont, b.mont, self.modulus);
+    }
+
+    /// In-place CIOS Montgomery multiplication. See
+    /// [`add_into`](Self::add_into) for the buffer-cycling rationale.
+    #[inline]
+    pub fn mul_into<'f>(
+        &'f self,
+        out: &mut Residue<'f, T, Nct>,
+        a: &Residue<'f, T, Nct>,
+        b: &Residue<'f, T, Nct>,
+    ) where
+        T: CiosMontMul,
+    {
+        out.mont = CiosMontMul::cios_mont_mul(&a.mont, &b.mont, &self.modulus, &self.n_prime);
+    }
+
     /// Modular exponentiation via square-and-multiply.
     ///
     /// `base` is taken as a [`Residue`] (already in Montgomery form); `exp`
@@ -773,6 +817,62 @@ where
             _brand: PhantomData,
             _p: PhantomData,
         }
+    }
+
+    /// In-place `(a + b) mod modulus` — constant-time finalize.
+    ///
+    /// Same math as [`add`](Self::add). The `_into` form lets a caller
+    /// chaining many field ops (e.g. RCB complete addition) cycle a fixed
+    /// set of `Residue` buffers instead of materializing a fresh returned
+    /// `Residue` per step. Under the `zeroize` feature every `Residue`
+    /// carries scope-end drop glue, which pins each returned temporary in
+    /// its own stack slot; reusing buffers caps the live set at the buffer
+    /// count. `out` must be distinct from `a` and `b` — the borrow checker
+    /// enforces it.
+    pub fn add_into<'f>(
+        &'f self,
+        out: &mut Residue<'f, T, Ct>,
+        a: &Residue<'f, T, Ct>,
+        b: &Residue<'f, T, Ct>,
+    ) where
+        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+    {
+        let sum = a.mont.wrapping_add(b.mont);
+        let sub = sum.wrapping_sub(self.modulus);
+        let carry = sum.ct_lt(&a.mont);
+        let ge_m = !sum.ct_lt(&self.modulus);
+        let needs_sub = carry | ge_m;
+        out.mont = T::conditional_select(&sum, &sub, needs_sub);
+    }
+
+    /// In-place `(a - b) mod modulus` — constant-time finalize. See
+    /// [`add_into`](Self::add_into) for the buffer-cycling rationale.
+    pub fn sub_into<'f>(
+        &'f self,
+        out: &mut Residue<'f, T, Ct>,
+        a: &Residue<'f, T, Ct>,
+        b: &Residue<'f, T, Ct>,
+    ) where
+        T: subtle::ConditionallySelectable + subtle::ConstantTimeLess,
+    {
+        let diff = a.mont.wrapping_sub(b.mont);
+        let corrected = diff.wrapping_add(self.modulus);
+        let borrow = a.mont.ct_lt(&b.mont);
+        out.mont = T::conditional_select(&diff, &corrected, borrow);
+    }
+
+    /// In-place CIOS Montgomery multiplication — constant-time finalize. See
+    /// [`add_into`](Self::add_into) for the buffer-cycling rationale.
+    #[inline]
+    pub fn mul_into<'f>(
+        &'f self,
+        out: &mut Residue<'f, T, Ct>,
+        a: &Residue<'f, T, Ct>,
+        b: &Residue<'f, T, Ct>,
+    ) where
+        T: CiosMontMulCt,
+    {
+        out.mont = CiosMontMulCt::cios_mont_mul_ct(&a.mont, &b.mont, &self.modulus, &self.n_prime);
     }
 
     /// Modular exponentiation — constant-time over `exp`.
@@ -1956,6 +2056,57 @@ mod tests {
                 fc.into_raw(&fc.exp(&base_ct, &u16ct(e))).forget_ct()
             );
         }
+    }
+
+    /// The `_into` ops must produce results identical to their by-value
+    /// siblings, and a buffer written by one op must be usable as an input
+    /// to a later op (the buffer-cycling use case that motivates them).
+    #[test]
+    fn in_place_matches_by_value_small() {
+        let f: Field<U16> = Field::new(u16(13)).unwrap();
+        let fc = FieldCt::new(u16ct(13)).unwrap();
+        let mut nct_buf = f.reduce(&u16(0));
+        let mut ct_buf = fc.reduce(&u16ct(0));
+        for a_raw in 0u16..13 {
+            for b_raw in 0u16..13 {
+                let a = f.reduce(&u16(a_raw));
+                let b = f.reduce(&u16(b_raw));
+                let ac = fc.reduce(&u16ct(a_raw));
+                let bc = fc.reduce(&u16ct(b_raw));
+
+                f.add_into(&mut nct_buf, &a, &b);
+                assert_eq!(f.into_raw(&nct_buf), f.into_raw(&f.add(&a, &b)));
+                f.sub_into(&mut nct_buf, &a, &b);
+                assert_eq!(f.into_raw(&nct_buf), f.into_raw(&f.sub(&a, &b)));
+                f.mul_into(&mut nct_buf, &a, &b);
+                assert_eq!(f.into_raw(&nct_buf), f.into_raw(&f.mul(&a, &b)));
+
+                fc.add_into(&mut ct_buf, &ac, &bc);
+                assert_eq!(
+                    fc.into_raw(&ct_buf).forget_ct(),
+                    fc.into_raw(&fc.add(&ac, &bc)).forget_ct()
+                );
+                fc.sub_into(&mut ct_buf, &ac, &bc);
+                assert_eq!(
+                    fc.into_raw(&ct_buf).forget_ct(),
+                    fc.into_raw(&fc.sub(&ac, &bc)).forget_ct()
+                );
+                fc.mul_into(&mut ct_buf, &ac, &bc);
+                assert_eq!(
+                    fc.into_raw(&ct_buf).forget_ct(),
+                    fc.into_raw(&fc.mul(&ac, &bc)).forget_ct()
+                );
+            }
+        }
+        // Buffer-cycling: a buffer written by mul_into feeds a later add_into
+        // as a (distinct-buffer) input. t = 7*5 = 9; u = t + 7 = 3 (mod 13).
+        let a = f.reduce(&u16(7));
+        let b = f.reduce(&u16(5));
+        let mut t = f.reduce(&u16(0));
+        let mut u = f.reduce(&u16(0));
+        f.mul_into(&mut t, &a, &b);
+        f.add_into(&mut u, &t, &a);
+        assert_eq!(f.into_raw(&u), u16(3));
     }
 
     #[test]
