@@ -65,6 +65,8 @@ mod sub;
 mod test_carrier;
 mod wide_mul;
 
+pub mod accelerator;
+
 mod field;
 mod inv;
 pub mod montgomery;
