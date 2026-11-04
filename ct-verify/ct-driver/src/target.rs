@@ -10,7 +10,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "thumbv7em-none-eabi",
         priority: 1,
-        toolchain: "1.86",
+        toolchain: "1.88",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
         thumb_it_blocks: true,
@@ -22,7 +22,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "thumbv7m-none-eabi",
         priority: 1,
-        toolchain: "1.86",
+        toolchain: "1.88",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
         thumb_it_blocks: true,
@@ -35,7 +35,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "thumbv6m-none-eabi",
         priority: 2,
-        toolchain: "1.86",
+        toolchain: "1.88",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
         thumb_it_blocks: false, // armv6m has no IT; no allowlist needed
@@ -48,7 +48,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "riscv32imc-unknown-none-elf",
         priority: 3,
-        toolchain: "1.86",
+        toolchain: "1.88",
         forbidden: mnemonics::RISCV_FORBIDDEN,
         allowed_cmov: &[],
         thumb_it_blocks: false,
@@ -60,7 +60,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "riscv32imac-unknown-none-elf",
         priority: 3,
-        toolchain: "1.86",
+        toolchain: "1.88",
         forbidden: mnemonics::RISCV_FORBIDDEN,
         allowed_cmov: &[],
         thumb_it_blocks: false,
@@ -89,7 +89,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "aarch64-unknown-linux-gnu",
         priority: 5,
-        toolchain: "1.86",
+        toolchain: "1.88",
         forbidden: mnemonics::AARCH64_FORBIDDEN,
         allowed_cmov: mnemonics::AARCH64_ALLOWED,
         thumb_it_blocks: false,
@@ -102,7 +102,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "x86_64-unknown-linux-gnu",
         priority: 6,
-        toolchain: "1.86",
+        toolchain: "1.88",
         forbidden: mnemonics::X86_64_FORBIDDEN,
         allowed_cmov: mnemonics::X86_64_ALLOWED,
         thumb_it_blocks: false,
@@ -282,10 +282,6 @@ const HELPER_ALLOWLIST: &[&str] = &[
     r"modmath10montgomery10basic_mont8mod_exp2",
     r"modmath10montgomery10basic_mont10mod_double",
     r"fixed_bigint\.\.fixeduint\.\.FixedUInt\$LT\$T\$C\$_\$C\$P\$GT\$\$u20\$as\$u20\$core\.\.cmp\.\.PartialEq",
-    // Fixture mechanics: the fixtures unwrap try_new_odd_ct's CtOption,
-    // whose is_some derives from a parity bit the fixture itself forces
-    // via `|= 1` — a branch on a fixture-defined value, not a secret.
-    r"subtle17CtOption\$LT\$T\$GT\$6unwrap",
     // fixed-bigint per-limb helpers reached from modmath's call sites
     // and not present in the upstream list (their fixtures don't reach
     // them). All N-bounded limb loops; schoolbook_mul's carry tail is
@@ -301,11 +297,6 @@ const HELPER_ALLOWLIST: &[&str] = &[
     // width of the operand type (a `cmp #64` counter on 32-bit
     // targets), public by construction.
     r"subtle16ConstantTimeLess5ct_lt",
-    // core's panic/assert formatting machinery, reached from the
-    // fixtures' `CtOption::unwrap`. It only executes once the fixture
-    // contract is already broken (an even modulus, which the fixtures
-    // prevent by forcing the low bit) — off the CT path by definition.
-    r"^_?_ZN4core9panicking",
 ];
 
 /// Thumbv6m-specific extras layered onto `HELPER_ALLOWLIST`.
@@ -363,3 +354,16 @@ const THUMBV6M_EXTRA_HELPERS: &[&str] = &[
     r"^__udivmodsi4$",
     r"^__aeabi_l?ls[lr]$",
 ];
+
+/// Fixtures left out per target: the Ct guarantee does not cover these
+/// (target, carrier, op) combinations. Each is a value branch the backend emits
+/// for lack of a conditional select.
+pub fn excluded_fixtures(triple: &str) -> &'static [&'static str] {
+    match triple {
+        // Word-to-bool on the wide-REDC and Field paths: `ct_is_zero`/`ct_eq`
+        // sign tests on u64 and limb borrow compares on FixedUInt, inlined into
+        // `wide_redc_ct`, `mod_double_ct` and the carry accumulator.
+        "thumbv6m-none-eabi" => &[r"^ct_fix__wide_", r"^ct_fix__(?:ASYM__)?field_"],
+        _ => &[],
+    }
+}

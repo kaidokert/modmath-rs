@@ -97,8 +97,21 @@ cargo run --release
 
 CI: `.github/workflows/ct-ctgrind.yml` (x86_64 + aarch64 taint rows)
 and `.github/workflows/ct-verify.yml` (seven-target asm-grep matrix,
-rustc pinned to 1.86 so codegen — and therefore the calibrated
+rustc pinned to 1.88 so codegen — and therefore the calibrated
 allowlist — stays deterministic). All hard-fail.
+
+CI runs every target at opt-level `"s"` and `"z"`. To reproduce, set
+`CARGO_PROFILE_RELEASE_OPT_LEVEL` plus the per-target `RUSTFLAGS` from
+`.github/workflows/ct-verify.yml` (x86-64 builds with `+lzcnt,+bmi1`). Loops
+over public bounds are accepted structurally, since inlining moves them into
+the fixtures, as are doubling counters seeded from an immediate (the
+`ct_lt` bit-smear ladder, Newton precision). Fixtures for combinations the Ct
+guarantee does not cover are excluded per target in
+`ct-driver/src/target.rs`.
+
+thumbv6m has no conditional select: the wide-REDC and `Field` paths compile
+to value branches there at every opt-level, so those fixtures are excluded.
+AVR is not in the matrix.
 
 ## Extending
 

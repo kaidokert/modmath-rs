@@ -10,9 +10,15 @@ on:
 
 jobs:
   hardware:
+    strategy:
+      fail-fast: false
+      matrix:
+        # "z" is the pinned profile; downstream deployments build at "s".
+        opt: ["s", "z"]
     uses: kaidokert/krabi-caliper-rs/.github/workflows/hw-ct.yml@hw-ct-v1
     with:
-      invocation-name: modmath
+      invocation-name: modmath-opt-${{ matrix.opt }}
       campaigns-json: '["modmath-jtrace-f407"]'
       working-directory: ct-verify/cyccnt-hardware
       prepared: true
+      opt-level: ${{ matrix.opt }}
