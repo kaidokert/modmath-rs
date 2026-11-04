@@ -34,4 +34,4 @@ overflow-checks = false
 incremental = false
 
 [patch.crates-io]
-krabi-caliper = { git = "https://github.com/kaidokert/krabi-caliper-rs", rev = "2fde5b401c4743d818db9d018c1bdd5ba7e7f777" }
+krabi-caliper = { git = "https://github.com/kaidokert/krabi-caliper-rs", rev = "7bf1e6e347eaab38b2d43341168a90e06bed3091" }
