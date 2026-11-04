@@ -144,8 +144,7 @@ pub extern "C" fn ct_fix__field_cswap_eq__fb32__N8(
 /// is observed, never branched on.
 #[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__field_try_new_odd__fb32__N8(m: *const [u32; 8]) -> u8 {
-    let mut mw = bb(unsafe { *m });
-    mw[0] |= 1;
+    let mw = bb(unsafe { *m });
     let f = bb(Field::<Fb256, Ct>::try_new_odd_ct(Fb256::from(mw)));
     bb(f.is_some().unwrap_u8())
 }

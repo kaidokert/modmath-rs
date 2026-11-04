@@ -31,8 +31,10 @@ fn main() -> ExitCode {
                 fixture_package: "ct-fixtures",
                 fixture_features: &["panic-handler"],
             },
-            // Secret-indexed loads are covered by the taint gate, not a branch scanner.
-            memory_class_negatives: &["table_lookup"],
+            // The taint gate covers these, not a branch scanner: secret-indexed
+            // loads have no branch, and counted-loop acceptance can't see that a
+            // loop's bound is secret.
+            memory_class_negatives: &["table_lookup", "secret_bound"],
         },
     )
 }

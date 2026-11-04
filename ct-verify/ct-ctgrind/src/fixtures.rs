@@ -299,6 +299,17 @@ ctgrind_fixture!(nct_fix__neg__value_loop__u32__N4, {
 });
 
 unsafe extern "C" {
+    fn nct_fix__neg__secret_bound__u32__N1(n: *const u32) -> u32;
+}
+ctgrind_fixture!(nct_fix__neg__secret_bound__u32__N1, {
+    let n = 0u32;
+    let n = taint_ptr(&n);
+    let r = unsafe { nct_fix__neg__secret_bound__u32__N1(n) };
+    untaint_val(&r);
+    let _ = black_box(r);
+});
+
+unsafe extern "C" {
     fn nct_fix__neg__doubling_normalize__u32__N1(d: *const u32, n: *const u32) -> u32;
 }
 ctgrind_fixture!(nct_fix__neg__doubling_normalize__u32__N1, {

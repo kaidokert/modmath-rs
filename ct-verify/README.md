@@ -19,7 +19,7 @@ Five members:
   public operands as in-body constants — the configuration where LLVM
   historically rewrites the XOR-select idiom into a secret-flag
   conditional move. `nct_fix__neg__*` fixtures are negative controls
-  (EEA inverse, schoolbook exp, secret-indexed table load) that must
+  (EEA inverse, schoolbook exp, secret-indexed table load, secret loop bound) that must
   trip the gate, or the harness itself is broken.
 - **`ct-ctgrind`** — runs each fixture under Valgrind memcheck with its
   secret inputs tagged `MAKE_MEM_UNDEFINED` via crabgrind. Valgrind

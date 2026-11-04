@@ -76,6 +76,22 @@ pub extern "C" fn nct_fix__neg__value_loop__u32__N4(a: *const [u32; 4]) -> u32 {
     bb(i as u32)
 }
 
+/// `for _ in 0..secret`. The counter steps by a constant, so the asm-grep gate
+/// accepts it as counted and cannot tell the bound is secret; this trips only
+/// under taint.
+#[unsafe(no_mangle)]
+pub extern "C" fn nct_fix__neg__secret_bound__u32__N1(n: *const u32) -> u32 {
+    // Nonzero, so no zero-trip guard sits beside the latch and trips instead.
+    let n = bb(unsafe { *n }) | 1;
+    let mut sum = 0u32;
+    let mut i = 0u32;
+    while i < n {
+        sum = bb(sum.wrapping_add(i));
+        i += 1;
+    }
+    bb(sum)
+}
+
 /// `while d < n { d <<= 1 }`, the normalization step of binary division and
 /// gcd. The doubling counter has the shape of a public ladder, so this trips
 /// only if the gate checks where the counter's value came from.
