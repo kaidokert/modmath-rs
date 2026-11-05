@@ -27,11 +27,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update -qq && \
     apt-get install -y -qq --no-install-recommends \
-        build-essential curl valgrind ca-certificates pkg-config && \
+        build-essential curl valgrind ca-certificates pkg-config libclang-dev && \
     rm -rf /var/lib/apt/lists/*
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-        sh -s -- -y --default-toolchain 1.86 --profile minimal --no-modify-path && \
+        sh -s -- -y --default-toolchain 1.88 --profile minimal --no-modify-path && \
     rustup --version && cargo --version
 
 WORKDIR /work

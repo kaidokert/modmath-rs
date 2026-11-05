@@ -2,7 +2,7 @@
 name = "ct-ctgrind"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.86"
+rust-version = "1.88"
 publish = false
 description = "Valgrind taint-based CT verifier for modmath primitives."
 
@@ -15,4 +15,4 @@ path = "src/main.rs"
 # `extern "C"` symbol directly.
 ct-fixtures = { path = "../ct-fixtures" }
 
-krabi-caliper = { version = "0.1", features = ["ctgrind"] }
+krabi-caliper = { version = "0.2", features = ["ctgrind"] }

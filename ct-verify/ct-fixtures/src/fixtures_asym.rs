@@ -6,9 +6,9 @@
 //! opaque there is nothing to propagate.
 
 use crate::bb;
+use crate::fixtures_field::{field_fb256, field_u64};
 use const_num_traits::Ct;
 use fixed_bigint::FixedUInt;
-use modmath::Field;
 
 type Fb256 = FixedUInt<u32, 8, Ct>;
 
@@ -34,7 +34,7 @@ const M256: [u32; 8] = [
 #[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__ASYM__field_inv_safegcd_public_m__u64__N1(v: *const u64) -> u8 {
     let v = bb(unsafe { *v });
-    let f = Field::<u64, Ct>::try_new_odd_ct(M64).unwrap();
+    let f = field_u64(M64);
     let r = f.reduce(&v);
     let inv = bb(f.inv_safegcd_ct(&r));
     bb(inv.is_some().unwrap_u8())
@@ -48,7 +48,7 @@ pub extern "C" fn ct_fix__ASYM__field_exp_secret_e__fb32__N8(
     out: *mut [u32; 8],
 ) {
     let e = Fb256::from(bb(unsafe { *e }));
-    let f = Field::<Fb256, Ct>::try_new_odd_ct(Fb256::from(M256)).unwrap();
+    let f = field_fb256(M256);
     let base = f.reduce(&Fb256::from(3u8));
     let powed = f.exp(&base, &e);
     unsafe { *out = bb(*f.into_raw(&powed).words()) }
@@ -63,7 +63,7 @@ pub extern "C" fn ct_fix__ASYM__field_cswap_choice__fb32__N8(
     out: *mut [u32; 8],
 ) {
     let choice = subtle::Choice::from(bb(unsafe { *choice }));
-    let f = Field::<Fb256, Ct>::try_new_odd_ct(Fb256::from(M256)).unwrap();
+    let f = field_fb256(M256);
     let mut ra = f.reduce(&Fb256::from(2u8));
     let mut rb = f.reduce(&Fb256::from(5u8));
     modmath::Residue::cswap(choice, &mut ra, &mut rb);

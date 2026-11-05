@@ -19,7 +19,7 @@ Five members:
   public operands as in-body constants — the configuration where LLVM
   historically rewrites the XOR-select idiom into a secret-flag
   conditional move. `nct_fix__neg__*` fixtures are negative controls
-  (EEA inverse, schoolbook exp, secret-indexed table load) that must
+  (EEA inverse, schoolbook exp, secret-indexed table load, secret loop bound) that must
   trip the gate, or the harness itself is broken.
 - **`ct-ctgrind`** — runs each fixture under Valgrind memcheck with its
   secret inputs tagged `MAKE_MEM_UNDEFINED` via crabgrind. Valgrind
@@ -97,8 +97,21 @@ cargo run --release
 
 CI: `.github/workflows/ct-ctgrind.yml` (x86_64 + aarch64 taint rows)
 and `.github/workflows/ct-verify.yml` (seven-target asm-grep matrix,
-rustc pinned to 1.86 so codegen — and therefore the calibrated
+rustc pinned to 1.88 so codegen — and therefore the calibrated
 allowlist — stays deterministic). All hard-fail.
+
+CI runs every target at opt-level `"s"` and `"z"`. To reproduce, set
+`CARGO_PROFILE_RELEASE_OPT_LEVEL` plus the per-target `RUSTFLAGS` from
+`.github/workflows/ct-verify.yml` (x86-64 builds with `+lzcnt,+bmi1`). Loops
+over public bounds are accepted structurally, since inlining moves them into
+the fixtures, as are doubling counters seeded from an immediate (the
+`ct_lt` bit-smear ladder, Newton precision). Fixtures for combinations the Ct
+guarantee does not cover are excluded per target in
+`ct-driver/src/target.rs`.
+
+thumbv6m has no conditional select: the wide-REDC and `Field` paths compile
+to value branches there at every opt-level, so those fixtures are excluded.
+AVR is not in the matrix.
 
 ## Extending
 

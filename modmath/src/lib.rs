@@ -26,6 +26,10 @@
 //! alongside their non-CT siblings ([`FieldCt`], `Field<T, Ct>`, `_ct`
 //! function suffixes, `<flavor>::montgomery::wide::ct::*`).
 //!
+//! The constant-time property depends on the target's codegen. It does not
+//! hold on `thumbv6m` (Cortex-M0), where the lack of a conditional select
+//! lowers word-to-bool conversions to value branches, and AVR is unverified.
+//!
 //! Backend-agnostic: any integer type implementing the required traits
 //! works — built-in integers or third-party bigints. The `basic`
 //! flavor's `Copy` bound rules out heap-allocated backends; those use

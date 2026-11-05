@@ -2,7 +2,7 @@
 name = "panic-free-audit"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.86"
+rust-version = "1.88"
 publish = false
 description = "Linker-DCE audit: confirm modmath's CT surface synthesizes no panic symbols."
 

@@ -3,10 +3,11 @@
 //! free-function path, so its coverage routes through
 //! `Field::inv_safegcd_ct`, which is also the deployment call site.
 //!
-//! `try_new_odd_ct(..).unwrap()` inside a fixture is deliberate: the
-//! parity `Choice` derives from the modulus's low bit, which the fixture
-//! defines via `|= 1`, so the unwrap branches on a *defined* bit —
-//! Valgrind-clean — and never actually panics.
+//! Fields are built the way a deployed consumer builds them: an
+//! `Odd::new_unchecked` proof at the trust boundary, then the infallible
+//! `new_odd_ct`. `try_new_odd_ct(..).unwrap()` would branch on the parity
+//! mask in the fixture body once `unwrap` inlines, which no gate could tell
+//! from a leak. `try_new_odd_ct` has its own fixture, observing the mask.
 //!
 //! `inv_safegcd_ct`'s `CtOption<Residue>` can't be unwrapped here: its
 //! `is_some` mask derives from fully-tainted gcd state, so any branch on
@@ -17,14 +18,27 @@
 use crate::bb;
 use const_num_traits::Ct;
 use fixed_bigint::FixedUInt;
-use modmath::Field;
+use modmath::{Field, Odd};
 
 type Fb256 = FixedUInt<u32, 8, Ct>;
 
+/// `m` must have its low bit set; every caller forces it or passes an odd
+/// constant.
+pub(crate) fn field_u64(m: u64) -> Field<u64, Ct> {
+    // SAFETY: odd per the contract above.
+    Field::new_odd_ct(unsafe { Odd::new_unchecked(m) })
+}
+
+/// `m` must have its low bit set; every caller forces it or passes an odd
+/// constant.
+pub(crate) fn field_fb256(m: [u32; 8]) -> Field<Fb256, Ct> {
+    // SAFETY: odd per the contract above.
+    Field::new_odd_ct(unsafe { Odd::new_unchecked(Fb256::from(m)) })
+}
+
 /// CT modular exponentiation through the shipped `Field<T, Ct>::exp`
-/// ladder. Modulus public (forced odd via `|= 1`, so `try_new_odd_ct`'s
-/// `CtOption` unwrap branches on a fixture-defined bit); base and
-/// exponent secret.
+/// ladder. Modulus public (forced odd via `|= 1`); base and exponent
+/// secret.
 #[unsafe(no_mangle)]
 pub extern "C" fn ct_fix__field_exp__u64__N1(
     base: *const u64,
@@ -35,7 +49,7 @@ pub extern "C" fn ct_fix__field_exp__u64__N1(
     let base = bb(unsafe { *base });
     let e = bb(unsafe { *e });
     let m = bb(unsafe { *m }) | 1;
-    let f = Field::<u64, Ct>::try_new_odd_ct(m).unwrap();
+    let f = field_u64(m);
     let r = f.exp(&f.reduce(&base), &e);
     unsafe { *out = bb(f.into_raw(&r)) }
 }
@@ -51,7 +65,7 @@ pub extern "C" fn ct_fix__field_exp__fb32__N8(
     let e = Fb256::from(bb(unsafe { *e }));
     let mut mw = bb(unsafe { *m });
     mw[0] |= 1;
-    let f = Field::<Fb256, Ct>::try_new_odd_ct(Fb256::from(mw)).unwrap();
+    let f = field_fb256(mw);
     let r = f.exp(&f.reduce(&base), &e);
     unsafe { *out = bb(*f.into_raw(&r).words()) }
 }
@@ -60,7 +74,7 @@ pub extern "C" fn ct_fix__field_exp__fb32__N8(
 pub extern "C" fn ct_fix__field_inv_safegcd__u64__N1(m: *const u64, v: *const u64) -> u8 {
     let m = bb(unsafe { *m }) | 1;
     let v = bb(unsafe { *v });
-    let f = Field::<u64, Ct>::try_new_odd_ct(m).unwrap();
+    let f = field_u64(m);
     let r = f.reduce(&v);
     let inv = bb(f.inv_safegcd_ct(&r));
     bb(inv.is_some().unwrap_u8())
@@ -74,7 +88,7 @@ pub extern "C" fn ct_fix__field_inv_safegcd__fb32__N8(
     let mut mw = bb(unsafe { *m });
     mw[0] |= 1;
     let v = Fb256::from(bb(unsafe { *v }));
-    let f = Field::<Fb256, Ct>::try_new_odd_ct(Fb256::from(mw)).unwrap();
+    let f = field_fb256(mw);
     let r = f.reduce(&v);
     let inv = bb(f.inv_safegcd_ct(&r));
     bb(inv.is_some().unwrap_u8())
@@ -93,7 +107,7 @@ pub extern "C" fn ct_fix__field_blind_path__fb32__N8(
     mw[0] |= 1;
     let x = Fb256::from(bb(unsafe { *x }));
     let e = Fb256::from(bb(unsafe { *e }));
-    let f = Field::<Fb256, Ct>::try_new_odd_ct(Fb256::from(mw)).unwrap();
+    let f = field_fb256(mw);
     let r = f.reduce(&x);
     let powed = f.exp(&r, &e);
     let inv = bb(f.inv_safegcd_ct(&powed));
@@ -117,11 +131,20 @@ pub extern "C" fn ct_fix__field_cswap_eq__fb32__N8(
     let a = Fb256::from(bb(unsafe { *a }));
     let b = Fb256::from(bb(unsafe { *b }));
     let choice = subtle::Choice::from(bb(unsafe { *choice }));
-    let f = Field::<Fb256, Ct>::try_new_odd_ct(Fb256::from(mw)).unwrap();
+    let f = field_fb256(mw);
     let mut ra = f.reduce(&a);
     let mut rb = f.reduce(&b);
     modmath::Residue::cswap(choice, &mut ra, &mut rb);
     let eq = ra.ct_eq(&rb);
     unsafe { *out = bb(*f.into_raw(&ra).words()) }
     bb(eq.unwrap_u8())
+}
+
+/// Secret-modulus construction through the fallible entry. The parity mask
+/// is observed, never branched on.
+#[unsafe(no_mangle)]
+pub extern "C" fn ct_fix__field_try_new_odd__fb32__N8(m: *const [u32; 8]) -> u8 {
+    let mw = bb(unsafe { *m });
+    let f = bb(Field::<Fb256, Ct>::try_new_odd_ct(Fb256::from(mw)));
+    bb(f.is_some().unwrap_u8())
 }

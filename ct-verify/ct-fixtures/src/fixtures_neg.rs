@@ -3,7 +3,7 @@
 //! broken (compiler folded the body away, taint marks not applied, or
 //! Valgrind not actually running), not the library fixed.
 //!
-//! All three leak through mechanisms cmov-rewrites can't neutralize:
+//! All of them leak through mechanisms cmov-rewrites can't neutralize:
 //! data-dependent *loop* conditions (memcheck must flag the branch) and
 //! a secret-derived *address* (memcheck flags the access). A plain
 //! `if a < b` canary would be unreliable here — LLVM freely rewrites it
@@ -61,4 +61,48 @@ pub extern "C" fn nct_fix__neg__table_lookup__u64__N1(a: *const u64, out: *mut u
     let a = bb(unsafe { *a });
     let r = TABLE[(a & 0xF) as usize];
     unsafe { *out = bb(r) }
+}
+
+/// Index of the first zero limb. The `i < 4` exit is a counted loop the
+/// asm-grep gate accepts; the `a[i] != 0` exit is decided by loaded data, so
+/// this trips only if counted-loop acceptance rejects data-decided loops.
+#[unsafe(no_mangle)]
+pub extern "C" fn nct_fix__neg__value_loop__u32__N4(a: *const [u32; 4]) -> u32 {
+    let a = bb(unsafe { *a });
+    let mut i = 0;
+    while i < 4 && a[i] != 0 {
+        i += 1;
+    }
+    bb(i as u32)
+}
+
+/// `for _ in 0..secret`. The counter steps by a constant, so the asm-grep gate
+/// accepts it as counted and cannot tell the bound is secret; this trips only
+/// under taint.
+#[unsafe(no_mangle)]
+pub extern "C" fn nct_fix__neg__secret_bound__u32__N1(n: *const u32) -> u32 {
+    // Nonzero, so no zero-trip guard sits beside the latch and trips instead.
+    let n = bb(unsafe { *n }) | 1;
+    let mut sum = 0u32;
+    let mut i = 0u32;
+    while i < n {
+        sum = bb(sum.wrapping_add(i));
+        i += 1;
+    }
+    bb(sum)
+}
+
+/// `while d < n { d <<= 1 }`, the normalization step of binary division and
+/// gcd. The doubling counter has the shape of a public ladder, so this trips
+/// only if the gate checks where the counter's value came from.
+#[unsafe(no_mangle)]
+pub extern "C" fn nct_fix__neg__doubling_normalize__u32__N1(d: *const u32, n: *const u32) -> u32 {
+    let mut d = bb(unsafe { *d }) | 1;
+    let n = bb(unsafe { *n });
+    let mut shifts = 0u32;
+    while d < n && d >> 31 == 0 {
+        d <<= 1;
+        shifts += 1;
+    }
+    bb(shifts)
 }
